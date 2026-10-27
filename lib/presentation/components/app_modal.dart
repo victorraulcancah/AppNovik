@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../theme/app_theme.dart';
+import 'app_tabs.dart';
+import 'error_banner.dart';
 
 /// Tono del modal: define el color de la franja de cabecera y del botón principal.
 enum AppModalTone {
@@ -53,19 +55,28 @@ extension on AppModalTone {
 /// - [primaryEnabled]: habilita o deshabilita el botón principal desde dentro
 ///   del cuerpo (por ejemplo, hasta elegir un archivo).
 /// - Con [primaryLabel] `null` no hay botón principal (solo se puede cerrar).
+/// - [tabs]: cuando hay muchos campos, en lugar de [child] se pasan pestañas;
+///   la barra queda fija bajo la cabecera. Pasa un [tabsController] para
+///   validar formularios por pestaña (`AppTabsController.validate`).
+/// - [error]: mensaje de error que se muestra fijo sobre el cuerpo (por
+///   ejemplo, la respuesta del servidor al guardar).
 Future<bool?> showAppModal(
   BuildContext context, {
   required String title,
   String? subtitle,
   IconData? icon,
   AppModalTone tone = AppModalTone.normal,
-  required Widget child,
+  Widget? child,
+  List<AppTabItem>? tabs,
+  AppTabsController? tabsController,
   String? primaryLabel = 'Guardar',
   String secondaryLabel = 'Cancelar',
   FutureOr<void> Function()? onPrimary,
   GlobalKey<FormState>? formKey,
   ValueListenable<bool>? primaryEnabled,
+  ValueListenable<String?>? error,
 }) {
+  assert(child != null || (tabs != null && tabs.isNotEmpty), 'Pasa child o tabs');
   final isTablet =
       MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
 
@@ -79,6 +90,9 @@ Future<bool?> showAppModal(
         onPrimary: onPrimary,
         formKey: formKey,
         primaryEnabled: primaryEnabled,
+        error: error,
+        tabs: tabs,
+        tabsController: tabsController,
         showHandle: handle,
         child: child,
       );
@@ -146,8 +160,11 @@ class _AppModalContent extends StatefulWidget {
   final FutureOr<void> Function()? onPrimary;
   final GlobalKey<FormState>? formKey;
   final ValueListenable<bool>? primaryEnabled;
+  final ValueListenable<String?>? error;
+  final List<AppTabItem>? tabs;
+  final AppTabsController? tabsController;
   final bool showHandle;
-  final Widget child;
+  final Widget? child;
 
   const _AppModalContent({
     required this.title,
@@ -159,6 +176,9 @@ class _AppModalContent extends StatefulWidget {
     required this.onPrimary,
     required this.formKey,
     required this.primaryEnabled,
+    required this.error,
+    required this.tabs,
+    required this.tabsController,
     required this.showHandle,
     required this.child,
   });
@@ -169,6 +189,18 @@ class _AppModalContent extends StatefulWidget {
 
 class _AppModalContentState extends State<_AppModalContent> {
   bool _busy = false;
+  AppTabsController? _ownTabs;
+
+  AppTabsController? get _tabs {
+    if (widget.tabs == null) return null;
+    return widget.tabsController ?? (_ownTabs ??= AppTabsController());
+  }
+
+  @override
+  void dispose() {
+    _ownTabs?.dispose();
+    super.dispose();
+  }
 
   Future<void> _confirm() async {
     final form = widget.formKey?.currentState;
@@ -208,7 +240,10 @@ class _AppModalContentState extends State<_AppModalContent> {
     final scheme = theme.colorScheme;
     final hasPrimary = widget.primaryLabel != null;
 
-    Widget body = widget.child;
+    final tabs = _tabs;
+    Widget body = tabs != null
+        ? AppTabsView(tabs: widget.tabs!, controller: tabs)
+        : widget.child!;
     if (widget.formKey != null) {
       body = Form(key: widget.formKey, child: body);
     }
@@ -291,6 +326,17 @@ class _AppModalContentState extends State<_AppModalContent> {
               ],
             ),
           ),
+          if (tabs != null) AppTabBar(tabs: widget.tabs!, controller: tabs),
+          if (widget.error != null)
+            ValueListenableBuilder<String?>(
+              valueListenable: widget.error!,
+              builder: (context, message, _) => message == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: ErrorBanner(message: message),
+                    ),
+            ),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),

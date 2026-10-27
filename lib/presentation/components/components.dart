@@ -14,6 +14,7 @@ export 'app_modal.dart';
 export 'app_page_header.dart';
 export 'app_search_bar.dart';
 export 'app_speed_dial.dart';
+export 'app_tabs.dart';
 export 'custom_button.dart';
 export 'custom_text_field.dart';
 export 'empty_state.dart';
