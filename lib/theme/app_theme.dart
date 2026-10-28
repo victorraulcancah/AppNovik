@@ -15,6 +15,11 @@ class AppTheme {
   static const Color navIndicator = Color(0xFF334155);
   static const Color navMuted = Color(0xFF94A3B8);
 
+  /// Relleno de los botones y marcas "fuertes" (acción principal de un modal o
+  /// encabezado, número de tarjeta): azul pizarra; en oscuro se aclara.
+  static Color strongFill(Brightness brightness) =>
+      brightness == Brightness.dark ? const Color(0xFF475569) : brandDark;
+
   static const double radius = 14;
 
   static ThemeData get light => _build(Brightness.light);

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
+import 'products_page.dart';
 
 /// Módulo que la app sabe mostrar. `slug` coincide con el nombre del módulo
 /// en el backend (`Module.name` pasado por `convertToSlug`).
@@ -48,9 +49,9 @@ class _MainShellPageState extends State<MainShellPage> {
     final actual = modulos.isEmpty ? null : modulos[index];
 
     return AdaptiveScaffold(
+      // Cada módulo pone su propio encabezado; la barra superior muestra la empresa.
       appBar: AppTopBar(
-        title: actual?.titulo ?? AppConstants.appName,
-        subtitle: session.company.razonSocial,
+        title: session.company.razonSocial,
         actions: [
           IconButton(
             tooltip: 'Cerrar sesión',
@@ -68,11 +69,14 @@ class _MainShellPageState extends State<MainShellPage> {
               title: 'Sin módulos habilitados',
               message: 'Tu empresa no tiene módulos habilitados para la app.',
             )
-          : AppEmptyState(
-              icon: actual.iconoActivo,
-              title: actual.titulo,
-              message: 'Este módulo está en construcción.',
-            ),
+          : switch (actual.slug) {
+              'productos' => const ProductsPage(),
+              _ => AppEmptyState(
+                  icon: actual.iconoActivo,
+                  title: actual.titulo,
+                  message: 'Este módulo está en construcción.',
+                ),
+            },
     );
   }
 }

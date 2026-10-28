@@ -25,7 +25,9 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: ThemeMode.system,
-        home: const AppWrapper(),
+        home: const bool.fromEnvironment('GALLERY')
+            ? const ComponentGalleryPage()
+            : const AppWrapper(),
       ),
     );
   }

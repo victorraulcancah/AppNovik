@@ -1,0 +1,145 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../domain/entities/product_entity.dart';
+import '../components/components.dart';
+import '../providers/products_provider.dart';
+
+/// Módulo Productos (solo lectura): lista paginada con búsqueda y filtro de tipo.
+class ProductsPage extends StatefulWidget {
+  const ProductsPage({super.key});
+
+  @override
+  State<ProductsPage> createState() => _ProductsPageState();
+}
+
+class _ProductsPageState extends State<ProductsPage> {
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<ProductsProvider>().ensureLoaded();
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) context.read<ProductsProvider>().setSearch(text);
+    });
+  }
+
+  Future<void> _openFilters() async {
+    final provider = context.read<ProductsProvider>();
+    final result = await showAppFilterSheet(
+      context,
+      fields: [
+        AppFilterField(
+          id: 'tipo',
+          label: 'Tipo',
+          allLabel: 'Todos',
+          value: provider.tipo,
+          options: const [
+            AppFilterOption('p', 'Productos'),
+            AppFilterOption('s', 'Servicios'),
+          ],
+        ),
+      ],
+    );
+    if (result != null) provider.setTipo(result['tipo']);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products = context.watch<ProductsProvider>();
+
+    return Column(
+      children: [
+        const AppPageHeader(
+          icon: Icons.category_outlined,
+          title: 'Productos',
+          subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+        ),
+        AppSearchBar(
+          hint: 'Buscar por nombre, código…',
+          onChanged: _onSearchChanged,
+          onFilter: _openFilters,
+          filterActive: products.filtersActive,
+        ),
+        Expanded(child: _body(products)),
+      ],
+    );
+  }
+
+  Widget _body(ProductsProvider products) {
+    if (products.loading && products.items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (products.error != null && products.items.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'No se pudieron cargar los productos',
+        message: products.error,
+        action: AppButton(
+          label: 'Reintentar',
+          icon: Icons.refresh,
+          onPressed: products.refresh,
+        ),
+      );
+    }
+
+    return AppCardList<ProductEntity>(
+      items: products.items,
+      emptyIcon: Icons.category_outlined,
+      emptyTitle: 'No hay productos',
+      emptyMessage: products.search.isNotEmpty || products.filtersActive
+          ? 'Prueba con otra búsqueda o quita los filtros.'
+          : null,
+      onRefresh: products.refresh,
+      onLoadMore: products.loadMore,
+      loadingMore: products.loadingMore,
+      itemBuilder: (context, p, number) => _card(context, p, number),
+    );
+  }
+
+  Widget _card(BuildContext context, ProductEntity p, int number) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    final detalle = [p.marca, p.categoria]
+        .whereType<String>()
+        .where((t) => t.isNotEmpty)
+        .join(' · ');
+
+    return AppListCard(
+      number: number,
+      title: p.name,
+      lines: [
+        if (p.codigo.isNotEmpty) p.codigo,
+        if (detalle.isNotEmpty) detalle,
+      ],
+      trailingTitle: p.esServicio ? 'Servicio' : _stock(p),
+      trailingCaption: p.activo ? 'Activo' : 'Inactivo',
+      trailingCaptionColor: p.activo
+          ? (dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
+          : scheme.onSurfaceVariant,
+    );
+  }
+
+  String? _stock(ProductEntity p) {
+    final stock = p.stockTotal;
+    if (stock == null) return null;
+    final text = stock == stock.roundToDouble()
+        ? stock.toInt().toString()
+        : stock.toStringAsFixed(2);
+    return '$text ${p.unidad ?? 'und.'}';
+  }
+}

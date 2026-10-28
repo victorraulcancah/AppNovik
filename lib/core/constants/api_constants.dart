@@ -24,6 +24,8 @@ class ApiConstants {
   /// Usuario + empresa + módulos habilitados + permisos.
   static const String authEndpoint = '/auth';
 
+  static const String productosEndpoint = '/productos';
+
   // Timeouts
   static const Duration connectionTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
