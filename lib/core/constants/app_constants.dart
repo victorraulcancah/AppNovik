@@ -5,6 +5,8 @@ class AppConstants {
   // Storage Keys
   static const String tokenStorageKey = 'auth_token_v1';
   static const String userStorageKey = 'auth_user_v1';
+  static const String savedUsuarioKey = 'saved_usuario_v1';
+  static const String savedPasswordKey = 'saved_password_v1';
 
   // Pagination
   static const int defaultPageSize = 20;

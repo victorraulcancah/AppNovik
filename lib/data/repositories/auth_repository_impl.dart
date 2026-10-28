@@ -1,6 +1,8 @@
 import '../../core/errors/exceptions.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../../domain/entities/saved_credentials_entity.dart';
+import '../../domain/entities/session_context_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
@@ -60,9 +62,18 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Either<Failure, UserEntity?>> getLoggedUser() async {
+  Future<Either<Failure, SessionContextEntity?>> getSessionContext() async {
     try {
-      return Either.right(await localDataSource.getUser());
+      final token = await localDataSource.getToken();
+      if (token == null) return Either.right(null);
+      return Either.right(await remoteDataSource.fetchContext(token));
+    } on AuthException catch (e) {
+      await localDataSource.clear();
+      return Either.left(AuthenticationFailure(e.message));
+    } on NetworkException catch (e) {
+      return Either.left(NetworkFailure(e.message));
+    } on ServerException catch (e) {
+      return Either.left(ServerFailure(e.message));
     } on CacheException catch (e) {
       return Either.left(CacheFailure(e.message));
     } catch (e) {
@@ -72,4 +83,42 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<String?> getToken() => localDataSource.getToken();
+
+  @override
+  Future<Either<Failure, SavedCredentialsEntity?>> getSavedCredentials() async {
+    try {
+      return Either.right(await localDataSource.getSavedCredentials());
+    } on CacheException catch (e) {
+      return Either.left(CacheFailure(e.message));
+    } catch (e) {
+      return Either.left(UnknownFailure('Error inesperado: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> saveCredentials(
+    String usuario,
+    String password,
+  ) async {
+    try {
+      await localDataSource.saveCredentials(usuario, password);
+      return Either.rightVoid();
+    } on CacheException catch (e) {
+      return Either.left(CacheFailure(e.message));
+    } catch (e) {
+      return Either.left(UnknownFailure('Error inesperado: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async {
+    try {
+      await localDataSource.clearSavedCredentials();
+      return Either.rightVoid();
+    } on CacheException catch (e) {
+      return Either.left(CacheFailure(e.message));
+    } catch (e) {
+      return Either.left(UnknownFailure('Error inesperado: $e'));
+    }
+  }
 }

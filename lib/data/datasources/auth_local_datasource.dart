@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/exceptions.dart';
+import '../../domain/entities/saved_credentials_entity.dart';
 import '../models/user_model.dart';
 
 abstract class AuthLocalDataSource {
@@ -9,6 +10,10 @@ abstract class AuthLocalDataSource {
   Future<String?> getToken();
   Future<UserModel?> getUser();
   Future<void> clear();
+
+  Future<SavedCredentialsEntity?> getSavedCredentials();
+  Future<void> saveCredentials(String usuario, String password);
+  Future<void> clearSavedCredentials();
 }
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
@@ -57,6 +62,38 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       await storage.delete(key: AppConstants.userStorageKey);
     } catch (e) {
       throw CacheException('No se pudo cerrar la sesión: $e');
+    }
+  }
+
+  @override
+  Future<SavedCredentialsEntity?> getSavedCredentials() async {
+    try {
+      final usuario = await storage.read(key: AppConstants.savedUsuarioKey);
+      final password = await storage.read(key: AppConstants.savedPasswordKey);
+      if (usuario == null || password == null) return null;
+      return SavedCredentialsEntity(usuario: usuario, password: password);
+    } catch (e) {
+      throw CacheException('No se pudieron leer las credenciales: $e');
+    }
+  }
+
+  @override
+  Future<void> saveCredentials(String usuario, String password) async {
+    try {
+      await storage.write(key: AppConstants.savedUsuarioKey, value: usuario);
+      await storage.write(key: AppConstants.savedPasswordKey, value: password);
+    } catch (e) {
+      throw CacheException('No se pudieron guardar las credenciales: $e');
+    }
+  }
+
+  @override
+  Future<void> clearSavedCredentials() async {
+    try {
+      await storage.delete(key: AppConstants.savedUsuarioKey);
+      await storage.delete(key: AppConstants.savedPasswordKey);
+    } catch (e) {
+      throw CacheException('No se pudieron borrar las credenciales: $e');
     }
   }
 }

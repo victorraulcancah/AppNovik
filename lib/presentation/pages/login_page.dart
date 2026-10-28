@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/validators.dart';
+import '../../theme/app_theme.dart';
+import '../components/components.dart';
 import '../providers/auth_provider.dart';
 
 class LoginPage extends StatefulWidget {
@@ -11,9 +14,16 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
   final _usuarioController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscure = true;
+  bool _remember = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefill());
+  }
 
   @override
   void dispose() {
@@ -22,77 +32,52 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _submit() {
-    return context
-        .read<AuthProvider>()
-        .login(_usuarioController.text, _passwordController.text);
+  Future<void> _prefill() async {
+    final auth = context.read<AuthProvider>();
+    await auth.loadSavedCredentials();
+    final saved = auth.savedCredentials;
+    if (!mounted || saved == null) return;
+    setState(() {
+      _usuarioController.text = saved.usuario;
+      _passwordController.text = saved.password;
+      _remember = true;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    await context.read<AuthProvider>().login(
+          _usuarioController.text,
+          _passwordController.text,
+          remember: _remember,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final loading = auth.status == AuthStatus.loading;
+    final isTablet =
+        MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
+    return isTablet ? _buildTablet() : _buildPhone();
+  }
 
+  /// Celular: cabecera oscura con la marca y el formulario debajo.
+  Widget _buildPhone() {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    AppConstants.appName,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.displaySmall,
-                  ),
-                  const SizedBox(height: 32),
-                  TextField(
-                    controller: _usuarioController,
-                    enabled: !loading,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Usuario',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _passwordController,
-                    enabled: !loading,
-                    obscureText: _obscure,
-                    onSubmitted: (_) => _submit(),
-                    decoration: InputDecoration(
-                      labelText: 'Contraseña',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
-                        ),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                  ),
-                  if (auth.errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      auth.errorMessage!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: loading ? null : _submit,
-                    child: loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Ingresar'),
+                  _Header(topPadding: MediaQuery.paddingOf(context).top),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                    child: _form(),
                   ),
                 ],
               ),
@@ -100,6 +85,141 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Tablet: fondo oscuro con la tarjeta de login centrada.
+  Widget _buildTablet() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: _darkGradient),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppLogo(),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: _form(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _form() {
+    final auth = context.watch<AuthProvider>();
+    final loading = auth.status == AuthStatus.loading;
+    final textTheme = Theme.of(context).textTheme;
+
+    return AutofillGroup(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Iniciar sesión',
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppTheme.dark,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ingresa con tu usuario y contraseña',
+              style: textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 24),
+            AppTextField(
+              controller: _usuarioController,
+              label: 'Usuario',
+              prefixIcon: Icons.person_outline,
+              enabled: !loading,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.username],
+              validator: (v) => Validators.validateRequired(v, 'El usuario'),
+            ),
+            const SizedBox(height: 16),
+            AppPasswordField(
+              controller: _passwordController,
+              enabled: !loading,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
+              validator: (v) => Validators.validateRequired(v, 'La contraseña'),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: loading ? null : () => setState(() => _remember = !_remember),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _remember,
+                      onChanged: loading
+                          ? null
+                          : (v) => setState(() => _remember = v ?? false),
+                    ),
+                    const Text('Recordar mis credenciales'),
+                  ],
+                ),
+              ),
+            ),
+            if (auth.errorMessage != null) ...[
+              const SizedBox(height: 8),
+              ErrorBanner(message: auth.errorMessage!),
+            ],
+            const SizedBox(height: 20),
+            AppButton(
+              label: 'Ingresar',
+              icon: Icons.login,
+              loading: loading,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+const _darkGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [AppTheme.dark, AppTheme.darkAlt],
+);
+
+class _Header extends StatelessWidget {
+  final double topPadding;
+
+  const _Header({required this.topPadding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(top: topPadding + 56, bottom: 48),
+      decoration: const BoxDecoration(
+        gradient: _darkGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
+      ),
+      child: const Center(child: AppLogo()),
     );
   }
 }

@@ -5,10 +5,12 @@ import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/exceptions.dart';
 import '../models/auth_session_model.dart';
+import '../models/session_context_model.dart';
 
 abstract class AuthRemoteDataSource {
   Future<AuthSessionModel> login(String usuario, String password);
   Future<void> logout(String token);
+  Future<SessionContextModel> fetchContext(String token);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -61,6 +63,38 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       throw const NetworkException('Sin conexión a internet');
     } on TimeoutException {
       throw const NetworkException('Tiempo de espera agotado');
+    }
+  }
+
+  @override
+  Future<SessionContextModel> fetchContext(String token) async {
+    try {
+      final response = await client
+          .post(
+            Uri.parse('${ApiConstants.baseUrl}${ApiConstants.authEndpoint}'),
+            headers: ApiConstants.authHeaders(token),
+          )
+          .timeout(ApiConstants.connectionTimeout);
+
+      if (response.statusCode == 200) {
+        return SessionContextModel.fromJson(json.decode(response.body));
+      } else if (response.statusCode == 401) {
+        throw const AuthException('Sesión expirada');
+      } else if (response.statusCode >= 500) {
+        throw const ServerException('Error del servidor');
+      } else {
+        throw ServerException('Error al cargar la sesión: ${response.statusCode}');
+      }
+    } on AppException {
+      rethrow;
+    } on SocketException {
+      throw const NetworkException('Sin conexión a internet');
+    } on TimeoutException {
+      throw const NetworkException('Tiempo de espera agotado');
+    } on FormatException catch (e) {
+      throw ServerException('Respuesta inválida del servidor: ${e.message}');
+    } catch (e) {
+      throw ServerException('Error de conexión: $e');
     }
   }
 

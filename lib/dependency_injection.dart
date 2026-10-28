@@ -21,8 +21,14 @@ class DependencyInjection {
           create: (context) => AuthProvider(
             loginUseCase: LoginUseCase(repository: _authRepository),
             logoutUseCase: LogoutUseCase(repository: _authRepository),
-            getLoggedUserUseCase:
-                GetLoggedUserUseCase(repository: _authRepository),
+            getSessionContextUseCase:
+                GetSessionContextUseCase(repository: _authRepository),
+            getSavedCredentialsUseCase:
+                GetSavedCredentialsUseCase(repository: _authRepository),
+            saveCredentialsUseCase:
+                SaveCredentialsUseCase(repository: _authRepository),
+            clearSavedCredentialsUseCase:
+                ClearSavedCredentialsUseCase(repository: _authRepository),
           ),
         ),
       ];

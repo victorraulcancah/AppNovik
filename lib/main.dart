@@ -53,6 +53,8 @@ class _AppWrapperState extends State<AppWrapper> {
         return const MainShellPage();
       case AuthStatus.initial:
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      case AuthStatus.contextError:
+        return const SessionErrorPage();
       case AuthStatus.loading:
       case AuthStatus.unauthenticated:
       case AuthStatus.error:
