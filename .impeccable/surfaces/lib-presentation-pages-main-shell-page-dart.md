@@ -19,7 +19,7 @@ Unresolved: Novik logo and brand color (seed is provisional); home module.
 
 THESIS: Plain Material 3, executed with craft; the surface refuses any decorative "world" and lets the company name and the data lead.
 
-OWN-WORLD: Tonal Material 3 surfaces from one blue seed (#1D4ED8), light and dark schemes from the same seed; filled search bar, 40 dp circular leading icons on tonal container, 28 dp pill navigation indicator, status in color roles (error for out of stock, tertiary for low).
+OWN-WORLD: Tonal Material 3 surfaces seeded from the login orange (primary #EA580C) with the slate login header (#0F172A to #1E293B), light and dark schemes; filled search bar, 40 dp circular leading icons on tonal container, 28 dp pill navigation indicator, status in color roles (error for out of stock, tertiary for low).
 
 STORY: The user signs in and immediately knows whose data this is (company name under the screen title) and what they can do (only enabled modules in the bar).
 

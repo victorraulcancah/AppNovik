@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/validators.dart';
+import '../../theme/app_theme.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 
@@ -57,38 +58,62 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isTablet =
         MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
-    final scheme = Theme.of(context).colorScheme;
+    return isTablet ? _buildTablet() : _buildPhone();
+  }
 
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Center(child: AppLogo()),
-        const SizedBox(height: 32),
-        _form(),
-      ],
-    );
-
+  /// Celular: cabecera oscura con la marca y el formulario debajo.
+  Widget _buildPhone() {
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding * 1.5),
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: isTablet
-                  ? Card(
-                      elevation: 0,
-                      color: scheme.surfaceContainerLow,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Header(topPadding: MediaQuery.paddingOf(context).top),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                    child: _form(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tablet: fondo oscuro con la tarjeta de login centrada.
+  Widget _buildTablet() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: _darkGradient),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppLogo(nameColor: Colors.white),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: content,
-                      ),
-                    )
-                  : content,
+                      child: _form(),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -108,7 +133,12 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Iniciar sesión', style: textTheme.titleLarge),
+            Text(
+              'Iniciar sesión',
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Ingresa con tu usuario y contraseña',
@@ -135,21 +165,29 @@ class _LoginPageState extends State<LoginPage> {
               validator: (v) => Validators.validateRequired(v, 'La contraseña'),
             ),
             const SizedBox(height: 8),
-            CheckboxListTile(
-              value: _remember,
-              onChanged: loading
-                  ? null
-                  : (v) => setState(() => _remember = v ?? false),
-              title: const Text('Recordar mis credenciales'),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-              dense: true,
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: loading ? null : () => setState(() => _remember = !_remember),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _remember,
+                      onChanged: loading
+                          ? null
+                          : (v) => setState(() => _remember = v ?? false),
+                    ),
+                    const Expanded(child: Text('Recordar mis credenciales')),
+                  ],
+                ),
+              ),
             ),
             if (auth.errorMessage != null) ...[
               const SizedBox(height: 8),
               ErrorBanner(message: auth.errorMessage!),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             AppButton(
               label: 'Ingresar',
               icon: Icons.login,
@@ -159,6 +197,30 @@ class _LoginPageState extends State<LoginPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+const _darkGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [AppTheme.brandDark, AppTheme.brandDarkAlt],
+);
+
+class _Header extends StatelessWidget {
+  final double topPadding;
+
+  const _Header({required this.topPadding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(top: topPadding + 56, bottom: 48),
+      decoration: const BoxDecoration(
+        gradient: _darkGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
+      ),
+      child: const Center(child: AppLogo(nameColor: Colors.white)),
     );
   }
 }

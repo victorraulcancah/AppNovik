@@ -6,12 +6,19 @@ class AppLogo extends StatelessWidget {
   final double size;
   final bool showName;
 
-  const AppLogo({super.key, this.size = 64, this.showName = true});
+  /// Color del nombre; sobre fondo oscuro se pasa blanco.
+  final Color? nameColor;
+
+  const AppLogo({
+    super.key,
+    this.size = 64,
+    this.showName = true,
+    this.nameColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return Semantics(
       label: AppConstants.appName,
@@ -36,11 +43,14 @@ class AppLogo extends StatelessWidget {
             ),
           ),
           if (showName) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               AppConstants.appName,
-              style: theme.textTheme.headlineMedium?.copyWith(
+              style: TextStyle(
+                color: nameColor ?? scheme.onSurface,
+                fontSize: 28,
                 fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
               ),
             ),
           ],
