@@ -1,48 +1,54 @@
 import 'package:flutter/material.dart';
 
+/// Tema Material 3 de Novik. Un solo color semilla genera los esquemas claro y
+/// oscuro; el resto de la app usa roles de color (`colorScheme`), nunca hex sueltos.
 class AppTheme {
-  /// Colores provisionales: aún no hay identidad de marca definida para Novik.
-  /// Naranja de acción (como el botón del login web) sobre azul pizarra oscuro.
-  static const Color primary = Color(0xFFEA580C);
-  static const Color dark = Color(0xFF0F172A);
-  static const Color darkAlt = Color(0xFF1E293B);
-  static const Color fieldFill = Color(0xFFF1F5F9);
-  static const Color textMuted = Color(0xFF64748B);
+  /// Azul semilla provisional: aún no hay un color de marca definido para Novik.
+  static const Color seed = Color(0xFF1D4ED8);
 
-  static const double radius = 14;
+  static ThemeData get light => _build(Brightness.light);
+  static ThemeData get dark => _build(Brightness.dark);
 
-  static OutlineInputBorder _border([Color color = Colors.transparent, double width = 1]) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(radius),
-        borderSide: BorderSide(color: color, width: width),
-      );
+  static ThemeData _build(Brightness brightness) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+    );
 
-  static final ThemeData lightTheme = ThemeData(
-    useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(seedColor: primary, primary: primary),
-    scaffoldBackgroundColor: Colors.white,
-    appBarTheme: const AppBarTheme(elevation: 0),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: fieldFill,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      border: _border(),
-      enabledBorder: _border(),
-      focusedBorder: _border(primary, 1.6),
-      errorBorder: _border(Colors.red.shade400),
-      focusedErrorBorder: _border(Colors.red.shade400, 1.6),
-      labelStyle: const TextStyle(color: textMuted),
-      prefixIconColor: textMuted,
-      suffixIconColor: textMuted,
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(54),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radius),
-        ),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    OutlineInputBorder border(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: color, width: width),
+        );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        surfaceTintColor: scheme.surfaceTint,
+        centerTitle: false,
       ),
-    ),
-  );
+      inputDecorationTheme: InputDecorationTheme(
+        border: border(scheme.outline),
+        enabledBorder: border(scheme.outline),
+        focusedBorder: border(scheme.primary, 2),
+        errorBorder: border(scheme.error),
+        focusedErrorBorder: border(scheme.error, 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        minVerticalPadding: 12,
+      ),
+    );
+  }
 }

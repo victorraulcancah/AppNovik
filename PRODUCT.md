@@ -42,7 +42,9 @@ Multi-company by design: one app, many companies, each seeing only their own dat
 
 ## Brand Commitments
 
-Name: **Novik**. No visual identity exists yet: the user chose to create a new Novik identity for the app rather than follow the web (black with orange/red accents, 7Power logo). Any colors, logo and type used so far are provisional placeholders.
+Name: **Novik**. No visual identity exists yet: the user chose a new Novik identity for the app rather than following the web (black with orange/red accents, 7Power logo). Any logo and type used so far are provisional placeholders.
+
+Standing preference (user's explicit choice in the direction round): the **category standard**, plain Material 3, executed at full craft, with no ornamental "world" layered on top. Novik is a bespoke (a medida) system, so the user named no reference apps to match; the quality bar is Material 3's own guidance. Brand expresses only through the Material theme (color roles, type scale, shape).
 
 ## Evidence on Hand
 

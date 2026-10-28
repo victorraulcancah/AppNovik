@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/validators.dart';
-import '../../theme/app_theme.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 
@@ -58,63 +57,38 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isTablet =
         MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
-    return isTablet ? _buildTablet() : _buildPhone();
-  }
+    final scheme = Theme.of(context).colorScheme;
 
-  /// Celular: cabecera oscura con la marca y el formulario debajo.
-  Widget _buildPhone() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Header(topPadding: MediaQuery.paddingOf(context).top),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                    child: _form(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Center(child: AppLogo()),
+        const SizedBox(height: 32),
+        _form(),
+      ],
     );
-  }
 
-  /// Tablet: fondo oscuro con la tarjeta de login centrada.
-  Widget _buildTablet() {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: _darkGradient),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const AppLogo(),
-                    const SizedBox(height: 28),
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding * 1.5),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: isTablet
+                  ? Card(
+                      elevation: 0,
+                      color: scheme.surfaceContainerLow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
                       ),
-                      child: _form(),
-                    ),
-                  ],
-                ),
-              ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: content,
+                      ),
+                    )
+                  : content,
             ),
           ),
         ),
@@ -126,6 +100,7 @@ class _LoginPageState extends State<LoginPage> {
     final auth = context.watch<AuthProvider>();
     final loading = auth.status == AuthStatus.loading;
     final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return AutofillGroup(
       child: Form(
@@ -133,17 +108,13 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Iniciar sesión',
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppTheme.dark,
-              ),
-            ),
+            Text('Iniciar sesión', style: textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               'Ingresa con tu usuario y contraseña',
-              style: textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
+              style: textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 24),
             AppTextField(
@@ -164,29 +135,21 @@ class _LoginPageState extends State<LoginPage> {
               validator: (v) => Validators.validateRequired(v, 'La contraseña'),
             ),
             const SizedBox(height: 8),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: loading ? null : () => setState(() => _remember = !_remember),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _remember,
-                      onChanged: loading
-                          ? null
-                          : (v) => setState(() => _remember = v ?? false),
-                    ),
-                    const Text('Recordar mis credenciales'),
-                  ],
-                ),
-              ),
+            CheckboxListTile(
+              value: _remember,
+              onChanged: loading
+                  ? null
+                  : (v) => setState(() => _remember = v ?? false),
+              title: const Text('Recordar mis credenciales'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
             ),
             if (auth.errorMessage != null) ...[
               const SizedBox(height: 8),
               ErrorBanner(message: auth.errorMessage!),
             ],
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             AppButton(
               label: 'Ingresar',
               icon: Icons.login,
@@ -196,30 +159,6 @@ class _LoginPageState extends State<LoginPage> {
           ],
         ),
       ),
-    );
-  }
-}
-
-const _darkGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [AppTheme.dark, AppTheme.darkAlt],
-);
-
-class _Header extends StatelessWidget {
-  final double topPadding;
-
-  const _Header({required this.topPadding});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(top: topPadding + 56, bottom: 48),
-      decoration: const BoxDecoration(
-        gradient: _darkGradient,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
-      ),
-      child: const Center(child: AppLogo()),
     );
   }
 }
