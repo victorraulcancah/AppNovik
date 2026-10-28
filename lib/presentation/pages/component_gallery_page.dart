@@ -86,7 +86,6 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: AppSpeedDial(
         actions: [
           AppSpeedDialAction(

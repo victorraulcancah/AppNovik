@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
@@ -17,15 +18,16 @@ class AppSpeedDialAction {
   });
 }
 
-/// Botón redondo "Acciones" que flota abajo a la izquierda de la vista. Al
-/// tocarlo oscurece la pantalla y despliega hacia arriba todas las acciones
-/// (crear, plantilla, subir, exportar...), cada una con su etiqueta. Con una
-/// sola acción se muestra como un botón flotante normal con su nombre.
+/// Botón redondo "Acciones" que flota abajo a la derecha de la vista. Al
+/// tocarlo oscurece la pantalla y despliega las acciones (crear, plantilla,
+/// subir, exportar...) en abanico: un arco de cuarto de círculo desde arriba
+/// del botón hasta su izquierda, cada una con su etiqueta a la izquierda. Con
+/// una sola acción se muestra como un botón flotante normal con su nombre.
 ///
-/// Colócalo con `Positioned(left: 16, bottom: 16)` dentro de un `Stack`, o en
-/// `Scaffold.floatingActionButton` con `FloatingActionButtonLocation.startFloat`.
-/// Deja espacio al final de la lista (`AppCardList.bottomPadding`, por ejemplo
-/// 96) para que no tape el último elemento.
+/// Colócalo con `Positioned(right: 16, bottom: 16)` dentro de un `Stack`, o en
+/// `Scaffold.floatingActionButton`. Deja espacio al final de la lista
+/// (`AppCardList.bottomPadding`, por ejemplo 96) para que no tape el último
+/// elemento.
 class AppSpeedDial extends StatefulWidget {
   final List<AppSpeedDialAction> actions;
   final String label;
@@ -40,8 +42,18 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
   static const _size = 64.0;
   static const _miniSize = 40.0;
 
+  /// Distancia del centro del botón al centro de cada acción.
+  static const _radius = 140.0;
+
   final _portal = OverlayPortalController();
-  final _link = LayerLink();
+  final _buttonKey = GlobalKey();
+
+  /// Posición del botón en la pantalla, para abrir el abanico desde ahí.
+  Rect? _buttonRect() {
+    final box = _buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
 
   /// Botón redondo con ícono y, debajo, el nombre.
   Widget _roundButton(BuildContext context, IconData icon, VoidCallback onPressed) {
@@ -75,10 +87,67 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
     );
   }
 
-  Widget _overlay(BuildContext context) {
+  /// Círculo de una acción y su etiqueta, en su lugar del arco.
+  List<Widget> _item(
+    BuildContext context,
+    int index,
+    Offset center,
+    double screenWidth,
+  ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final fill = AppTheme.strongFill(theme.brightness);
+    final a = widget.actions[index];
+    final count = widget.actions.length;
+
+    // De 90° (justo arriba del botón) a 180° (a su izquierda).
+    final degrees = count == 1 ? 90.0 : 90 + index * 90 / (count - 1);
+    final radians = degrees * math.pi / 180;
+    final c = center + Offset(_radius * math.cos(radians), -_radius * math.sin(radians));
+
+    return [
+      Positioned(
+        left: c.dx - _miniSize / 2,
+        top: c.dy - _miniSize / 2,
+        width: _miniSize,
+        height: _miniSize,
+        child: FloatingActionButton.small(
+          heroTag: null,
+          tooltip: a.label,
+          backgroundColor:
+              a.primary ? AppTheme.strongFill(theme.brightness) : scheme.surfaceContainerHighest,
+          foregroundColor: a.primary ? Colors.white : scheme.onSurface,
+          onPressed: () {
+            _portal.hide();
+            a.onPressed?.call();
+          },
+          child: Icon(a.icon),
+        ),
+      ),
+      // Etiqueta a la izquierda del círculo, pegada a él.
+      Positioned(
+        top: c.dy - _miniSize / 2,
+        height: _miniSize,
+        right: screenWidth - (c.dx - _miniSize / 2 - 12),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            color: scheme.surfaceContainerHighest,
+            elevation: 2,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(a.label, style: theme.textTheme.labelLarge),
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _overlay(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final rect = _buttonRect() ??
+        Rect.fromLTWH(size.width - 16 - _size, size.height - 16 - _size, _size, _size);
     final animate = !MediaQuery.disableAnimationsOf(context);
 
     return TweenAnimationBuilder<double>(
@@ -96,60 +165,12 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
                 child: const ColoredBox(color: Color(0x99000000)),
               ),
             ),
-            CompositedTransformFollower(
-              link: _link,
-              targetAnchor: Alignment.bottomLeft,
-              followerAnchor: Alignment.bottomLeft,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final a in widget.actions)
-                    Padding(
-                      // Centra el círculo pequeño sobre el botón principal.
-                      padding: const EdgeInsets.only(
-                        left: (_size - _miniSize) / 2,
-                        bottom: 12,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: _miniSize,
-                            height: _miniSize,
-                            child: FloatingActionButton.small(
-                              heroTag: null,
-                              tooltip: a.label,
-                              backgroundColor:
-                                  a.primary ? fill : scheme.surfaceContainerHighest,
-                              foregroundColor:
-                                  a.primary ? Colors.white : scheme.onSurface,
-                              onPressed: () {
-                                _portal.hide();
-                                a.onPressed?.call();
-                              },
-                              child: Icon(a.icon),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Material(
-                            color: scheme.surfaceContainerHighest,
-                            elevation: 2,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              child: Text(a.label, style: theme.textTheme.labelLarge),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  _roundButton(context, Icons.close, _portal.hide),
-                ],
-              ),
+            for (var i = 0; i < widget.actions.length; i++)
+              ..._item(context, i, rect.center, size.width),
+            Positioned(
+              left: rect.left,
+              top: rect.top,
+              child: _roundButton(context, Icons.close, _portal.hide),
             ),
           ],
         ),
@@ -171,11 +192,11 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
       );
     }
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _portal,
-        overlayChildBuilder: _overlay,
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: _overlay,
+      child: KeyedSubtree(
+        key: _buttonKey,
         child: _roundButton(context, Icons.apps, _portal.show),
       ),
     );

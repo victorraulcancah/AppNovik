@@ -124,9 +124,9 @@ class _ProductsPageState extends State<ProductsPage> {
             Expanded(child: _body(products)),
           ],
         ),
-        // Botón "Acciones": abajo a la izquierda, sobre la lista.
+        // Botón "Acciones": abajo a la derecha, sobre la lista.
         Positioned(
-          left: 16,
+          right: 16,
           bottom: 16,
           child: AppSpeedDial(actions: _actions()),
         ),
