@@ -17,6 +17,8 @@ class SessionContextModel extends SessionContextEntity {
     required super.permissions,
     required super.roles,
     required super.warehouses,
+    super.defaultWarehouseId,
+    super.defaultListPriceId,
   });
 
   factory SessionContextModel.fromJson(Map<String, dynamic> json) {
@@ -51,6 +53,8 @@ class SessionContextModel extends SessionContextEntity {
                 codigo: w['codigo'] as String?,
               ))
           .toList(),
+      defaultWarehouseId: _int(user['warehouse_id']),
+      defaultListPriceId: _int(user['list_price_id']),
     );
   }
 
@@ -63,6 +67,7 @@ class SessionContextModel extends SessionContextEntity {
       direccion: c['direccion'] as String?,
       telefono: c['telefono'] as String?,
       igv: _double(c['igv']),
+      emiteComprobantes: c['certificado'] != null && '${c['certificado']}'.isNotEmpty,
       plan: profile == null
           ? null
           : PlanEntity(

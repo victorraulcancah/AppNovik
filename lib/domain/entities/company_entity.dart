@@ -25,6 +25,10 @@ class CompanyEntity {
   final double? igv;
   final PlanEntity? plan;
 
+  /// Tiene certificado digital: puede emitir boletas y facturas a SUNAT.
+  /// (Solo se guarda si existe; el certificado en sí nunca se conserva.)
+  final bool emiteComprobantes;
+
   const CompanyEntity({
     required this.id,
     required this.razonSocial,
@@ -33,5 +37,6 @@ class CompanyEntity {
     this.telefono,
     this.igv,
     this.plan,
+    this.emiteComprobantes = false,
   });
 }

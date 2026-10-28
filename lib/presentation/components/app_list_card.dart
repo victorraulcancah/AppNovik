@@ -9,6 +9,9 @@ class AppListCard extends StatelessWidget {
   final String title;
   final List<String> lines;
   final String? trailingTitle;
+
+  /// Color del dato destacado (por ejemplo rojo si el stock es negativo).
+  final Color? trailingTitleColor;
   final String? trailingCaption;
 
   /// Color de la nota (por ejemplo verde para "Activo"); por defecto, apagado.
@@ -24,6 +27,7 @@ class AppListCard extends StatelessWidget {
     required this.title,
     this.lines = const [],
     this.trailingTitle,
+    this.trailingTitleColor,
     this.trailingCaption,
     this.trailingCaptionColor,
     this.actions = const [],
@@ -95,6 +99,7 @@ class AppListCard extends StatelessWidget {
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 fontFeatures: tabular,
+                                color: trailingTitleColor,
                               ),
                             ),
                           ),

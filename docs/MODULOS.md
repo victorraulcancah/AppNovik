@@ -33,6 +33,18 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 Cada módulo se entrega primero en **solo lectura** y después se agregan las acciones de crear/editar.
 
+### Estado de Reportes
+
+- **Versión 1 (hecha, sin probar contra el servidor)**: *Resumen ejecutivo* (`GET /ventas/resumen-ejecutivo`, permiso `reportes.index`). Rango: hoy, este mes (predeterminado), mes pasado, este año o fechas a elección. Muestra ventas contra el mismo rango del año pasado, n.º de ventas, ticket promedio, meta del mes con su semáforo, evolución por mes (año actual contra el anterior), mejores clientes, productos más vendidos, venta por departamento y cotizaciones pendientes.
+- Es el resumen **del propio usuario** (las ventas que se le atribuyen); el backend responde 403 al Jefe de Almacén.
+- **Pendiente**: el resto de las pestañas de la web (Producto, Ventas General, Vendedor, Sucursales, Marcas, Categorías, Clientes, Tracking, Clientes con caída, Productos sin ventas...), exportar a Excel, y las tarjetas del resumen que dependen de Gestión y seguimiento (tareas de hoy, clientes que necesitan atención, cumpleaños).
+
+### Estado de Ventas
+
+- **Paso 1 (hecho, sin probar contra el servidor)**: venta al contado en soles. Permiso `ventas.store`. Comprobante (nota de venta; boleta y factura solo si la empresa tiene certificado), almacén, lista de precios en soles, cliente (`/clientes/search`), productos (`/productos/search`, con stock por almacén y precio por lista), una forma de pago al contado (`/metodos-de-pago/list`) y `POST /ventas`. Entrega inmediata (`metodo_entrega: 'e'`).
+- **Paso 2 (pendiente)**: crédito y cuotas, ventas en dólares (tipo de cambio 3.000–4.300), puntos, contraentrega, descuentos, ítems libres, cliente varios, fecha de emisión, vendedor encargado y cotizaciones.
+- La app no repite la venta si falla la red: avisa que se revise Documentos antes de reintentar, porque el servidor pudo haberla registrado.
+
 ## 3. Preguntas abiertas
 
 1. **¿Un mismo usuario puede trabajar con más de una empresa?** Hoy el backend no lo permite (un usuario = una empresa). Si hace falta, habría que cambiar el backend o aceptar dos logins distintos en la app.

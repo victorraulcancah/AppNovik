@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
+import 'documents_page.dart';
 import 'products_page.dart';
+import 'reports_page.dart';
+import 'sales_page.dart';
+import 'stock_page.dart';
 
 /// Módulo que la app sabe mostrar. `slug` coincide con el nombre del módulo
 /// en el backend (`Module.name` pasado por `convertToSlug`).
@@ -59,7 +63,11 @@ class _MainShellPageState extends State<MainShellPage> {
               mensaje: 'Tu empresa no tiene módulos habilitados para la app.',
             )
           : switch (actual.slug) {
+              'ventas' => const SalesPage(),
+              'reportes' => const ReportsPage(),
               'productos' => const ProductsPage(),
+              'stock' => const StockPage(),
+              'documentos' => const DocumentsPage(),
               _ => _ModuloVacio(
                   icono: actual.iconoActivo,
                   titulo: actual.titulo,

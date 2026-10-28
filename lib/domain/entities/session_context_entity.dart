@@ -13,6 +13,10 @@ class SessionContextEntity {
   final List<String> roles;
   final List<WarehouseEntity> warehouses;
 
+  /// Almacén y lista de precios predeterminados del usuario (pueden no existir).
+  final int? defaultWarehouseId;
+  final int? defaultListPriceId;
+
   const SessionContextEntity({
     required this.user,
     required this.company,
@@ -20,9 +24,13 @@ class SessionContextEntity {
     required this.permissions,
     required this.roles,
     required this.warehouses,
+    this.defaultWarehouseId,
+    this.defaultListPriceId,
   });
 
   bool hasModule(String slug) => modules.any((m) => m.slug == slug);
 
   bool can(String permission) => permissions.contains(permission);
+
+  bool hasRole(String role) => roles.contains(role);
 }
