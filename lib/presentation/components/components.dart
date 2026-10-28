@@ -1,5 +1,6 @@
 export 'adaptive_scaffold.dart';
 export 'app_list_row.dart';
+export 'app_loading.dart';
 export 'app_logo.dart';
 export 'app_search_bar.dart';
 export 'app_top_bar.dart';

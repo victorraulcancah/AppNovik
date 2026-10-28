@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/constants/app_constants.dart';
 import 'dependency_injection.dart';
+import 'presentation/components/components.dart';
 import 'presentation/pages/pages.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'theme/app_theme.dart';
@@ -54,7 +55,7 @@ class _AppWrapperState extends State<AppWrapper> {
       case AuthStatus.authenticated:
         return const MainShellPage();
       case AuthStatus.initial:
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const AppLoadingScreen();
       case AuthStatus.contextError:
         return const SessionErrorPage();
       case AuthStatus.loading:

@@ -10,6 +10,11 @@ class AppTheme {
   static const Color brandDark = Color(0xFF0F172A);
   static const Color brandDarkAlt = Color(0xFF1E293B);
 
+  /// Navegación (barra inferior y riel): el azul pizarra de la marca, con
+  /// íconos apagados y el destino activo en blanco sobre una píldora más clara.
+  static const Color navIndicator = Color(0xFF334155);
+  static const Color navMuted = Color(0xFF94A3B8);
+
   static const double radius = 14;
 
   static ThemeData get light => _build(Brightness.light);
@@ -82,6 +87,51 @@ class AppTheme {
             borderRadius: BorderRadius.circular(radius),
           ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: scheme.onSurfaceVariant,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: brandDark,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: navIndicator,
+        height: 72,
+        elevation: 0,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            size: 24,
+            color: states.contains(WidgetState.selected)
+                ? Colors.white
+                : navMuted,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? Colors.white
+                : navMuted,
+          ),
+        ),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: brandDark,
+        indicatorColor: navIndicator,
+        selectedIconTheme: const IconThemeData(color: Colors.white),
+        unselectedIconTheme: const IconThemeData(color: navMuted),
+        selectedLabelTextStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        unselectedLabelTextStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: navMuted,
         ),
       ),
       listTileTheme: const ListTileThemeData(

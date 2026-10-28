@@ -4,7 +4,7 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 ## 1. Cómo funciona lo multiempresa en 7power
 
-- **Cada usuario pertenece a una sola empresa** (`users.company_id`). El token de Sanctum identifica al usuario, y el backend filtra por `Auth::user()->company_id`. **La app nunca envía `company_id`.**
+- **Cada usuario pertenece a una sola empresa** (`users.company_id`). El token de Sanctum identifica al usuario. Varias partes del backend filtran por `Auth::user()->company_id`, **pero no todas**: `GET /productos` y `GET /productos/search` exigen `company_id` como parámetro de la petición y filtran con ese valor sin comprobar que sea el de la empresa del usuario. La app debe enviar siempre el `company_id` de su sesión, y el backend debería validarlo (hoy un usuario autenticado podría pedir productos de otra empresa cambiando ese parámetro). Pendiente de corregir en 7power.
 - Casi toda la información lleva `company_id`: productos, ventas, cotizaciones, stock, almacenes, clientes, listas de precios, marcas, categorías, despachos, etc. Los números de documento se numeran por empresa.
 - **Perfil/plan de la empresa** (`profiles`): `documentos_max`, `almacenes_max`, `estado_cuenta_clientes`, `ecommerce`. Hay funciones que dependen del plan.
 - **Módulos por empresa**: la tabla `module_company` define qué módulos tiene contratados cada empresa. Además cada usuario necesita el permiso `<nombre-del-módulo-en-slug>.index` (por rol).
