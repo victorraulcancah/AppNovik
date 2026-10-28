@@ -49,6 +49,9 @@ class DependencyInjection {
         ChangeNotifierProxyProvider<AuthProvider, ProductsProvider>(
           create: (context) => ProductsProvider(
             getProductsUseCase: GetProductsUseCase(repository: _productRepository),
+            getCatalogsUseCase:
+                GetProductCatalogsUseCase(repository: _productRepository),
+            saveProductUseCase: SaveProductUseCase(repository: _productRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) =>

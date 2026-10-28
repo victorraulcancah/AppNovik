@@ -3,9 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../domain/entities/product_entity.dart';
 import '../components/components.dart';
+import '../providers/auth_provider.dart';
 import '../providers/products_provider.dart';
+import '../widgets/product_modals.dart';
 
-/// Módulo Productos (solo lectura): lista paginada con búsqueda y filtro de tipo.
+/// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle,
+/// y crear/editar según los permisos del usuario. Plantilla, subir, exportar e
+/// importar marcas/categorías aún no están disponibles.
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
 
@@ -64,15 +68,66 @@ class _ProductsPageState extends State<ProductsPage> {
       ..showSnackBar(SnackBar(content: Text('$accion: disponible pronto')));
   }
 
-  /// Las mismas acciones que la web en `/productos`: crear, plantilla, subir,
-  /// exportar, y las importaciones de marcas y categorías.
+  /// Permisos del usuario (los mismos que valida la web: `productos.store`,
+  /// `productos.update`).
+  bool _can(String permission) =>
+      context.read<AuthProvider>().session?.can(permission) ?? false;
+
+  void _crear() {
+    final products = context.read<ProductsProvider>();
+    showProductForm(
+      context,
+      loadCatalogs: products.loadCatalogs,
+      onSubmit: (form) => products.saveProduct(form),
+    );
+  }
+
+  Future<void> _editar(ProductEntity p) async {
+    final products = context.read<ProductsProvider>();
+    await showProductForm(
+      context,
+      product: p,
+      loadCatalogs: products.loadCatalogs,
+      onSubmit: (form) => products.saveProduct(form, id: p.id),
+    );
+  }
+
+  Future<void> _verDetalle(ProductEntity p) async {
+    final editar = await showProductDetail(
+      context,
+      p,
+      canEdit: _can('productos.update'),
+    );
+    if (editar == true && mounted) _editar(p);
+  }
+
+  // Las mismas acciones que la web en `/productos`: crear, plantilla, subir,
+  // exportar, y las importaciones de marcas y categorías.
+
+  void _importar(String titulo, String plantilla, IconData icono) {
+    showAppImportModal(
+      context,
+      title: titulo,
+      subtitle: 'Importación masiva',
+      icon: icono,
+      templateName: plantilla,
+      onDownloadTemplate: () => _proximamente('Descargar plantilla'),
+      onPickFile: () async {
+        _proximamente('Elegir archivo');
+        return null;
+      },
+      onUpload: (_) => _proximamente('Subir archivo'),
+    );
+  }
+
   List<AppSpeedDialAction> _actions() => [
-        AppSpeedDialAction(
-          label: 'Crear',
-          icon: Icons.add,
-          color: const Color(0xFF16A34A),
-          onPressed: () => _proximamente('Crear producto'),
-        ),
+        if (_can('productos.store'))
+          AppSpeedDialAction(
+            label: 'Crear',
+            icon: Icons.add,
+            color: const Color(0xFF16A34A),
+            onPressed: _crear,
+          ),
         AppSpeedDialAction(
           label: 'Descargar plantilla',
           icon: Icons.download_outlined,
@@ -83,7 +138,8 @@ class _ProductsPageState extends State<ProductsPage> {
           label: 'Subir productos',
           icon: Icons.upload_outlined,
           color: const Color(0xFFE8891D),
-          onPressed: () => _proximamente('Subir productos'),
+          onPressed: () =>
+              _importar('Subir productos', 'plantilla de productos', Icons.upload_outlined),
         ),
         AppSpeedDialAction(
           label: 'Exportar',
@@ -95,13 +151,18 @@ class _ProductsPageState extends State<ProductsPage> {
           label: 'Importar marcas',
           icon: Icons.sell_outlined,
           color: const Color(0xFF7C3AED),
-          onPressed: () => _proximamente('Importar marcas'),
+          onPressed: () =>
+              _importar('Importar marcas', 'plantilla de marcas', Icons.sell_outlined),
         ),
         AppSpeedDialAction(
           label: 'Importar categorías',
           icon: Icons.account_tree_outlined,
           color: const Color(0xFFDB2777),
-          onPressed: () => _proximamente('Importar categorías'),
+          onPressed: () => _importar(
+            'Importar categorías',
+            'plantilla de categorías',
+            Icons.account_tree_outlined,
+          ),
         ),
       ];
 
@@ -187,6 +248,8 @@ class _ProductsPageState extends State<ProductsPage> {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
 
+    // Los mismos datos que la tabla de la web: tipo, código, descripción,
+    // marca, categoría, unidad de medida y estado.
     final detalle = [p.marca, p.categoria]
         .whereType<String>()
         .where((t) => t.isNotEmpty)
@@ -196,33 +259,21 @@ class _ProductsPageState extends State<ProductsPage> {
       number: number,
       title: p.name,
       lines: [
-        if (p.codigo.isNotEmpty) p.codigo,
+        [p.esServicio ? 'Servicio' : 'Producto', if (p.codigo.isNotEmpty) p.codigo]
+            .join(' · '),
         if (detalle.isNotEmpty) detalle,
       ],
-      trailingTitle: p.esServicio ? 'Servicio' : _stock(p),
+      trailingTitle: p.unidadLabel,
       trailingCaption: p.activo ? 'Activo' : 'Inactivo',
       trailingCaptionColor: p.activo
           ? (dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
           : scheme.onSurfaceVariant,
+      onTap: () => _verDetalle(p),
       actions: [
-        AppActionButton(
-          type: AppActionType.edit,
-          onPressed: () => _proximamente('Editar producto'),
-        ),
-        AppActionButton(
-          type: AppActionType.annul,
-          onPressed: () => _proximamente('Anular producto'),
-        ),
+        AppActionButton(type: AppActionType.view, onPressed: () => _verDetalle(p)),
+        if (_can('productos.update'))
+          AppActionButton(type: AppActionType.edit, onPressed: () => _editar(p)),
       ],
     );
-  }
-
-  String? _stock(ProductEntity p) {
-    final stock = p.stockTotal;
-    if (stock == null) return null;
-    final text = stock == stock.roundToDouble()
-        ? stock.toInt().toString()
-        : stock.toStringAsFixed(2);
-    return '$text ${p.unidad ?? 'und.'}';
   }
 }

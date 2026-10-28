@@ -5,13 +5,26 @@ class ProductModel extends ProductEntity {
     required super.id,
     required super.codigo,
     required super.name,
-    super.sku,
     super.esServicio,
     super.activo,
     super.marca,
     super.categoria,
     super.unidad,
-    super.stockTotal,
+    super.cantidadBloque,
+    super.codBarra,
+    super.sku,
+    super.proveedor,
+    super.descripcion,
+    super.usuario,
+    super.ventaSinStock,
+    super.duplicar,
+    super.creado,
+    super.marcaId,
+    super.categoriaId,
+    super.unidadId,
+    super.proveedorId,
+    super.canalId,
+    super.giroNegocioId,
   });
 
   /// Elemento de `data` de `GET /productos`.
@@ -20,37 +33,36 @@ class ProductModel extends ProductEntity {
       id: _int(json['id']) ?? 0,
       codigo: (json['codigo'] ?? '') as String,
       name: (json['name'] ?? '') as String,
-      sku: json['sku'] as String?,
       esServicio: json['tipo'] == 's',
       activo: _bool(json['estado'], defaultValue: true),
       marca: _name(json['brand']),
       categoria: _name(json['category']),
       unidad: _name(json['measure']),
-      stockTotal: _stock(json['warehouses']),
+      cantidadBloque: _int(json['cantidad_bloque']),
+      codBarra: json['cod_barra'] as String?,
+      sku: json['sku'] as String?,
+      proveedor: _name(json['provider']),
+      descripcion: json['descripcion'] as String?,
+      usuario: _name(json['user']),
+      ventaSinStock: _bool(json['vender_sin_stock'], defaultValue: false),
+      duplicar: _bool(json['duplicar'], defaultValue: false),
+      creado: json['created_at'] is String
+          ? DateTime.tryParse(json['created_at'] as String)?.toLocal()
+          : null,
+      marcaId: _int(json['brand_id']),
+      categoriaId: _int(json['category_id']),
+      unidadId: _int(json['measure_id']),
+      proveedorId: _int(json['provider_id']),
+      canalId: _int(json['canal_id']),
+      giroNegocioId: _int(json['giro_negocio_id']),
     );
   }
 
   static String? _name(dynamic relation) =>
       relation is Map ? relation['name'] as String? : null;
 
-  /// Suma `pivot.stock` de cada almacén; `null` si ninguno trae el dato.
-  static double? _stock(dynamic warehouses) {
-    if (warehouses is! List) return null;
-    double? total;
-    for (final w in warehouses) {
-      if (w is! Map) continue;
-      final pivot = w['pivot'];
-      final value = pivot is Map ? _double(pivot['stock']) : null;
-      if (value != null) total = (total ?? 0) + value;
-    }
-    return total;
-  }
-
   static int? _int(dynamic v) =>
       v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
-
-  static double? _double(dynamic v) =>
-      v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
 
   static bool _bool(dynamic v, {required bool defaultValue}) {
     if (v == null) return defaultValue;

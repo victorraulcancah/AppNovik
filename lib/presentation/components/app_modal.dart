@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../theme/app_theme.dart';
 
 /// Tono del modal: define el color de la franja de cabecera y del botón principal.
 enum AppModalTone {
-  /// Acciones normales (crear, editar): azul pizarra de la marca.
+  /// Acciones normales (crear, editar, ver detalle): azul pizarra de la marca.
   normal,
 
   /// Acciones destructivas (eliminar).
@@ -35,36 +36,52 @@ extension on AppModalTone {
   }
 }
 
-/// Abre un modal con cabecera de color (título y subtítulo), cuerpo
-/// desplazable y pie con Cancelar y la acción principal.
+/// Modal estándar de la app (ver detalle, crear, editar, anular, importar...).
 ///
-/// En celular sube como hoja inferior; en tablet es un diálogo centrado.
+/// Cabecera con fondo de color: ícono, título y subtítulo (una línea cada uno).
+/// Cuerpo con scroll y pie con dos botones: el secundario (Cancelar, Cerrar...)
+/// y el principal. No tiene botón de cerrar: en celular sube como hoja inferior
+/// con asa y se cierra deslizando hacia abajo; en tablet es un diálogo
+/// centrado que también se cierra tocando fuera.
+///
 /// Devuelve `true` si se confirmó la acción principal, `null` si se cerró.
 ///
-/// [onPrimary] puede ser asíncrono: mientras corre, el botón muestra carga.
-/// Si lanza una excepción, el modal sigue abierto; si termina bien, se cierra.
+/// - [onPrimary] puede ser asíncrono: mientras corre, el botón muestra carga.
+///   Si lanza una excepción, el modal sigue abierto; si termina bien, se cierra.
+/// - [formKey]: si se pasa, el cuerpo se envuelve en un `Form` y la acción
+///   principal solo corre si el formulario es válido.
+/// - [primaryEnabled]: habilita o deshabilita el botón principal desde dentro
+///   del cuerpo (por ejemplo, hasta elegir un archivo).
+/// - Con [primaryLabel] `null` no hay botón principal (solo se puede cerrar).
 Future<bool?> showAppModal(
   BuildContext context, {
   required String title,
   String? subtitle,
+  IconData? icon,
   AppModalTone tone = AppModalTone.normal,
   required Widget child,
-  String primaryLabel = 'Guardar',
-  String cancelLabel = 'Cancelar',
+  String? primaryLabel = 'Guardar',
+  String secondaryLabel = 'Cancelar',
   FutureOr<void> Function()? onPrimary,
+  GlobalKey<FormState>? formKey,
+  ValueListenable<bool>? primaryEnabled,
 }) {
-  Widget build(BuildContext ctx) => _AppModalContent(
-        title: title,
-        subtitle: subtitle,
-        tone: tone,
-        primaryLabel: primaryLabel,
-        cancelLabel: cancelLabel,
-        onPrimary: onPrimary,
-        child: child,
-      );
-
   final isTablet =
       MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
+
+  Widget build(BuildContext ctx, {required bool handle}) => _AppModalContent(
+        title: title,
+        subtitle: subtitle,
+        icon: icon,
+        tone: tone,
+        primaryLabel: primaryLabel,
+        secondaryLabel: secondaryLabel,
+        onPrimary: onPrimary,
+        formKey: formKey,
+        primaryEnabled: primaryEnabled,
+        showHandle: handle,
+        child: child,
+      );
 
   if (isTablet) {
     return showDialog<bool>(
@@ -75,7 +92,7 @@ Future<bool?> showAppModal(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: build(ctx),
+          child: build(ctx, handle: false),
         ),
       ),
     );
@@ -91,18 +108,19 @@ Future<bool?> showAppModal(
     ),
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-      child: build(ctx),
+      child: build(ctx, handle: true),
     ),
   );
 }
 
-/// Confirmación sencilla (eliminar, anular): mismo modal, sin cuerpo propio.
+/// Confirmación sencilla (eliminar, anular): mismo modal, con un mensaje.
 /// Devuelve `true` solo si el usuario confirma.
 Future<bool> showAppConfirm(
   BuildContext context, {
   required String title,
   required String message,
   String? subtitle,
+  IconData? icon,
   String confirmLabel = 'Confirmar',
   AppModalTone tone = AppModalTone.danger,
 }) async {
@@ -110,6 +128,7 @@ Future<bool> showAppConfirm(
     context,
     title: title,
     subtitle: subtitle,
+    icon: icon,
     tone: tone,
     primaryLabel: confirmLabel,
     child: Text(message),
@@ -120,19 +139,27 @@ Future<bool> showAppConfirm(
 class _AppModalContent extends StatefulWidget {
   final String title;
   final String? subtitle;
+  final IconData? icon;
   final AppModalTone tone;
-  final String primaryLabel;
-  final String cancelLabel;
+  final String? primaryLabel;
+  final String secondaryLabel;
   final FutureOr<void> Function()? onPrimary;
+  final GlobalKey<FormState>? formKey;
+  final ValueListenable<bool>? primaryEnabled;
+  final bool showHandle;
   final Widget child;
 
   const _AppModalContent({
     required this.title,
     required this.subtitle,
+    required this.icon,
     required this.tone,
     required this.primaryLabel,
-    required this.cancelLabel,
+    required this.secondaryLabel,
     required this.onPrimary,
+    required this.formKey,
+    required this.primaryEnabled,
+    required this.showHandle,
     required this.child,
   });
 
@@ -144,6 +171,9 @@ class _AppModalContentState extends State<_AppModalContent> {
   bool _busy = false;
 
   Future<void> _confirm() async {
+    final form = widget.formKey?.currentState;
+    if (form != null && !form.validate()) return;
+
     setState(() => _busy = true);
     try {
       await widget.onPrimary?.call();
@@ -154,10 +184,34 @@ class _AppModalContentState extends State<_AppModalContent> {
     }
   }
 
+  Widget _primaryButton(Brightness brightness, bool enabled) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 52),
+        backgroundColor: widget.tone.buttonColor(brightness),
+        foregroundColor: Colors.white,
+      ),
+      onPressed: (_busy || !enabled) ? null : _confirm,
+      child: _busy
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+            )
+          : Text(widget.primaryLabel!),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final hasPrimary = widget.primaryLabel != null;
+
+    Widget body = widget.child;
+    if (widget.formKey != null) {
+      body = Form(key: widget.formKey, child: body);
+    }
 
     return Material(
       color: scheme.surfaceContainerLowest,
@@ -165,9 +219,9 @@ class _AppModalContentState extends State<_AppModalContent> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Franja de cabecera: título, subtítulo y cierre.
+          // Cabecera con fondo: asa, ícono, título, subtítulo y cierre.
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+            padding: EdgeInsets.fromLTRB(16, widget.showHandle ? 8 : 14, 8, 14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
@@ -175,36 +229,64 @@ class _AppModalContentState extends State<_AppModalContent> {
                 colors: widget.tone.headerColors,
               ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (widget.subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.subtitle!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.78),
-                          ),
-                        ),
-                      ],
-                    ],
+                if (widget.showHandle)
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Cerrar',
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (widget.icon != null) ...[
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(widget.icon, color: Colors.white),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Una línea: los nombres largos se cortan con "…".
+                          Text(
+                            widget.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (widget.subtitle != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.78),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ),
               ],
             ),
@@ -212,47 +294,46 @@ class _AppModalContentState extends State<_AppModalContent> {
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
-              child: widget.child,
+              child: body,
             ),
           ),
           Divider(height: 1, color: scheme.outlineVariant),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: scheme.onSurface,
-                    side: BorderSide(color: scheme.outline),
-                    minimumSize: const Size(96, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radius),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: scheme.onSurface,
+                        side: BorderSide(color: scheme.outline),
+                        minimumSize: const Size(0, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radius),
+                        ),
+                      ),
+                      onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                      child: Text(widget.secondaryLabel),
                     ),
                   ),
-                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                  child: Text(widget.cancelLabel),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(120, 48),
-                    backgroundColor: widget.tone.buttonColor(theme.brightness),
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: _busy ? null : _confirm,
-                  child: _busy
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(widget.primaryLabel),
-                ),
-              ],
+                  if (hasPrimary) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: widget.primaryEnabled == null
+                          ? _primaryButton(theme.brightness, true)
+                          : ValueListenableBuilder<bool>(
+                              valueListenable: widget.primaryEnabled!,
+                              builder: (context, enabled, _) =>
+                                  _primaryButton(theme.brightness, enabled),
+                            ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],

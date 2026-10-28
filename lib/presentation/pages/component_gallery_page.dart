@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../domain/entities/product_entity.dart';
+import '../../domain/entities/product_form_entity.dart';
 import '../components/components.dart';
+import '../widgets/product_modals.dart';
 
 /// Vista de ejemplo con los componentes reutilizables, con la misma lógica que
 /// la web (`/productos`): encabezado con un solo botón de acciones adicionales,
@@ -63,23 +66,49 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
     if (result != null) setState(() => _filters = result);
   }
 
-  Future<void> _crear() {
-    final codigo = TextEditingController();
-    final nombre = TextEditingController();
-    return showAppModal(
+  void _detalle((String, String, String, String, String) p) {
+    showProductDetail(
       context,
-      title: 'Nuevo producto',
-      subtitle: 'Completa los datos del producto',
-      primaryLabel: 'Crear producto',
-      onPrimary: () => Future<void>.delayed(const Duration(milliseconds: 600)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppTextField(controller: codigo, label: 'Código'),
-          const SizedBox(height: 16),
-          AppTextField(controller: nombre, label: 'Nombre'),
-        ],
+      ProductEntity(
+        id: 1,
+        codigo: p.$1,
+        // Nombre largo a propósito: el título del modal debe cortarse con "…".
+        name: '${p.$2} CCA CALIBRE 0GA 15 METROS DE LARGO',
+        sku: '7750010${p.$1.length}',
+        marca: p.$3,
+        categoria: 'Audio',
+        unidad: 'UNIDAD',
+        cantidadBloque: 1,
+        codBarra: '7750010123456',
+        proveedor: 'IMPORTADORA SAC',
+        descripcion: 'Producto de ejemplo',
+        usuario: 'Admin',
+        creado: DateTime(2026, 8, 21),
       ),
+    );
+  }
+
+  /// Formulario real de producto con catálogos de ejemplo (sin red).
+  Future<void> _crear() {
+    List<CatalogItemEntity> items(List<String> names) => [
+          for (var i = 0; i < names.length; i++)
+            CatalogItemEntity(id: i + 1, name: names[i]),
+        ];
+
+    return showProductForm(
+      context,
+      loadCatalogs: () async => ProductCatalogsEntity(
+        marcas: items(['PIONEER', 'JBL', 'KICKER']),
+        categorias: items(['PARLANTES', 'AMPLIFICADORES']),
+        medidas: items(['UNIDAD', 'CAJA']),
+        proveedores: items(['IMPORTADORA SAC']),
+        canales: items(['ELECTRÓNICA', 'INDUSTRIAL']),
+        giros: items(['CAR AUDIO']),
+      ),
+      onSubmit: (form) async {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        return form.codigo == 'DUP' ? 'El código ya existe' : null;
+      },
     );
   }
 
@@ -149,7 +178,9 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
                 lines: [p.$1, p.$3],
                 trailingTitle: p.$5,
                 trailingCaption: p.$4,
+                onTap: () => _detalle(p),
                 actions: [
+                  AppActionButton(type: AppActionType.view, onPressed: () => _detalle(p)),
                   AppActionButton(type: AppActionType.edit, onPressed: () {}),
                   AppActionButton(
                     type: AppActionType.annul,

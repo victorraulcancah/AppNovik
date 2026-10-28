@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../domain/entities/product_entity.dart';
+import '../../domain/entities/product_form_entity.dart';
 import '../../domain/usecases/product_usecases.dart';
 
 /// Estado de la lista de productos: búsqueda, filtro de tipo y paginación.
@@ -8,17 +9,24 @@ class ProductsProvider extends ChangeNotifier {
   static const pageSize = 20;
 
   final GetProductsUseCase _getProducts;
+  final GetProductCatalogsUseCase _getCatalogs;
+  final SaveProductUseCase _saveProduct;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
 
   ProductsProvider({
     required GetProductsUseCase getProductsUseCase,
+    required GetProductCatalogsUseCase getCatalogsUseCase,
+    required SaveProductUseCase saveProductUseCase,
     VoidCallback? onSessionExpired,
   })  : _getProducts = getProductsUseCase,
+        _getCatalogs = getCatalogsUseCase,
+        _saveProduct = saveProductUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
+  ProductCatalogsEntity? _catalogs;
   int _page = 0;
   int _request = 0;
 
@@ -51,6 +59,42 @@ class ProductsProvider extends ChangeNotifier {
     tipo = null;
     _page = 0;
     _request++;
+    _catalogs = null;
+  }
+
+  /// Catálogos del formulario (marcas, categorías...). Se piden una vez por
+  /// empresa; lanza una excepción con el mensaje si falla.
+  Future<ProductCatalogsEntity> loadCatalogs() async {
+    final cached = _catalogs;
+    if (cached != null) return cached;
+
+    final result = await _getCatalogs();
+    return result.fold(
+      (failure) {
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+        throw Exception(failure.message);
+      },
+      (catalogs) => _catalogs = catalogs,
+    );
+  }
+
+  /// Crea el producto, o lo edita si se pasa [id], y recarga la lista.
+  /// Devuelve `null` si salió bien o el mensaje de error.
+  Future<String?> saveProduct(ProductFormEntity form, {int? id}) async {
+    final companyId = _companyId;
+    if (companyId == null) return 'No hay una empresa activa';
+
+    final result = await _saveProduct(companyId: companyId, form: form, id: id);
+    return result.fold(
+      (failure) {
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+        return failure.message;
+      },
+      (_) {
+        refresh();
+        return null;
+      },
+    );
   }
 
   /// Carga la primera página si todavía no se cargó nada.
