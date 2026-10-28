@@ -17,11 +17,15 @@ class AppSpeedDialAction {
   });
 }
 
-/// Botón flotante "Acciones" que se despliega hacia arriba con todas las
-/// acciones de la vista (crear, plantilla, subir, exportar...), cada una con
-/// su etiqueta. Con una sola acción se muestra como un botón flotante normal.
-/// Va en `Scaffold.floatingActionButton`; deja espacio al final de la lista
-/// (`AppCardList.bottomPadding`) para que no tape el último elemento.
+/// Botón redondo "Acciones" que flota abajo a la izquierda de la vista. Al
+/// tocarlo oscurece la pantalla y despliega hacia arriba todas las acciones
+/// (crear, plantilla, subir, exportar...), cada una con su etiqueta. Con una
+/// sola acción se muestra como un botón flotante normal con su nombre.
+///
+/// Colócalo con `Positioned(left: 16, bottom: 16)` dentro de un `Stack`, o en
+/// `Scaffold.floatingActionButton` con `FloatingActionButtonLocation.startFloat`.
+/// Deja espacio al final de la lista (`AppCardList.bottomPadding`, por ejemplo
+/// 96) para que no tape el último elemento.
 class AppSpeedDial extends StatefulWidget {
   final List<AppSpeedDialAction> actions;
   final String label;
@@ -33,12 +37,48 @@ class AppSpeedDial extends StatefulWidget {
 }
 
 class _AppSpeedDialState extends State<AppSpeedDial> {
+  static const _size = 64.0;
+  static const _miniSize = 40.0;
+
   final _portal = OverlayPortalController();
   final _link = LayerLink();
 
+  /// Botón redondo con ícono y, debajo, el nombre.
+  Widget _roundButton(BuildContext context, IconData icon, VoidCallback onPressed) {
+    return Material(
+      color: AppTheme.strongFill(Theme.of(context).brightness),
+      elevation: 6,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: _size,
+          height: _size,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 24),
+              Text(
+                widget.label,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _overlay(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final fill = AppTheme.strongFill(Theme.of(context).brightness);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final fill = AppTheme.strongFill(theme.brightness);
     final animate = !MediaQuery.disableAnimationsOf(context);
 
     return TweenAnimationBuilder<double>(
@@ -58,18 +98,40 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
             ),
             CompositedTransformFollower(
               link: _link,
-              targetAnchor: Alignment.bottomRight,
-              followerAnchor: Alignment.bottomRight,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.bottomLeft,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (final a in widget.actions)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      // Centra el círculo pequeño sobre el botón principal.
+                      padding: const EdgeInsets.only(
+                        left: (_size - _miniSize) / 2,
+                        bottom: 12,
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          SizedBox(
+                            width: _miniSize,
+                            height: _miniSize,
+                            child: FloatingActionButton.small(
+                              heroTag: null,
+                              tooltip: a.label,
+                              backgroundColor:
+                                  a.primary ? fill : scheme.surfaceContainerHighest,
+                              foregroundColor:
+                                  a.primary ? Colors.white : scheme.onSurface,
+                              onPressed: () {
+                                _portal.hide();
+                                a.onPressed?.call();
+                              },
+                              child: Icon(a.icon),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
                           Material(
                             color: scheme.surfaceContainerHighest,
                             elevation: 2,
@@ -79,37 +141,13 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
                                 horizontal: 12,
                                 vertical: 8,
                               ),
-                              child: Text(
-                                a.label,
-                                style: Theme.of(context).textTheme.labelLarge,
-                              ),
+                              child: Text(a.label, style: theme.textTheme.labelLarge),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          FloatingActionButton.small(
-                            heroTag: null,
-                            tooltip: a.label,
-                            backgroundColor:
-                                a.primary ? fill : scheme.surfaceContainerHighest,
-                            foregroundColor:
-                                a.primary ? Colors.white : scheme.onSurface,
-                            onPressed: () {
-                              _portal.hide();
-                              a.onPressed?.call();
-                            },
-                            child: Icon(a.icon),
                           ),
                         ],
                       ),
                     ),
-                  FloatingActionButton.extended(
-                    heroTag: null,
-                    backgroundColor: fill,
-                    foregroundColor: Colors.white,
-                    onPressed: _portal.hide,
-                    icon: const Icon(Icons.close),
-                    label: Text(widget.label),
-                  ),
+                  _roundButton(context, Icons.close, _portal.hide),
                 ],
               ),
             ),
@@ -121,13 +159,11 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
 
   @override
   Widget build(BuildContext context) {
-    final fill = AppTheme.strongFill(Theme.of(context).brightness);
-
     if (widget.actions.length == 1) {
       final only = widget.actions.single;
       return FloatingActionButton.extended(
         heroTag: null,
-        backgroundColor: fill,
+        backgroundColor: AppTheme.strongFill(Theme.of(context).brightness),
         foregroundColor: Colors.white,
         onPressed: only.onPressed,
         icon: Icon(only.icon),
@@ -140,14 +176,7 @@ class _AppSpeedDialState extends State<AppSpeedDial> {
       child: OverlayPortal(
         controller: _portal,
         overlayChildBuilder: _overlay,
-        child: FloatingActionButton.extended(
-          heroTag: null,
-          backgroundColor: fill,
-          foregroundColor: Colors.white,
-          onPressed: _portal.show,
-          icon: const Icon(Icons.apps),
-          label: Text(widget.label),
-        ),
+        child: _roundButton(context, Icons.apps, _portal.show),
       ),
     );
   }

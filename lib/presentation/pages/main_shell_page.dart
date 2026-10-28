@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/constants/app_constants.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import 'products_page.dart';
@@ -27,7 +26,8 @@ const _catalogo = [
 ];
 
 /// Contenedor principal. Solo muestra los módulos que la empresa del usuario
-/// tiene habilitados.
+/// tiene habilitados. No tiene barra superior: cada módulo pone su propio
+/// encabezado (`AppPageHeader`) en lo más alto de la pantalla.
 class MainShellPage extends StatefulWidget {
   const MainShellPage({super.key});
 
@@ -49,34 +49,52 @@ class _MainShellPageState extends State<MainShellPage> {
     final actual = modulos.isEmpty ? null : modulos[index];
 
     return AdaptiveScaffold(
-      // Cada módulo pone su propio encabezado; la barra superior muestra la empresa.
-      appBar: AppTopBar(
-        title: session.company.razonSocial,
-        actions: [
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            icon: const Icon(Icons.logout),
-            onPressed: () => context.read<AuthProvider>().logout(),
-          ),
-        ],
-      ),
       destinations: [for (final m in modulos) m.destino],
       selectedIndex: index,
       onDestinationSelected: (i) => setState(() => _index = i),
       body: actual == null
-          ? const AppEmptyState(
-              icon: Icons.apps_outlined,
-              title: 'Sin módulos habilitados',
-              message: 'Tu empresa no tiene módulos habilitados para la app.',
+          ? const _ModuloVacio(
+              icono: Icons.apps_outlined,
+              titulo: 'Novik',
+              mensaje: 'Tu empresa no tiene módulos habilitados para la app.',
             )
           : switch (actual.slug) {
               'productos' => const ProductsPage(),
-              _ => AppEmptyState(
-                  icon: actual.iconoActivo,
-                  title: actual.titulo,
-                  message: 'Este módulo está en construcción.',
+              _ => _ModuloVacio(
+                  icono: actual.iconoActivo,
+                  titulo: actual.titulo,
+                  mensaje: 'Este módulo está en construcción.',
                 ),
             },
+    );
+  }
+}
+
+/// Módulo sin pantalla todavía: encabezado estándar y un estado vacío.
+class _ModuloVacio extends StatelessWidget {
+  final IconData icono;
+  final String titulo;
+  final String mensaje;
+
+  const _ModuloVacio({
+    required this.icono,
+    required this.titulo,
+    required this.mensaje,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AppPageHeader(
+          icon: icono,
+          title: titulo,
+          trailing: const AppAccountMenu(),
+        ),
+        Expanded(
+          child: AppEmptyState(icon: icono, title: titulo, message: mensaje),
+        ),
+      ],
     );
   }
 }

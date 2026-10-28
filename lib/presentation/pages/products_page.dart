@@ -57,24 +57,79 @@ class _ProductsPageState extends State<ProductsPage> {
     if (result != null) provider.setTipo(result['tipo']);
   }
 
+  /// Mientras la app es de solo lectura, estas acciones avisan que aún no existen.
+  void _proximamente(String accion) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('$accion: disponible pronto')));
+  }
+
+  List<AppSpeedDialAction> _actions() => [
+        AppSpeedDialAction(
+          label: 'Crear',
+          icon: Icons.add,
+          primary: true,
+          onPressed: () => _proximamente('Crear producto'),
+        ),
+        AppSpeedDialAction(
+          label: 'Descargar plantilla',
+          icon: Icons.download_outlined,
+          onPressed: () => _proximamente('Descargar plantilla'),
+        ),
+        AppSpeedDialAction(
+          label: 'Subir productos',
+          icon: Icons.upload_outlined,
+          onPressed: () => _proximamente('Subir productos'),
+        ),
+        AppSpeedDialAction(
+          label: 'Exportar',
+          icon: Icons.description_outlined,
+          onPressed: () => _proximamente('Exportar'),
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final products = context.watch<ProductsProvider>();
 
-    return Column(
+    return Stack(
       children: [
-        const AppPageHeader(
-          icon: Icons.category_outlined,
-          title: 'Productos',
-          subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+        Column(
+          children: [
+            const AppPageHeader(
+              icon: Icons.category_outlined,
+              title: 'Productos',
+              subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+              trailing: AppAccountMenu(),
+            ),
+            AppSearchBar(
+              hint: 'Buscar por nombre, código…',
+              onChanged: _onSearchChanged,
+              onFilter: _openFilters,
+              filterActive: products.filtersActive,
+            ),
+            if (products.total > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${products.total} productos',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ),
+            Expanded(child: _body(products)),
+          ],
         ),
-        AppSearchBar(
-          hint: 'Buscar por nombre, código…',
-          onChanged: _onSearchChanged,
-          onFilter: _openFilters,
-          filterActive: products.filtersActive,
+        // Botón "Acciones": abajo a la izquierda, sobre la lista.
+        Positioned(
+          left: 16,
+          bottom: 16,
+          child: AppSpeedDial(actions: _actions()),
         ),
-        Expanded(child: _body(products)),
       ],
     );
   }
@@ -106,6 +161,7 @@ class _ProductsPageState extends State<ProductsPage> {
       onRefresh: products.refresh,
       onLoadMore: products.loadMore,
       loadingMore: products.loadingMore,
+      bottomPadding: 96,
       itemBuilder: (context, p, number) => _card(context, p, number),
     );
   }
@@ -131,6 +187,16 @@ class _ProductsPageState extends State<ProductsPage> {
       trailingCaptionColor: p.activo
           ? (dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
           : scheme.onSurfaceVariant,
+      actions: [
+        AppActionButton(
+          type: AppActionType.edit,
+          onPressed: () => _proximamente('Editar producto'),
+        ),
+        AppActionButton(
+          type: AppActionType.annul,
+          onPressed: () => _proximamente('Anular producto'),
+        ),
+      ],
     );
   }
 

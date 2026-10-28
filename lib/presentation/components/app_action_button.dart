@@ -2,41 +2,44 @@ import 'package:flutter/material.dart';
 
 /// Acciones estándar sobre un registro. Cada una trae su ícono y su color, para
 /// que "anular" se vea igual en toda la app.
-enum AppActionType { view, edit, delete, annul }
+enum AppActionType { view, edit, dispatch, duplicate, annul, delete, pdf }
 
 extension on AppActionType {
   IconData get icon => switch (this) {
-        AppActionType.view => Icons.visibility_outlined,
+        AppActionType.view => Icons.description_outlined,
         AppActionType.edit => Icons.edit_outlined,
-        AppActionType.delete => Icons.delete_outline,
+        AppActionType.dispatch => Icons.local_shipping_outlined,
+        AppActionType.duplicate => Icons.content_copy_outlined,
         AppActionType.annul => Icons.block,
+        AppActionType.delete => Icons.delete_outline,
+        AppActionType.pdf => Icons.picture_as_pdf_outlined,
       };
 
   String get label => switch (this) {
-        AppActionType.view => 'Ver',
+        AppActionType.view => 'Ver detalle',
         AppActionType.edit => 'Editar',
-        AppActionType.delete => 'Eliminar',
+        AppActionType.dispatch => 'Despachar',
+        AppActionType.duplicate => 'Duplicar',
         AppActionType.annul => 'Anular',
+        AppActionType.delete => 'Eliminar',
+        AppActionType.pdf => 'Descargar PDF',
       };
 
-  /// En oscuro se usan tonos más claros para mantener el contraste.
-  Color color(ColorScheme scheme) {
-    final dark = scheme.brightness == Brightness.dark;
-    return switch (this) {
-      AppActionType.view => scheme.onSurfaceVariant,
-      AppActionType.edit =>
-        dark ? const Color(0xFF60A5FA) : const Color(0xFF1E4E80),
-      AppActionType.delete =>
-        dark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
-      AppActionType.annul =>
-        dark ? const Color(0xFFFB923C) : const Color(0xFFF97316),
-    };
-  }
+  Color get color => switch (this) {
+        AppActionType.view => const Color(0xFF16A34A),
+        AppActionType.edit => const Color(0xFF0E90C7),
+        AppActionType.dispatch => const Color(0xFF2563EB),
+        AppActionType.duplicate => const Color(0xFFE8891D),
+        AppActionType.annul => const Color(0xFFC2410C),
+        AppActionType.delete => const Color(0xFFC8123F),
+        AppActionType.pdf => const Color(0xFFA31238),
+      };
 }
 
-/// Botón de acción de una fila: solo ícono, sin fondo ni texto (el nombre sale
-/// como tooltip). Se pone dentro de cada fila o tarjeta, por ejemplo en
-/// `AppListCard.actions`.
+/// Botón de acción de una fila: píldora de color con un ícono blanco, sin
+/// texto (el nombre sale como tooltip). Se pone dentro de cada fila o tarjeta,
+/// por ejemplo en `AppListCard.actions`. Solo se muestran las acciones que el
+/// registro admite.
 ///
 /// Las acciones destructivas ([AppActionType.delete], [AppActionType.annul])
 /// deberían confirmarse con `showAppConfirm` antes de ejecutarse.
@@ -60,11 +63,16 @@ class AppActionButton extends StatelessWidget {
       tooltip: label ?? type.label,
       onPressed: onPressed,
       icon: Icon(type.icon),
-      iconSize: 20,
-      color: type.color(Theme.of(context).colorScheme),
+      iconSize: 18,
       visualDensity: VisualDensity.compact,
       style: IconButton.styleFrom(
-        minimumSize: const Size(36, 36),
+        backgroundColor: type.color,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: type.color.withValues(alpha: 0.35),
+        fixedSize: const Size(38, 28),
+        minimumSize: const Size(38, 28),
+        padding: EdgeInsets.zero,
+        shape: const StadiumBorder(),
         tapTargetSize: MaterialTapTargetSize.padded,
       ),
     );

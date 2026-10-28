@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
-/// Encabezado de una vista: franja con ícono, título y subtítulo. Las acciones
-/// de la vista van en un [AppSpeedDial], no aquí.
+/// Encabezado de una vista y lo más alto de la pantalla: franja con ícono,
+/// título, subtítulo y, a la derecha, un widget opcional ([trailing], por
+/// ejemplo `AppAccountMenu`). Se dibuja debajo de la barra de estado.
 class AppPageHeader extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? subtitle;
+  final Widget? trailing;
 
   const AppPageHeader({
     super.key,
     required this.icon,
     required this.title,
     this.subtitle,
+    this.trailing,
   });
 
   @override
@@ -23,7 +26,12 @@ class AppPageHeader extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        MediaQuery.paddingOf(context).top + 12,
+        16,
+        12,
+      ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
@@ -65,6 +73,7 @@ class AppPageHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );

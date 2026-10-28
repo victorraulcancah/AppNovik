@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
+import '../../theme/app_theme.dart';
 
 /// Destino de la navegación principal.
 class AppDestination {
@@ -44,18 +45,24 @@ class AdaptiveScaffold extends StatelessWidget {
       body: isTablet && showNav
           ? Row(
               children: [
-                NavigationRail(
-                  selectedIndex: selectedIndex,
-                  labelType: NavigationRailLabelType.all,
-                  onDestinationSelected: onDestinationSelected,
-                  destinations: [
-                    for (final d in destinations)
-                      NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selectedIcon),
-                        label: Text(d.label),
-                      ),
-                  ],
+                ColoredBox(
+                  color: AppTheme.brandDark,
+                  child: SafeArea(
+                    right: false,
+                    child: NavigationRail(
+                      selectedIndex: selectedIndex,
+                      labelType: NavigationRailLabelType.all,
+                      onDestinationSelected: onDestinationSelected,
+                      destinations: [
+                        for (final d in destinations)
+                          NavigationRailDestination(
+                            icon: Icon(d.icon),
+                            selectedIcon: Icon(d.selectedIcon),
+                            label: Text(d.label),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
                 Expanded(child: body),
               ],

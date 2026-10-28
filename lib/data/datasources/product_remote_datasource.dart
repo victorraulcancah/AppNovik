@@ -34,7 +34,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }) async {
     // Mismos parámetros que usa la web (`/productos`).
     final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.productosEndpoint}')
-        .replace(queryParametersAll: {
+        .replace(queryParameters: {
       'company_id': ['$companyId'],
       'pagination[current]': ['$page'],
       'pagination[pageSize]': ['$pageSize'],

@@ -86,6 +86,7 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: AppSpeedDial(
         actions: [
           AppSpeedDialAction(
@@ -111,49 +112,46 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            AppPageHeader(
-              icon: Icons.category_outlined,
-              title: 'Productos',
-              subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
-            ),
-            AppSearchBar(
-              hint: 'Buscar por nombre, código…',
-              onFilter: _openFilters,
-              filterActive: _filtersActive,
-            ),
-            Expanded(
-              child: AppCardList<(String, String, String, String, String)>(
-                items: _productos,
-                bottomPadding: 96,
-                itemBuilder: (context, p, number) => AppListCard(
-                  number: number,
-                  title: p.$2,
-                  lines: [p.$1, p.$3],
-                  trailingTitle: p.$5,
-                  trailingCaption: p.$4,
-                  actions: [
-                    AppActionButton(type: AppActionType.edit, onPressed: () {}),
-                    AppActionButton(
-                      type: AppActionType.annul,
-                      onPressed: () => showAppConfirm(
-                        context,
-                        title: 'Anular producto',
-                        subtitle: '${p.$1} · ${p.$2}',
-                        message: 'El producto quedará anulado y no podrá venderse.',
-                        confirmLabel: 'Anular',
-                        tone: AppModalTone.warning,
-                      ),
+      body: Column(
+        children: [
+          const AppPageHeader(
+            icon: Icons.category_outlined,
+            title: 'Productos',
+            subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+          ),
+          AppSearchBar(
+            hint: 'Buscar por nombre, código…',
+            onFilter: _openFilters,
+            filterActive: _filtersActive,
+          ),
+          Expanded(
+            child: AppCardList<(String, String, String, String, String)>(
+              items: _productos,
+              bottomPadding: 96,
+              itemBuilder: (context, p, number) => AppListCard(
+                number: number,
+                title: p.$2,
+                lines: [p.$1, p.$3],
+                trailingTitle: p.$5,
+                trailingCaption: p.$4,
+                actions: [
+                  AppActionButton(type: AppActionType.edit, onPressed: () {}),
+                  AppActionButton(
+                    type: AppActionType.annul,
+                    onPressed: () => showAppConfirm(
+                      context,
+                      title: 'Anular producto',
+                      subtitle: '${p.$1} · ${p.$2}',
+                      message: 'El producto quedará anulado y no podrá venderse.',
+                      confirmLabel: 'Anular',
+                      tone: AppModalTone.warning,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
