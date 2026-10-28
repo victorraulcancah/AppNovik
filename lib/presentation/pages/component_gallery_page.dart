@@ -118,6 +118,7 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
             icon: Icons.category_outlined,
             title: 'Productos',
             subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+            trailing: AppAccountMenu(),
           ),
           AppSearchBar(
             hint: 'Buscar por nombre, código…',

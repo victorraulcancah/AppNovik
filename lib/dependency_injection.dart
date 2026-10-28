@@ -6,6 +6,7 @@ import 'package:provider/single_child_widget.dart';
 import 'data/datasources/auth_local_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/product_remote_datasource.dart';
+import 'data/datasources/theme_local_datasource.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/product_repository_impl.dart';
 
@@ -18,6 +19,7 @@ import 'domain/usecases/product_usecases.dart';
 // Presentation Layer
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/products_provider.dart';
+import 'presentation/providers/theme_provider.dart';
 
 class DependencyInjection {
   static final http.Client _httpClient = http.Client();
@@ -36,6 +38,11 @@ class DependencyInjection {
             clearSavedCredentialsUseCase:
                 ClearSavedCredentialsUseCase(repository: _authRepository),
           ),
+        ),
+
+        ChangeNotifierProvider<ThemeProvider>(
+          create: (context) =>
+              ThemeProvider(storage: ThemeLocalDataSourceImpl())..load(),
         ),
 
         // Depende de la sesión: al cambiar de empresa descarta sus datos.

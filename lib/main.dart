@@ -5,6 +5,7 @@ import 'dependency_injection.dart';
 import 'presentation/components/components.dart';
 import 'presentation/pages/pages.dart';
 import 'presentation/providers/auth_provider.dart';
+import 'presentation/providers/theme_provider.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -19,15 +20,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: DependencyInjection.providers,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: AppConstants.appName,
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.system,
-        home: const bool.fromEnvironment('GALLERY')
-            ? const ComponentGalleryPage()
-            : const AppWrapper(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, theme, _) => MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: AppConstants.appName,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: theme.mode,
+          home: const bool.fromEnvironment('GALLERY')
+              ? const ComponentGalleryPage()
+              : const AppWrapper(),
+        ),
       ),
     );
   }
