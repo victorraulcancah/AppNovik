@@ -64,27 +64,44 @@ class _ProductsPageState extends State<ProductsPage> {
       ..showSnackBar(SnackBar(content: Text('$accion: disponible pronto')));
   }
 
+  /// Las mismas acciones que la web en `/productos`: crear, plantilla, subir,
+  /// exportar, y las importaciones de marcas y categorías.
   List<AppSpeedDialAction> _actions() => [
         AppSpeedDialAction(
           label: 'Crear',
           icon: Icons.add,
-          primary: true,
+          color: const Color(0xFF16A34A),
           onPressed: () => _proximamente('Crear producto'),
         ),
         AppSpeedDialAction(
           label: 'Descargar plantilla',
           icon: Icons.download_outlined,
+          color: const Color(0xFF0E90C7),
           onPressed: () => _proximamente('Descargar plantilla'),
         ),
         AppSpeedDialAction(
           label: 'Subir productos',
           icon: Icons.upload_outlined,
+          color: const Color(0xFFE8891D),
           onPressed: () => _proximamente('Subir productos'),
         ),
         AppSpeedDialAction(
           label: 'Exportar',
           icon: Icons.description_outlined,
+          color: const Color(0xFF0D9488),
           onPressed: () => _proximamente('Exportar'),
+        ),
+        AppSpeedDialAction(
+          label: 'Importar marcas',
+          icon: Icons.sell_outlined,
+          color: const Color(0xFF7C3AED),
+          onPressed: () => _proximamente('Importar marcas'),
+        ),
+        AppSpeedDialAction(
+          label: 'Importar categorías',
+          icon: Icons.account_tree_outlined,
+          color: const Color(0xFFDB2777),
+          onPressed: () => _proximamente('Importar categorías'),
         ),
       ];
 

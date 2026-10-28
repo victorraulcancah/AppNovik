@@ -91,22 +91,37 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
           AppSpeedDialAction(
             label: 'Crear',
             icon: Icons.add,
-            primary: true,
+            color: const Color(0xFF16A34A),
             onPressed: _crear,
           ),
           AppSpeedDialAction(
             label: 'Descargar plantilla',
             icon: Icons.download_outlined,
+            color: const Color(0xFF0E90C7),
             onPressed: () {},
           ),
           AppSpeedDialAction(
             label: 'Subir productos',
             icon: Icons.upload_outlined,
+            color: const Color(0xFFE8891D),
             onPressed: () {},
           ),
           AppSpeedDialAction(
             label: 'Exportar',
             icon: Icons.description_outlined,
+            color: const Color(0xFF0D9488),
+            onPressed: () {},
+          ),
+          AppSpeedDialAction(
+            label: 'Importar marcas',
+            icon: Icons.sell_outlined,
+            color: const Color(0xFF7C3AED),
+            onPressed: () {},
+          ),
+          AppSpeedDialAction(
+            label: 'Importar categorías',
+            icon: Icons.account_tree_outlined,
+            color: const Color(0xFFDB2777),
             onPressed: () {},
           ),
         ],
