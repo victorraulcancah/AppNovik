@@ -7,7 +7,7 @@ import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/sale_modals.dart';
-import '../widgets/sale_product_picker.dart';
+import '../widgets/sale_product_entry.dart';
 
 /// Módulo Ventas: registra una venta al contado en soles — comprobante, cliente,
 /// productos con su precio y stock, y una forma de pago. Las ventas a crédito,
@@ -67,8 +67,6 @@ class _SalesPageState extends State<SalesPage> {
       },
     );
   }
-
-  Future<void> _addProduct() => showSaleProductPicker(context);
 
   Future<void> _submit() async {
     final sales = context.read<SalesProvider>();
@@ -309,6 +307,12 @@ class _SalesPageState extends State<SalesPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SaleProductEntry(),
+          if (sales.lines.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+            const SizedBox(height: 16),
+          ],
           for (var i = 0; i < sales.lines.length; i++) ...[
             _SaleLineTile(
               key: ObjectKey(sales.lines[i].product),
@@ -321,14 +325,8 @@ class _SalesPageState extends State<SalesPage> {
               onPrice: (v) => sales.setPrecio(i, v),
               onRemove: () => sales.removeLine(i),
             ),
-            const SizedBox(height: 10),
+            if (i < sales.lines.length - 1) const SizedBox(height: 10),
           ],
-          OutlinedButton.icon(
-            onPressed: _addProduct,
-            icon: const Icon(Icons.add),
-            label: Text(sales.lines.isEmpty ? 'Agregar producto' : 'Agregar otro producto'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-          ),
         ],
       ),
     );

@@ -320,10 +320,20 @@ class SalesProvider extends ChangeNotifier {
         '${enVenta > 0 ? ' (ya hay $enVenta en la venta)' : ''}';
   }
 
-  /// Agrega el producto, o suma [cantidad] si ya estaba. Devuelve el motivo si no se pudo.
-  String? addProduct(SaleProductEntity product, {int cantidad = 1}) {
+  /// Agrega el producto, o suma [cantidad] si ya estaba. Con [precio] la línea queda con ese
+  /// precio en lugar del de la lista. Devuelve el motivo si no se pudo.
+  String? addProduct(SaleProductEntity product, {int cantidad = 1, double? precio}) {
     final problems = addProducts([(product: product, cantidad: cantidad)]);
-    return problems.isEmpty ? null : problems.first;
+    if (problems.isNotEmpty) return problems.first;
+
+    if (precio != null && precio >= 0) {
+      final index = lines.indexWhere((l) => l.product.id == product.id);
+      if (index != -1) {
+        lines = [...lines]..[index] = lines[index].copyWith(precio: precio);
+        notifyListeners();
+      }
+    }
+    return null;
   }
 
   /// Agrega varios productos a la vez, cada uno con su cantidad (los que ya están suman).

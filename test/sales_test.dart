@@ -250,6 +250,15 @@ Finder _pickerSearchField() => find.byWidgetPredicate(
       (w) => w is TextField && w.decoration?.hintText == 'Nombre, código, marca…',
     );
 
+/// Pulsa "Agregar producto" del formulario, desplazando la pantalla hasta verlo.
+Future<void> _tapAddProduct(WidgetTester tester) async {
+  final button = find.widgetWithText(FilledButton, 'Agregar producto');
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('modelos', () {
     test('el producto de la búsqueda trae stock por almacén y precio por lista', () {
@@ -531,6 +540,19 @@ void main() {
       expect(p.disponibleParaAgregar(_product()), 0);
     });
 
+    test('agregar con un precio distinto al de la lista deja la línea con ese precio', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(1);
+
+      expect(p.addProduct(_product(), cantidad: 2, precio: 35), isNull);
+      expect(p.lines.single.precio, 35);
+      expect(p.total, 70);
+
+      // Si no se puede agregar (sin stock), el precio tampoco se toca.
+      expect(p.addProduct(_product(), cantidad: 99, precio: 1), contains('Solo hay 5'));
+      expect(p.lines.single.precio, 35);
+    });
+
     test('agregar varios productos es todo o nada', () async {
       final p = await _ready(_FakeSaleRepository());
       p.selectWarehouse(1);
@@ -646,30 +668,59 @@ void main() {
       expect(sales.client?.id, 7);
 
       sales.selectWarehouse(1);
-      await tester.tap(find.text('Agregar producto'));
+      expect(find.text('Buscar producto'), findsOneWidget);
+      expect(find.text('Unidad'), findsWidgets);
+
+      // Sin elegir producto no se agrega nada.
+      await _tapAddProduct(tester);
+      expect(find.text('Elige un producto'), findsOneWidget);
+      expect(sales.lines, isEmpty);
+
+      // Se elige el producto buscándolo: trae su unidad y el precio de la lista.
+      await tester.tap(find.text('Producto').first);
       await tester.pumpAndSettle();
-      expect(find.text('Buscar productos'), findsOneWidget);
-      await tester.enterText(_pickerSearchField(), 'sub');
+      await tester.enterText(find.byType(SearchBar), 'sub');
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
-      expect(find.text('1 producto'), findsOneWidget);
-      expect(find.text('0 seleccionados'), findsOneWidget);
-
       await tester.tap(find.text('SUBWOOFER 12"'));
       await tester.pumpAndSettle();
-      expect(find.text('1 seleccionado'), findsOneWidget);
-      await tester.tap(find.text('Agregar a la venta'));
-      await tester.pumpAndSettle();
+      expect(find.text('SUB-12 · PIONEER · Stock 5'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '40.00'), findsOneWidget);
 
-      expect(sales.lines.single.cantidad, 1);
-      expect(find.text('Buscar productos'), findsNothing);
-      expect(find.text('SUBWOOFER 12"'), findsOneWidget);
-      expect(find.text('S/ 40.00'), findsWidgets);
+      // Cantidad y precio se pueden cambiar antes de agregar.
+      await tester.enterText(find.widgetWithText(TextField, '1').first, '2');
+      await tester.enterText(find.widgetWithText(TextField, '40.00'), '35');
+      await _tapAddProduct(tester);
 
-      await tester.tap(find.byIcon(Icons.add).first);
-      await tester.pumpAndSettle();
       expect(sales.lines.single.cantidad, 2);
-      expect(sales.total, 80);
+      expect(sales.lines.single.precio, 35);
+      expect(sales.total, 70);
+      // El formulario queda limpio para el siguiente producto.
+      expect(find.text('SUB-12 · PIONEER · Stock 5'), findsNothing);
+
+      await tester.tap(find.byTooltip('Más'));
+      await tester.pumpAndSettle();
+      expect(sales.lines.single.cantidad, 3);
+      expect(sales.total, 105);
+    });
+
+    testWidgets('no agrega más de lo que hay en stock y avisa', (tester) async {
+      final (sales, _) = await pump(tester);
+      sales.selectWarehouse(1);
+
+      await tester.tap(find.text('Producto').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(SearchBar), 'sub');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('SUBWOOFER 12"'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextField, '1').first, '9');
+      await _tapAddProduct(tester);
+
+      expect(find.textContaining('Solo hay 5'), findsOneWidget);
+      expect(sales.lines, isEmpty);
     });
 
     testWidgets('registrar pide confirmación y muestra la venta registrada', (tester) async {
@@ -763,7 +814,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Agregar producto'));
+      await tester.tap(find.byIcon(Icons.manage_search));
       await tester.pumpAndSettle();
       await tester.enterText(_pickerSearchField(), 'a');
       await tester.pump(const Duration(milliseconds: 600));

@@ -52,6 +52,7 @@ Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra 
 ### Estado de Ventas
 
 - **Paso 1 (hecho, sin probar contra el servidor)**: venta al contado en soles. Permiso `ventas.store`. Comprobante (nota de venta; boleta y factura solo si la empresa tiene certificado), almacén, lista de precios en soles, cliente (`/clientes/search`), productos (`/productos/search`, con stock por almacén y precio por lista), una forma de pago al contado (`/metodos-de-pago/list`) y `POST /ventas`. Entrega inmediata (`metodo_entrega: 'e'`).
+- **Buscador de productos** (modal): búsqueda en el servidor por nombre, código, marca o categoría; filtros por categoría y marca (en 7power no hay subcategorías ni submarcas); marcar varios productos con su cantidad y agregarlos de una vez. Muestra stock del almacén, precio de la lista, categoría y unidad (cada producto tiene una sola unidad de medida). Los productos sin stock quedan bloqueados salvo los de "vender sin stock" y los servicios, y la cantidad no pasa de lo disponible (descontando lo que ya está en la venta).
 - **Paso 2 (pendiente)**: crédito y cuotas, ventas en dólares (tipo de cambio 3.000–4.300), puntos, contraentrega, descuentos, ítems libres, cliente varios, fecha de emisión, vendedor encargado y cotizaciones.
 - La app no repite la venta si falla la red: avisa que se revise Documentos antes de reintentar, porque el servidor pudo haberla registrado.
 
