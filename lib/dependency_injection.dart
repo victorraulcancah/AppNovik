@@ -81,10 +81,16 @@ class DependencyInjection {
         ChangeNotifierProxyProvider<AuthProvider, DocumentsProvider>(
           create: (context) => DocumentsProvider(
             getDocumentsUseCase: GetDocumentsUseCase(repository: _documentRepository),
+            exportDocumentsUseCase: ExportDocumentsUseCase(repository: _documentRepository),
+            getFilterCatalogsUseCase:
+                GetDocumentFilterCatalogsUseCase(repository: _documentRepository),
+            deleteDocumentUseCase: DeleteDocumentUseCase(repository: _documentRepository),
+            createCreditNoteUseCase: CreateCreditNoteUseCase(repository: _documentRepository),
+            downloadCdrUseCase: DownloadCdrUseCase(repository: _documentRepository),
+            getCompanyLogoUseCase: GetCompanyLogoUseCase(repository: _documentRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
-          update: (context, auth, previous) =>
-              previous!..syncCompany(auth.session?.company.id),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),
 
         ChangeNotifierProxyProvider<AuthProvider, ReportsProvider>(

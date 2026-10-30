@@ -8,11 +8,15 @@ import '../../domain/entities/document_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
+import '../utils/share_file.dart';
+import '../widgets/document_filters.dart';
 import '../widgets/document_modals.dart';
+import 'receipt_page.dart';
 
-/// Módulo Documentos: ventas y cotizaciones de la empresa (solo lectura), con
-/// búsqueda por número, filtros y detalle. Las demás listas de la web (traslados,
-/// guías, notas de crédito, entradas de stock) aún no están.
+/// Módulo Documentos: ventas y cotizaciones de la empresa, con búsqueda por número,
+/// filtros avanzados, totales, descarga en Excel y, en cada documento, ver el detalle,
+/// el comprobante en PDF y eliminar o anular con nota de crédito. Las demás listas de la
+/// web (traslados, guías de remisión, notas de crédito, entradas de stock) aún no están.
 class DocumentsPage extends StatefulWidget {
   const DocumentsPage({super.key});
 
@@ -64,71 +68,45 @@ class _DocumentsPageState extends State<DocumentsPage> {
     });
   }
 
-  Future<void> _openFilters() async {
-    final documents = context.read<DocumentsProvider>();
-    final isQuote = documents.kind == DocumentKind.cotizacion;
+  void _snack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
-    final result = await showAppFilterSheet(
+  Future<void> _export() async {
+    final result = await context.read<DocumentsProvider>().exportCurrent();
+    if (!mounted) return;
+    if (result.isLeft) return _snack(result.left.message);
+    await shareDownloadedFile(result.right);
+  }
+
+  void _openReceipt(DocumentEntity d) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ReceiptPage(document: d)));
+  }
+
+  Future<void> _delete(DocumentEntity d) async {
+    final confirmed = await showAppConfirm(
       context,
-      fields: [
-        AppFilterField(
-          id: 'fecha',
-          label: 'Fecha',
-          allLabel: DocumentDateRange.hoy.label,
-          value: documents.range == DocumentDateRange.hoy ? null : documents.range.name,
-          options: [
-            for (final r in DocumentDateRange.values.skip(1))
-              AppFilterOption(r.name, r.label),
-          ],
-        ),
-        if (!isQuote) ...[
-          AppFilterField(
-            id: 'tipo',
-            label: 'Comprobante',
-            allLabel: 'Todos',
-            value: documents.tipo?.name,
-            options: const [
-              AppFilterOption('boleta', 'Boleta'),
-              AppFilterOption('factura', 'Factura'),
-              AppFilterOption('notaVenta', 'Nota de venta'),
-            ],
-          ),
-          AppFilterField(
-            id: 'estado',
-            label: 'Estado',
-            allLabel: 'Todos',
-            value: documents.estado?.name,
-            options: const [
-              AppFilterOption('activos', 'Activos'),
-              AppFilterOption('eliminados', 'Eliminados'),
-            ],
-          ),
-        ],
-        if (isQuote)
-          AppFilterField(
-            id: 'pendientes',
-            label: 'Cotizaciones',
-            allLabel: 'Todas',
-            value: documents.soloPendientes ? 'pendientes' : null,
-            options: const [AppFilterOption('pendientes', 'Pendientes (sin procesar)')],
-          ),
-      ],
+      title: 'Eliminar documento',
+      subtitle: d.numero,
+      icon: Icons.delete_outline,
+      message: '¿Está seguro de eliminar este documento? '
+          'No será considerado en los reportes ni podrá ser restaurado.',
+      confirmLabel: 'Eliminar',
     );
-    if (result == null) return;
+    if (!confirmed || !mounted) return;
 
-    T? byName<T extends Enum>(List<T> values, String? name) {
-      for (final v in values) {
-        if (v.name == name) return v;
-      }
-      return null;
-    }
+    final result = await context.read<DocumentsProvider>().deleteDocument(d);
+    if (!mounted) return;
+    _snack(result.isLeft
+        ? result.left.message
+        : (d.esCotizacion ? 'Cotización eliminada' : 'Venta eliminada'));
+  }
 
-    documents.applyFilters(
-      range: byName(DocumentDateRange.values, result['fecha']) ?? DocumentDateRange.hoy,
-      tipo: byName(DocumentTipo.values, result['tipo']),
-      estado: byName(DocumentEstado.values, result['estado']),
-      soloPendientes: result['pendientes'] != null,
-    );
+  Future<void> _creditNote(DocumentEntity d) async {
+    final done = await showCreditNoteForm(context, d);
+    if (done == true && mounted) _snack('Nota de crédito creada con éxito');
   }
 
   @override
@@ -166,25 +144,104 @@ class _DocumentsPageState extends State<DocumentsPage> {
         AppSearchBar(
           hint: 'Buscar por número de documento',
           onChanged: _onSearchChanged,
-          onFilter: _openFilters,
+          onFilter: () => showDocumentFilters(context),
           filterActive: documents.filtersActive,
-        ),
-        if (documents.total > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${documents.total} ${documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones'}'
-                '${documents.search.isEmpty ? ' · ${documents.range.label.toLowerCase()}' : ''}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+          actions: [
+            if (kinds.isNotEmpty)
+              IconButton(
+                tooltip: 'Descargar Excel',
+                onPressed: documents.exporting ? null : _export,
+                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                icon: documents.exporting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_outlined),
               ),
-            ),
-          ),
+          ],
+        ),
+        if (kinds.isNotEmpty && documents.search.isEmpty) _tagsRow(documents),
+        if (kinds.isNotEmpty) _summary(documents),
         Expanded(child: _body(documents, kinds)),
       ],
+    );
+  }
+
+  /// Las etiquetas de los filtros puestos: cada una se quita con su ✕, y "Restablecer"
+  /// vuelve a como se entra (los documentos de hoy).
+  Widget _tagsRow(DocumentsProvider documents) {
+    final tags = documentFilterTags(
+      kind: documents.kind,
+      filters: documents.filters,
+      catalogs: documents.catalogs,
+      now: documents.now,
+    );
+    final canReset = tags.any((t) => t.remove != null);
+
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        children: [
+          for (final tag in tags)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Chip(
+                label: Text(tag.text),
+                visualDensity: VisualDensity.compact,
+                onDeleted: tag.remove == null
+                    ? null
+                    : () => documents.applyFilters(tag.remove!(documents.filters)),
+              ),
+            ),
+          if (canReset)
+            TextButton.icon(
+              onPressed: documents.resetFilters,
+              icon: const Icon(Icons.restart_alt, size: 18),
+              label: const Text('Restablecer'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Cuántos documentos hay y la suma de todo lo filtrado (no solo lo cargado), cada moneda
+  /// por separado; los eliminados no cuentan.
+  Widget _summary(DocumentsProvider documents) {
+    if (documents.total == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final label = documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Wrap(
+          spacing: 14,
+          runSpacing: 2,
+          children: [
+            Text('${documents.total} $label', style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+            Text.rich(
+              TextSpan(children: [
+                const TextSpan(text: 'Total Soles: ', style: TextStyle(fontWeight: FontWeight.w700)),
+                TextSpan(text: formatMoney(documents.totalSoles, symbol: 'S/.')),
+              ]),
+              style: theme.textTheme.bodySmall,
+            ),
+            Text.rich(
+              TextSpan(children: [
+                const TextSpan(text: 'Total Dólares: ', style: TextStyle(fontWeight: FontWeight.w700)),
+                TextSpan(text: formatMoney(documents.totalDolares, symbol: r'$')),
+              ]),
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -223,8 +280,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   Widget _card(BuildContext context, DocumentEntity d, int number) {
-    final brightness = Theme.of(context).brightness;
-    final dark = brightness == Brightness.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final status = documentStatus(d);
     final statusColor = switch (status.tone) {
       AppBadgeTone.success => dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D),
@@ -232,6 +288,10 @@ class _DocumentsPageState extends State<DocumentsPage> {
       AppBadgeTone.warning => dark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
       AppBadgeTone.neutral => Theme.of(context).colorScheme.onSurfaceVariant,
     };
+
+    final deletePermission = d.esCotizacion
+        ? 'documentos.cotizaciones.destroy'
+        : 'documentos.ventas.destroy';
 
     return AppListCard(
       number: number,
@@ -247,6 +307,19 @@ class _DocumentsPageState extends State<DocumentsPage> {
       onTap: () => showDocumentDetail(context, d),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => showDocumentDetail(context, d)),
+        AppActionButton(
+          type: AppActionType.pdf,
+          label: 'Ver comprobante PDF',
+          onPressed: () => _openReceipt(d),
+        ),
+        if (d.sePuedeEliminar && _can(deletePermission))
+          AppActionButton(type: AppActionType.delete, onPressed: () => _delete(d)),
+        if (d.sePuedeAnularConNotaCredito && _can('documentos.ventas.destroy'))
+          AppActionButton(
+            type: AppActionType.annul,
+            label: 'Anular con nota de crédito',
+            onPressed: () => _creditNote(d),
+          ),
       ],
     );
   }

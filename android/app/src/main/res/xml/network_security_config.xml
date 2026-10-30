@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Producción solo por HTTPS. El HTTP en claro se permite únicamente hacia el
+     servidor local de desarrollo (Laragon): el emulador (10.0.2.2) y la IP de
+     la PC en la red. Si cambia la IP, se actualiza aquí. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">192.168.18.23</domain>
+    </domain-config>
+</network-security-config>

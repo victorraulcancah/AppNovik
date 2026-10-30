@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/document_entity.dart';
 import '../components/components.dart';
+import '../providers/documents_provider.dart';
 
 String _dateTime(DateTime? d) =>
     d == null ? '-' : DateFormat(AppConstants.dateTimeFormat).format(d);
@@ -50,12 +52,28 @@ Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
               value: formatMoney(d.monto, symbol: d.simboloMoneda),
             ),
             AppDetailRow(label: 'Registrado por', value: d.usuario),
-            AppDetailRow(label: 'Vendedor', value: d.vendedor),
+            AppDetailRow(label: 'Ejecutivo', value: d.vendedor),
             AppDetailRow(label: 'Almacén', value: d.almacen),
+            if (d.descuento > 0)
+              AppDetailRow(
+                label: 'Descuento',
+                value: formatMoney(d.descuento, symbol: d.simboloMoneda),
+              ),
+            if (d.esDolares && d.tipoCambio != null)
+              AppDetailRow(label: 'Tipo de cambio', value: 'S/ ${d.tipoCambio}'),
             AppDetailRow(
               label: 'Estado',
               valueWidget: AppStatusBadge(label: status.label, tone: status.tone),
             ),
+            if (d.esCotizacion && d.reservado == true && d.vencimientoStock != null)
+              AppDetailRow(
+                label: 'Stock reservado hasta',
+                value: DateFormat(AppConstants.dateFormat).format(d.vencimientoStock!),
+              ),
+            if (d.boleta?.tieneNotaCredito == true)
+              const AppDetailRow(label: 'Nota de crédito', value: 'Emitida'),
+            if (d.boleta?.tieneGuia == true)
+              const AppDetailRow(label: 'Guía de remisión', value: 'Creada'),
             if (!d.activo && d.kind == DocumentKind.venta) ...[
               AppDetailRow(label: 'Anulado por', value: d.anuladoPor ?? 'Sin registro'),
               if (d.anuladoAt != null)
@@ -121,4 +139,82 @@ Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
         ),
     ],
   );
+}
+
+/// Formulario de la nota de crédito de una boleta o factura (igual que la web: fecha de
+/// emisión de hoy o de los dos días anteriores y una descripción obligatoria). Devuelve
+/// `true` si se creó.
+Future<bool?> showCreditNoteForm(BuildContext context, DocumentEntity d) {
+  final documents = context.read<DocumentsProvider>();
+  final formKey = GlobalKey<FormState>();
+  final description = TextEditingController();
+  final error = ValueNotifier<String?>(null);
+  final today = DateUtils.dateOnly(documents.now);
+  final date = ValueNotifier<DateTime>(today);
+
+  final result = showAppModal(
+    context,
+    title: 'Nota de crédito',
+    subtitle: d.numero,
+    icon: Icons.block,
+    tone: AppModalTone.danger,
+    primaryLabel: 'Crear',
+    formKey: formKey,
+    error: error,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Se emitirá una nota de crédito sobre ${d.comprobante.toLowerCase()} ${d.numero} '
+          'y se enviará a SUNAT. No se puede deshacer.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        Text('Fecha de emisión', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 6),
+        ValueListenableBuilder<DateTime>(
+          valueListenable: date,
+          builder: (context, selected, _) => Wrap(
+            spacing: 8,
+            children: [
+              for (final (label, days) in const [('Hoy', 0), ('Ayer', 1), ('Anteayer', 2)])
+                ChoiceChip(
+                  label: Text(label),
+                  selected: selected == today.subtract(Duration(days: days)),
+                  onSelected: (_) => date.value = today.subtract(Duration(days: days)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        AppTextField(
+          controller: description,
+          label: 'Descripción (razón para anular)',
+          maxLines: 3,
+          keyboardType: TextInputType.multiline,
+          validator: (v) =>
+              (v == null || v.trim().isEmpty) ? 'La descripción es obligatoria' : null,
+        ),
+      ],
+    ),
+    onPrimary: () async {
+      error.value = null;
+      final outcome = await documents.createCreditNote(
+        document: d,
+        descripcion: description.text,
+        fechaEmision: date.value,
+      );
+      if (outcome.isLeft) {
+        // El modal sigue abierto con el mensaje del servidor.
+        error.value = outcome.left.message;
+        throw StateError(outcome.left.message);
+      }
+    },
+  );
+
+  return result.whenComplete(() {
+    description.dispose();
+    error.dispose();
+    date.dispose();
+  });
 }

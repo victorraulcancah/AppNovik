@@ -10,6 +10,9 @@ class AppSearchBar extends StatelessWidget {
   final VoidCallback? onFilter;
   final bool filterActive;
 
+  /// Otros botones junto al de filtros (por ejemplo, descargar el Excel).
+  final List<Widget> actions;
+
   const AppSearchBar({
     super.key,
     this.hint = 'Buscar',
@@ -18,6 +21,7 @@ class AppSearchBar extends StatelessWidget {
     this.onSubmitted,
     this.onFilter,
     this.filterActive = false,
+    this.actions = const [],
   });
 
   @override
@@ -52,6 +56,7 @@ class AppSearchBar extends StatelessWidget {
               ),
             ),
           ],
+          ...actions,
         ],
       ),
     );

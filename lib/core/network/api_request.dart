@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../constants/api_constants.dart';
 import '../errors/exceptions.dart';
@@ -8,11 +9,26 @@ import '../errors/exceptions.dart';
 /// Hace una petición a la API de 7power y devuelve el JSON de la respuesta.
 /// Traduce los errores del backend y de la red a las excepciones de la app.
 Future<dynamic> sendApiRequest(Future<http.Response> Function() request) async {
+  final response = await _send(request);
+  try {
+    return json.decode(response.body);
+  } on FormatException catch (e) {
+    throw ServerException('Respuesta inválida del servidor: ${e.message}');
+  }
+}
+
+/// Igual que [sendApiRequest], para respuestas que son un archivo (Excel, ZIP, imagen).
+Future<Uint8List> sendApiBytes(Future<http.Response> Function() request) async {
+  final response = await _send(request);
+  return response.bodyBytes;
+}
+
+Future<http.Response> _send(Future<http.Response> Function() request) async {
   try {
     final response = await request().timeout(ApiConstants.connectionTimeout);
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body);
+      return response;
     } else if (response.statusCode == 401) {
       throw AuthException(apiErrorMessage(response.body) ?? 'Sesión expirada');
     } else if (response.statusCode == 403) {
@@ -30,8 +46,6 @@ Future<dynamic> sendApiRequest(Future<http.Response> Function() request) async {
     throw const NetworkException('Sin conexión a internet');
   } on TimeoutException {
     throw const NetworkException('Tiempo de espera agotado');
-  } on FormatException catch (e) {
-    throw ServerException('Respuesta inválida del servidor: ${e.message}');
   } catch (e) {
     throw ServerException('Error de conexión: $e');
   }

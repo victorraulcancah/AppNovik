@@ -33,6 +33,16 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 Cada módulo se entrega primero en **solo lectura** y después se agregan las acciones de crear/editar.
 
+### Estado de Documentos
+
+Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra el servidor:
+
+- **Filtros avanzados** (los mismos parámetros que la web: `fecha_desde`, `fecha_hasta`, `sucursales[]`, `vendedores[]`, `clientes[]`, `tipo_documento`, `estado_documento`; en cotizaciones `estado_cotizacion` y `reserva`). Cada lista conserva los suyos; por defecto, los documentos de hoy. Etiquetas con ✕ y "Restablecer". El vendedor sin permiso `reportes.ventas.ver-otros-vendedores` solo se ve a sí mismo.
+- **Totales** en soles y en dólares de todo lo filtrado (las eliminadas no cuentan).
+- **Exportar Excel** (`POST /ventas/export` y `/cotizaciones/export`) con lo que se ve; se comparte con el menú del sistema.
+- **Acciones por documento**: ver detalle; **comprobante en PDF** (A4 o ticket de 80 mm, descargar/compartir/imprimir, con las reglas de cabecera de la web: datos del almacén, del vendedor o de la empresa); **CDR** de SUNAT; **eliminar** venta sin comprobante (`PUT /ventas/{id}` `estado:false`) o cotización (`DELETE`); **nota de crédito** sobre boleta/factura. Permisos como la web (`documentos.ventas.destroy`, `documentos.cotizaciones.destroy`).
+- **Pendiente**: guía de remisión, convertir una cotización en venta, y las otras pestañas (traslados de stock, guías de remisión, notas de crédito, entradas de stock).
+
 ### Estado de Reportes
 
 - **Versión 1 (hecha, sin probar contra el servidor)**: *Resumen ejecutivo* (`GET /ventas/resumen-ejecutivo`, permiso `reportes.index`). Rango: hoy, este mes (predeterminado), mes pasado, este año o fechas a elección. Muestra ventas contra el mismo rango del año pasado, n.º de ventas, ticket promedio, meta del mes con su semáforo, evolución por mes (año actual contra el anterior), mejores clientes, productos más vendidos, venta por departamento y cotizaciones pendientes.

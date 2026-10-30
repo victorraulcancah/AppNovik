@@ -66,6 +66,8 @@ class SessionContextModel extends SessionContextEntity {
       ruc: c['ruc'] as String?,
       direccion: c['direccion'] as String?,
       telefono: c['telefono'] as String?,
+      email: c['email'] as String?,
+      web: c['web'] as String?,
       igv: _double(c['igv']),
       emiteComprobantes: c['certificado'] != null && '${c['certificado']}'.isNotEmpty,
       plan: profile == null

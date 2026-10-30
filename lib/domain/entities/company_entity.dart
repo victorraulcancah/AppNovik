@@ -22,6 +22,8 @@ class CompanyEntity {
   final String? ruc;
   final String? direccion;
   final String? telefono;
+  final String? email;
+  final String? web;
   final double? igv;
   final PlanEntity? plan;
 
@@ -35,6 +37,8 @@ class CompanyEntity {
     this.ruc,
     this.direccion,
     this.telefono,
+    this.email,
+    this.web,
     this.igv,
     this.plan,
     this.emiteComprobantes = false,
