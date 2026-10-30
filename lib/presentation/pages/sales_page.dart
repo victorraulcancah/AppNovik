@@ -6,6 +6,8 @@ import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
+import '../widgets/client_modals.dart';
+import '../widgets/exchange_rate_badge.dart';
 import '../widgets/sale_modals.dart';
 import '../widgets/sale_product_entry.dart';
 
@@ -68,6 +70,20 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
+  Future<void> _createClient() async {
+    final sales = context.read<SalesProvider>();
+    final created = await showCreateClientForm(context);
+    if (created != null && mounted) {
+      sales.selectClient(created);
+      _snack('Cliente creado');
+    }
+  }
+
+  Future<void> _toggleSinDocumento(bool on) async {
+    final problem = await context.read<SalesProvider>().toggleSinDocumento(on);
+    if (problem != null && mounted) _snack(problem);
+  }
+
   Future<void> _submit() async {
     final sales = context.read<SalesProvider>();
     final session = context.read<AuthProvider>().session;
@@ -75,12 +91,13 @@ class _SalesPageState extends State<SalesPage> {
     if (!sales.prepare()) return;
 
     final client = sales.client!;
+    final tipo = sales.tipoDocumento;
     // Igual que la web: vender a un cliente de la cartera de otro ejecutivo pide confirmación.
     final ejecutivoId = client.ejecutivoComercialId;
     if (!client.esVarios && ejecutivoId != null && ejecutivoId != session?.user.id) {
       final seguir = await showAppConfirm(
         context,
-        title: '¿Deseas continuar con la venta?',
+        title: tipo.esCotizacion ? '¿Deseas continuar con la cotización?' : '¿Deseas continuar con la venta?',
         subtitle: client.name,
         icon: Icons.groups_outlined,
         message: 'Este cliente no pertenece a tu cartera comercial. '
@@ -91,23 +108,37 @@ class _SalesPageState extends State<SalesPage> {
       if (!seguir || !mounted) return;
     }
 
-    final tipo = sales.tipoDocumento;
-    final confirmed = await showAppConfirm(
-      context,
-      title: 'Registrar venta',
-      subtitle: '${tipo.label} · ${formatMoney(sales.total)}',
-      icon: Icons.point_of_sale,
-      message: tipo.esFiscal
-          ? 'Se emitirá una ${tipo.label.toLowerCase()} a ${client.name} y se enviará a SUNAT. '
-              'Los productos saldrán del stock del almacén.'
-          : 'Se registrará una nota de venta para ${client.name}. '
-              'Los productos saldrán del stock del almacén.',
-      confirmLabel: 'Registrar',
-      tone: AppModalTone.normal,
-    );
-    if (!confirmed || !mounted) return;
+    var reservarStock = false;
+    DateTime? vencimientoStock;
+    if (tipo.esCotizacion) {
+      // La cotización pregunta si reserva el stock y hasta cuándo.
+      final options = await showQuoteOptions(
+        context,
+        now: DateTime.now(),
+        client: client.name,
+        total: formatMoney(sales.total),
+      );
+      if (options == null || !mounted) return;
+      reservarStock = options.reservarStock;
+      vencimientoStock = options.vencimientoStock;
+    } else {
+      final confirmed = await showAppConfirm(
+        context,
+        title: 'Registrar venta',
+        subtitle: '${tipo.label} · ${formatMoney(sales.total)}',
+        icon: Icons.point_of_sale,
+        message: tipo.esFiscal
+            ? 'Se emitirá una ${tipo.label.toLowerCase()} a ${client.name} y se enviará a SUNAT. '
+                'Los productos saldrán del stock del almacén.'
+            : 'Se registrará una nota de venta para ${client.name}. '
+                'Los productos saldrán del stock del almacén.',
+        confirmLabel: 'Registrar',
+        tone: AppModalTone.normal,
+      );
+      if (!confirmed || !mounted) return;
+    }
 
-    final ok = await sales.submit();
+    final ok = await sales.submit(reservarStock: reservarStock, vencimientoStock: vencimientoStock);
     if (!mounted) return;
     if (ok) {
       _observaciones.clear();
@@ -195,24 +226,63 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   Widget _comprobante(SalesProvider sales) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return AppSection(
       title: 'Comprobante',
       icon: Icons.receipt_long_outlined,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (sales.documentTypes.length > 1) ...[
-            AppDropdownField<SaleDocumentType>(
-              key: ValueKey('tipo-${sales.tipoDocumento}'),
-              label: 'Tipo de comprobante',
-              value: sales.tipoDocumento,
-              items: [
-                for (final t in sales.documentTypes)
-                  DropdownMenuItem(value: t, child: Text(t.label)),
-              ],
-              onChanged: (v) => v == null ? null : sales.selectTipoDocumento(v),
+          AppDropdownField<SaleDocumentType>(
+            key: ValueKey('tipo-${sales.tipoDocumento}'),
+            label: 'Tipo de documento',
+            value: sales.tipoDocumento,
+            items: [
+              for (final t in sales.documentTypes)
+                DropdownMenuItem(value: t, child: Text(t.label)),
+            ],
+            onChanged: (v) => v == null ? null : sales.selectTipoDocumento(v),
+          ),
+          if (sales.facturaAPersona)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, top: 6),
+              child: Text(
+                'No se puede emitir Factura a un cliente de tipo Persona.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            const SizedBox(height: 12),
-          ],
+          if (sales.tipoDocumento.esCotizacion)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, top: 6),
+              child: Text(
+                'La cotización no cobra ni descuenta stock, salvo que reserves el stock.',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          if (sales.puedeSinDocumento || sales.sinDocumento)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              value: sales.sinDocumento,
+              onChanged: sales.sinDocumentoLoading ? null : (v) => _toggleSinDocumento(v ?? false),
+              title: const Text('Emitir sin documento del cliente (venta menor a S/700)'),
+            ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ExchangeRateBadge(
+              rate: sales.exchangeRate,
+              loading: sales.exchangeRateLoading,
+              onRefresh: sales.loadExchangeRate,
+            ),
+          ),
+          const SizedBox(height: 12),
           AppDropdownField<int>(
             key: ValueKey('almacen-${sales.warehouseId}'),
             label: 'Almacén',
@@ -243,59 +313,77 @@ class _SalesPageState extends State<SalesPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final client = sales.client;
+    final canCreate = context.read<AuthProvider>().session?.can('clientes.store') ?? false;
+    // Con "sin documento" el cliente es siempre "CLIENTE VARIOS": no se cambia ni se crea otro.
+    final locked = sales.sinDocumento || sales.sinDocumentoLoading;
 
     return AppSection(
       title: 'Cliente',
       icon: Icons.person_outline,
-      child: InkWell(
-        onTap: _pickClient,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: scheme.primaryContainer,
-                foregroundColor: scheme.onPrimaryContainer,
-                child: Icon(client == null ? Icons.person_search_outlined : Icons.person),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: client == null
-                    ? Text(
-                        'Elegir cliente',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            client.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (client.documento != null)
-                            Text(
-                              client.documento!,
-                              style: theme.textTheme.bodySmall?.copyWith(
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: locked ? null : _pickClient,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: scheme.primaryContainer,
+                      foregroundColor: scheme.onPrimaryContainer,
+                      child: Icon(client == null ? Icons.person_search_outlined : Icons.person),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: client == null
+                          ? Text(
+                              'Elegir cliente',
+                              style: theme.textTheme.bodyLarge?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  client.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (client.documento != null)
+                                  Text(
+                                    client.documento!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
                             ),
-                        ],
+                    ),
+                    if (!locked)
+                      Text(
+                        client == null ? 'Buscar' : 'Cambiar',
+                        style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary),
                       ),
+                  ],
+                ),
               ),
-              Text(
-                client == null ? 'Buscar' : 'Cambiar',
-                style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary),
-              ),
-            ],
+            ),
           ),
-        ),
+          if (canCreate && !locked) ...[
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Crear cliente',
+              onPressed: _createClient,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -333,22 +421,26 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   Widget _pago(SalesProvider sales) {
+    final isQuote = sales.tipoDocumento.esCotizacion;
+
     return AppSection(
-      title: 'Pago',
-      icon: Icons.payments_outlined,
+      title: isQuote ? 'Observaciones' : 'Pago',
+      icon: isQuote ? Icons.notes_outlined : Icons.payments_outlined,
       child: Column(
         children: [
-          AppDropdownField<int>(
-            key: ValueKey('pago-${sales.paymentMethodId}'),
-            label: 'Forma de pago',
-            value: sales.paymentMethodId,
-            items: [
-              for (final m in sales.paymentMethods)
-                DropdownMenuItem(value: m.id, child: Text(m.name)),
-            ],
-            onChanged: sales.selectPaymentMethod,
-          ),
-          const SizedBox(height: 12),
+          if (!isQuote) ...[
+            AppDropdownField<int>(
+              key: ValueKey('pago-${sales.paymentMethodId}'),
+              label: 'Forma de pago',
+              value: sales.paymentMethodId,
+              items: [
+                for (final m in sales.paymentMethods)
+                  DropdownMenuItem(value: m.id, child: Text(m.name)),
+              ],
+              onChanged: sales.selectPaymentMethod,
+            ),
+            const SizedBox(height: 12),
+          ],
           AppTextField(
             controller: _observaciones,
             label: 'Observaciones (opcional)',
@@ -410,7 +502,7 @@ class _SalesPageState extends State<SalesPage> {
                       Expanded(
                         flex: 3,
                         child: AppButton(
-                          label: 'Registrar venta',
+                          label: sales.tipoDocumento.esCotizacion ? 'Crear cotización' : 'Registrar venta',
                           loading: sales.submitting,
                           onPressed: () {
                             sales.setObservaciones(_observaciones.text);

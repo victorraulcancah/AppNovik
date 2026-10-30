@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/data/models/sale_model.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
+import 'package:app_novik/data/models/client_model.dart';
+import 'package:app_novik/domain/entities/client_form_entity.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/product_form_entity.dart';
@@ -11,17 +14,22 @@ import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/stock_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
+import 'package:app_novik/domain/repositories/client_repository.dart';
 import 'package:app_novik/domain/repositories/sale_repository.dart';
 import 'package:app_novik/domain/repositories/stock_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
+import 'package:app_novik/domain/usecases/client_usecases.dart';
 import 'package:app_novik/domain/usecases/sale_usecases.dart';
 import 'package:app_novik/domain/usecases/stock_usecases.dart';
 import 'package:app_novik/presentation/pages/sales_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
+import 'package:app_novik/presentation/providers/clients_provider.dart';
 import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
+import 'package:app_novik/presentation/widgets/sale_modals.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -60,6 +68,28 @@ class _FakeSaleRepository implements SaleRepository {
   int? sentUser;
   Either<Failure, SaleResultEntity>? result;
   List<SaleProductEntity>? products;
+  int rateCalls = 0;
+  bool rateFails = false;
+  bool walkInFails = false;
+
+  @override
+  Future<Either<Failure, ExchangeRateEntity>> getExchangeRate() async {
+    rateCalls++;
+    if (rateFails) return Either.left(const ServerFailure('No hay tipo de cambio disponible'));
+    return Either.right(ExchangeRateEntity(
+      valorFinal: 3.452,
+      valorFuente: 3.427,
+      fuente: 'bloomberg',
+      fechaFuente: DateTime(2026, 10, 28),
+      margen: 0.025,
+    ));
+  }
+
+  @override
+  Future<Either<Failure, ClientEntity>> getWalkInClient(int companyId) async {
+    if (walkInFails) return Either.left(const NetworkFailure('Sin conexión a internet'));
+    return Either.right(const ClientEntity(id: 99, name: 'CLIENTE VARIOS', documento: '00000000', tipo: 'p'));
+  }
 
   @override
   Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters() async =>
@@ -101,7 +131,7 @@ class _FakeSaleRepository implements SaleRepository {
     sent = form;
     sentCompany = companyId;
     sentUser = userId;
-    return result ?? Either.right(_sale());
+    return result ?? Either.right(form.tipoDocumento.esCotizacion ? _quote() : _sale());
   }
 }
 
@@ -173,6 +203,18 @@ SaleProductEntity _product({
       precioPorLista: prices,
     );
 
+DocumentEntity _quote() => DocumentEntity(
+      id: 2,
+      kind: DocumentKind.cotizacion,
+      numero: 'C001-0002',
+      comprobante: 'Cotización',
+      cliente: 'ACME SAC',
+      almacen: 'LIMA',
+      monto: 100,
+      reservado: true,
+      vencimientoStock: DateTime(2026, 10, 30),
+    );
+
 DocumentEntity _sale() => const DocumentEntity(
       id: 1,
       kind: DocumentKind.venta,
@@ -185,12 +227,18 @@ DocumentEntity _sale() => const DocumentEntity(
       monto: 100,
     );
 
-SessionContextEntity _session({int companyId = 1, bool certificado = false}) => SessionContextEntity(
+SessionContextEntity _session({
+  int companyId = 1,
+  bool certificado = false,
+  List<String> roles = const [],
+  Set<String> permissions = const {'ventas.store'},
+}) =>
+    SessionContextEntity(
       user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
       company: CompanyEntity(id: companyId, razonSocial: 'ACME', emiteComprobantes: certificado),
       modules: const [],
-      permissions: const {'ventas.store'},
-      roles: const [],
+      permissions: permissions,
+      roles: roles,
       warehouses: const [],
       defaultWarehouseId: 2,
       defaultListPriceId: 11,
@@ -203,6 +251,8 @@ SalesProvider _provider(_FakeSaleRepository sales) {
     getPriceListsUseCase: GetPriceListsUseCase(repository: stock),
     getPaymentMethodsUseCase: GetPaymentMethodsUseCase(repository: sales),
     getSaleProductFiltersUseCase: GetSaleProductFiltersUseCase(repository: sales),
+    getExchangeRateUseCase: GetExchangeRateUseCase(repository: sales),
+    getWalkInClientUseCase: GetWalkInClientUseCase(repository: sales),
     searchClientsUseCase: SearchClientsUseCase(repository: sales),
     searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: sales),
     createSaleUseCase: CreateSaleUseCase(repository: sales),
@@ -258,6 +308,82 @@ Future<void> _tapAddProduct(WidgetTester tester) async {
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
+
+class _FakeClientRepository implements ClientRepository {
+  final List<String> calls = [];
+  NewClientFormEntity? created;
+  int? executive;
+  Either<Failure, ClientEntity>? createResult;
+
+  @override
+  Future<Either<Failure, List<UbigeoItemEntity>>> getDepartments() async {
+    calls.add('departments');
+    return Either.right(const [
+      UbigeoItemEntity(id: '04', name: 'AREQUIPA'),
+      UbigeoItemEntity(id: '15', name: 'LIMA'),
+    ]);
+  }
+
+  @override
+  Future<Either<Failure, List<UbigeoItemEntity>>> getProvinces(String departmentId) async {
+    calls.add('provinces:$departmentId');
+    return Either.right([UbigeoItemEntity(id: '${departmentId}01', name: 'PROVINCIA $departmentId')]);
+  }
+
+  @override
+  Future<Either<Failure, List<UbigeoItemEntity>>> getDistricts(String provinceId) async {
+    calls.add('districts:$provinceId');
+    return Either.right([UbigeoItemEntity(id: '${provinceId}01', name: 'DISTRITO $provinceId')]);
+  }
+
+  @override
+  Future<Either<Failure, DocumentLookupEntity>> lookupDocument({
+    required String tipo,
+    required String number,
+  }) async {
+    calls.add('lookup:$tipo:$number');
+    if (tipo == 'e') {
+      return Either.right(const DocumentLookupEntity(
+        tipo: 'e',
+        razonSocial: 'ACME SAC',
+        direccion: 'AV. UNO 123',
+        ubigeo: '150101',
+      ));
+    }
+    return Either.right(const DocumentLookupEntity(tipo: 'p', name: 'JUAN', lastName: 'PEREZ GOMEZ'));
+  }
+
+  @override
+  Future<Either<Failure, ClientEntity>> createClient({
+    required int companyId,
+    int? executiveId,
+    required NewClientFormEntity form,
+  }) async {
+    created = form;
+    executive = executiveId;
+    return createResult ??
+        Either.right(ClientEntity(
+          id: 55,
+          name: form.esEmpresa ? form.razonSocial! : form.name,
+          documento: form.dniRuc,
+          tipo: form.tipo,
+        ));
+  }
+}
+
+ClientsProvider _clientsProvider(_FakeClientRepository repo, {SessionContextEntity? session}) {
+  return ClientsProvider(
+    getDepartmentsUseCase: GetDepartmentsUseCase(repository: repo),
+    getProvincesUseCase: GetProvincesUseCase(repository: repo),
+    getDistrictsUseCase: GetDistrictsUseCase(repository: repo),
+    lookupDocumentUseCase: LookupDocumentUseCase(repository: repo),
+    createClientUseCase: CreateClientUseCase(repository: repo),
+  )..syncSession(session ?? _session());
+}
+
+Finder _field(String label) => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == label,
+    );
 
 void main() {
   group('modelos', () {
@@ -406,7 +532,10 @@ void main() {
     });
 
     test('boleta y factura solo si la empresa tiene certificado', () async {
-      expect((await _ready(_FakeSaleRepository())).documentTypes, [SaleDocumentType.ticket]);
+      expect(
+        (await _ready(_FakeSaleRepository())).documentTypes,
+        [SaleDocumentType.ticket, SaleDocumentType.cotizacion],
+      );
       expect(
         (await _ready(_FakeSaleRepository(), certificado: true)).documentTypes,
         SaleDocumentType.values,
@@ -917,4 +1046,649 @@ void main() {
       expect(button.onPressed, isNull);
     });
   });
+
+  group('Tipo de cambio, cliente varios y cotización (provider)', () {
+    test('el tipo de cambio se pide al preparar la venta y se puede actualizar', () async {
+      final repo = _FakeSaleRepository();
+      final p = await _ready(repo);
+      await Future<void>.delayed(Duration.zero); // el tipo de cambio se pide aparte
+
+      expect(p.exchangeRate!.valorFinal, 3.452);
+      expect(p.exchangeRate!.fuenteNombre, 'Bloomberg');
+      expect(repo.rateCalls, 1);
+
+      await p.loadExchangeRate();
+      expect(repo.rateCalls, 2);
+    });
+
+    test('si no hay tipo de cambio la venta sigue funcionando y se avisa', () async {
+      final repo = _FakeSaleRepository()..rateFails = true;
+      final p = await _ready(repo);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(p.error, isNull);
+      expect(p.exchangeRate, isNull);
+      expect(p.exchangeRateError, 'No hay tipo de cambio disponible');
+    });
+
+    test('sin certificado se elige entre nota de venta y cotización; con certificado, todo', () async {
+      expect(
+        (await _ready(_FakeSaleRepository())).documentTypes.map((t) => t.label),
+        ['Nota de venta', 'Cotización'],
+      );
+      expect(
+        (await _ready(_FakeSaleRepository(), certificado: true)).documentTypes.map((t) => t.label),
+        ['Nota de venta', 'Boleta', 'Factura', 'Cotización'],
+      );
+    });
+
+    test('vender sin documento del cliente: solo boleta y menos de S/ 700', () async {
+      final p = await _ready(_FakeSaleRepository(), certificado: true);
+      p.selectWarehouse(1);
+      p.addProduct(_product(), cantidad: 2); // S/ 80
+
+      expect(p.puedeSinDocumento, isFalse); // es nota de venta
+      p.selectTipoDocumento(SaleDocumentType.boleta);
+      expect(p.puedeSinDocumento, isTrue);
+
+      expect(await p.toggleSinDocumento(true), isNull);
+      expect(p.sinDocumento, isTrue);
+      expect(p.client!.esVarios, isTrue);
+
+      // Si el total llega a S/ 700 deja de valer y se descarta a "cliente varios".
+      p.addProduct(_product(id: 101, name: 'AMP', stock: const {1: 99}, prices: const {11: 700}));
+      expect(p.sinDocumento, isFalse);
+      expect(p.client, isNull);
+    });
+
+    test('al cambiar de comprobante se descarta la venta sin documento', () async {
+      final p = await _ready(_FakeSaleRepository(), certificado: true);
+      p.selectWarehouse(1);
+      p.addProduct(_product());
+      p.selectTipoDocumento(SaleDocumentType.boleta);
+      await p.toggleSinDocumento(true);
+
+      p.selectTipoDocumento(SaleDocumentType.factura);
+
+      expect(p.sinDocumento, isFalse);
+      expect(p.client, isNull);
+    });
+
+    test('desmarcar "sin documento" quita al cliente varios', () async {
+      final p = await _ready(_FakeSaleRepository(), certificado: true);
+      p.selectWarehouse(1);
+      p.addProduct(_product());
+      p.selectTipoDocumento(SaleDocumentType.boleta);
+      await p.toggleSinDocumento(true);
+
+      await p.toggleSinDocumento(false);
+
+      expect(p.sinDocumento, isFalse);
+      expect(p.client, isNull);
+    });
+
+    test('si falla la consulta de cliente varios devuelve el motivo y no marca nada', () async {
+      final repo = _FakeSaleRepository()..walkInFails = true;
+      final p = await _ready(repo, certificado: true);
+      p.selectWarehouse(1);
+      p.addProduct(_product());
+      p.selectTipoDocumento(SaleDocumentType.boleta);
+
+      expect(await p.toggleSinDocumento(true), 'Sin conexión a internet');
+      expect(p.sinDocumento, isFalse);
+      expect(p.client, isNull);
+    });
+
+    test('avisa que no se factura a una persona', () async {
+      final p = await _ready(_FakeSaleRepository(), certificado: true);
+      p.selectClient(const ClientEntity(id: 8, name: 'JUAN', tipo: 'p', documento: '12345678'));
+      p.selectTipoDocumento(SaleDocumentType.factura);
+      expect(p.facturaAPersona, isTrue);
+      p.selectClient(_acme);
+      expect(p.facturaAPersona, isFalse);
+    });
+
+    test('una cotización no pide forma de pago ni stock si no lo reserva', () async {
+      final repo = _FakeSaleRepository();
+      final p = await _ready(repo);
+      p.selectWarehouse(2); // sin stock
+      p.selectClient(_acme);
+      p.addProduct(_product(sinStock: true), cantidad: 3);
+      p.selectTipoDocumento(SaleDocumentType.cotizacion);
+      p.selectPaymentMethod(null);
+      p.lines = [SaleLineEntity(product: _product(), cantidad: 3, precio: 40)]; // hay 0 en el almacén 2
+
+      expect(p.prepare(), isTrue);
+      expect(await p.submit(), isTrue);
+
+      expect(repo.sent!.tipoDocumento, SaleDocumentType.cotizacion);
+      expect(repo.sent!.reservarStock, isFalse);
+      expect(repo.sent!.priceListId, 11);
+      expect(p.lastSale!.esCotizacion, isTrue);
+      expect(p.lines, isEmpty);
+    });
+
+    test('al reservar stock sí se revisa el stock y se necesita la fecha', () async {
+      final repo = _FakeSaleRepository();
+      final p = await _ready(repo);
+      p.selectWarehouse(1);
+      p.selectClient(_acme);
+      p.addProduct(_product(), cantidad: 5);
+      p.selectTipoDocumento(SaleDocumentType.cotizacion);
+      p.lines = [SaleLineEntity(product: _product(), cantidad: 9, precio: 40)]; // solo hay 5
+
+      expect(await p.submit(reservarStock: true, vencimientoStock: DateTime(2026, 10, 30)), isFalse);
+      expect(p.submitError, contains('No hay stock suficiente'));
+      expect(repo.sent, isNull);
+
+      p.lines = [SaleLineEntity(product: _product(), cantidad: 2, precio: 40)];
+      expect(await p.submit(reservarStock: true), isFalse);
+      expect(p.submitError, contains('hasta qué día'));
+
+      expect(await p.submit(reservarStock: true, vencimientoStock: DateTime(2026, 10, 30)), isTrue);
+      expect(repo.sent!.reservarStock, isTrue);
+      expect(repo.sent!.vencimientoStock, DateTime(2026, 10, 30));
+    });
+
+    test('la cotización lleva la lista de precios, la reserva y las líneas', () {
+      final form = SaleFormEntity(
+        tipoDocumento: SaleDocumentType.cotizacion,
+        client: _acme,
+        warehouseId: 1,
+        paymentMethodId: null,
+        priceListId: 11,
+        reservarStock: true,
+        vencimientoStock: DateTime(2026, 10, 30),
+        observaciones: ' Entregar ',
+        lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 40)],
+      );
+      final body = quoteToJson(form, companyId: 3, userId: 9);
+
+      expect(body['totales_soles'], 80);
+      expect(body['totales_dolares'], 0);
+      expect(body['company_id'], 3);
+      expect(body['client_id'], 7);
+      expect(body['list_price_id'], 11);
+      expect(body['reservar_stock'], true);
+      expect(body['vencimiento_stock'], '2026-10-30');
+      expect(body['observaciones'], 'Entregar');
+      expect(body.containsKey('payment_methods'), isFalse);
+      expect((body['product_sales'] as List).single['subtotal_con_dto'], 80);
+
+      final sinReserva = quoteToJson(
+        SaleFormEntity(
+          tipoDocumento: SaleDocumentType.cotizacion,
+          client: _acme,
+          warehouseId: 1,
+          paymentMethodId: null,
+          priceListId: 11,
+          vencimientoStock: DateTime(2026, 10, 30), // sin reservar: no viaja
+          lines: form.lines,
+        ),
+        companyId: 3,
+        userId: 9,
+      );
+      expect(sinReserva['reservar_stock'], false);
+      expect(sinReserva.containsKey('vencimiento_stock'), isFalse);
+    });
+
+    test('lee el tipo de cambio comercial', () {
+      final rate = exchangeRateFromJson({
+        'valor_final': '3.452',
+        'valor_fuente': 3.427,
+        'fuente': 'manual-usuario',
+        'fecha_fuente': '2026-10-28',
+        'margen': 0.025,
+        'actualizado_en': null,
+      });
+      expect(rate.valorFinal, 3.452);
+      expect(rate.fuenteNombre, 'Manual');
+      expect(rate.fechaFuente, DateTime(2026, 10, 28));
+    });
+
+    test('la fecha por defecto de la reserva: mañana, sin pasar del fin de mes', () {
+      expect(quoteDefaultExpiry(DateTime(2026, 10, 28)), DateTime(2026, 10, 29));
+      expect(quoteDefaultExpiry(DateTime(2026, 10, 31)), DateTime(2026, 10, 31));
+      expect(quoteDefaultExpiry(DateTime(2026, 2, 28)), DateTime(2026, 2, 28));
+    });
+  });
+
+  group('Crear cliente (reglas y datos)', () {
+    NewClientFormEntity form({
+      String tipo = 'p',
+      String dni = '12345678',
+      String name = 'JUAN',
+      String? razon,
+      String phone = '987654321',
+      String email = 'juan@mail.com',
+      String dep = '15',
+      String prov = '1501',
+      String dist = '150101',
+    }) =>
+        NewClientFormEntity(
+          tipo: tipo,
+          dniRuc: dni,
+          name: name,
+          razonSocial: razon,
+          telefono: phone,
+          email: email,
+          departmentId: dep,
+          provinceId: prov,
+          districtId: dist,
+        );
+
+    test('una persona completa es válida', () {
+      expect(CreateClientUseCase.validate(form()), isNull);
+    });
+
+    test('pide documento con su largo, nombre, teléfono, correo y distrito', () {
+      expect(CreateClientUseCase.validate(form(dni: '')), 'El DNI es obligatorio');
+      expect(CreateClientUseCase.validate(form(dni: '1234')), 'El DNI debe tener 8 dígitos');
+      expect(CreateClientUseCase.validate(form(name: ' ')), 'El nombre es obligatorio');
+      expect(CreateClientUseCase.validate(form(phone: '')), 'El teléfono es obligatorio');
+      expect(CreateClientUseCase.validate(form(email: '')), 'El correo es obligatorio');
+      expect(CreateClientUseCase.validate(form(email: 'juan@gmailcom')), 'Debe ser un correo válido');
+      expect(CreateClientUseCase.validate(form(dist: '')), contains('distrito'));
+    });
+
+    test('una empresa necesita RUC de 11 dígitos, razón social y contacto', () {
+      expect(CreateClientUseCase.validate(form(tipo: 'e', dni: '12345678', razon: 'X')), 'El RUC debe tener 11 dígitos');
+      expect(
+        CreateClientUseCase.validate(form(tipo: 'e', dni: '20123456789')),
+        'La razón social es obligatoria',
+      );
+      expect(
+        CreateClientUseCase.validate(form(tipo: 'e', dni: '20123456789', razon: 'ACME SAC')),
+        isNull,
+      );
+    });
+
+    test('el teléfono se guarda en formato internacional', () {
+      expect(CreateClientUseCase.normalizePhone('987 654 321'), '+51987654321');
+      expect(CreateClientUseCase.normalizePhone('+1 (555) 123-4567'), '+15551234567');
+      expect(CreateClientUseCase.normalizePhone('4251234'), '4251234');
+    });
+
+    test('el cuerpo de POST /clientes lleva los campos de la web', () {
+      final body = newClientToJson(
+        form(tipo: 'e', dni: '20123456789', razon: 'ACME SAC'),
+        companyId: 3,
+        executiveId: 9,
+      );
+      expect(body['company_id'], 3);
+      expect(body['tipo'], 'e');
+      expect(body['dni_ruc'], '20123456789');
+      expect(body['razon_social'], 'ACME SAC');
+      expect(body['department_id'], '15');
+      expect(body['district_id'], '150101');
+      expect(body['ejecutivo_comercial_id'], 9);
+      expect(body['estado'], true);
+
+      // En personas no viaja la razón social ni el ejecutivo si no lo hay.
+      final persona = newClientToJson(form(razon: 'X'), companyId: 3);
+      expect(persona.containsKey('razon_social'), isFalse);
+      expect(persona.containsKey('ejecutivo_comercial_id'), isFalse);
+    });
+
+    test('lee la consulta de DNI y de RUC', () {
+      final dni = documentLookupFromJson({
+        'success': true,
+        'dni': '12345678',
+        'nombres': 'JUAN',
+        'apellidoPaterno': 'PEREZ',
+        'apellidoMaterno': 'GOMEZ',
+      });
+      expect(dni.esEmpresa, isFalse);
+      expect(dni.name, 'JUAN');
+      expect(dni.lastName, 'PEREZ GOMEZ');
+
+      final ruc = documentLookupFromJson({
+        'ruc': '20123456789',
+        'razonSocial': 'ACME SAC',
+        'direccion': 'AV. UNO 123',
+        'ubigeo': '150101',
+      });
+      expect(ruc.esEmpresa, isTrue);
+      expect(ruc.razonSocial, 'ACME SAC');
+      expect(ruc.departmentId, '15');
+      expect(ruc.provinceId, '1501');
+      expect(ruc.districtId, '150101');
+    });
+
+    test('los códigos de ubigeo se conservan como texto con sus ceros', () {
+      final items = ubigeoItemsFromJson([
+        {'id': '01', 'name': 'AMAZONAS'},
+        {'id': 15, 'name': 'LIMA'},
+        {'name': 'sin id'},
+      ]);
+      expect(items.map((i) => i.id), ['01', '15']);
+    });
+
+    test('la consulta valida el largo antes de llamar a la API', () async {
+      final repo = _FakeClientRepository();
+      final lookup = LookupDocumentUseCase(repository: repo);
+
+      expect((await lookup(tipo: 'p', number: '123')).isLeft, isTrue);
+      expect((await lookup(tipo: 'e', number: '12345678')).isLeft, isTrue);
+      expect(repo.calls, isEmpty);
+      expect((await lookup(tipo: 'p', number: '12345678')).isRight, isTrue);
+    });
+
+    test('un vendedor o el ceo quedan como ejecutivo del cliente que crean; otros roles no', () async {
+      final repo = _FakeClientRepository();
+
+      await _clientsProvider(repo, session: _session()).create(form());
+      expect(repo.executive, isNull);
+
+      await _clientsProvider(repo, session: _session(roles: const ['Vendedor'])).create(form());
+      expect(repo.executive, 9);
+
+      repo.executive = null;
+      await _clientsProvider(repo, session: _session(roles: const ['Ceo Empresa'])).create(form());
+      expect(repo.executive, 9);
+    });
+
+    test('los departamentos y provincias se piden una sola vez', () async {
+      final repo = _FakeClientRepository();
+      final p = _clientsProvider(repo);
+
+      await p.departments();
+      await p.departments();
+      await p.provincesOf('15');
+      await p.provincesOf('15');
+
+      expect(repo.calls, ['departments', 'provinces:15']);
+    });
+
+    test('un cliente que ya existe devuelve el mensaje del servidor', () async {
+      final repo = _FakeClientRepository()
+        ..createResult = Either.left(const ValidationFailure('El Cliente ya existe'));
+      final result = await _clientsProvider(repo).create(form());
+      expect(result.left.message, 'El Cliente ya existe');
+    });
+  });
+
+  group('Pantalla de ventas: documento, tipo de cambio, cliente y cotización', () {
+    Future<(SalesProvider, _FakeSaleRepository, _FakeClientRepository)> pumpFull(
+      WidgetTester tester, {
+      Set<String> permissions = const {'ventas.store'},
+      bool certificado = false,
+    }) async {
+      _phoneScreen(tester);
+      final repo = _FakeSaleRepository();
+      final clientRepo = _FakeClientRepository();
+      final session = _session(permissions: permissions, certificado: certificado);
+      final sales = _provider(repo)..syncSession(session);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+            ChangeNotifierProvider<ClientsProvider>.value(value: _clientsProvider(clientRepo, session: session)),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const Scaffold(body: SalesPage()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (sales, repo, clientRepo);
+    }
+
+    String textOf(WidgetTester tester, String label) =>
+        tester.widget<TextField>(_field(label)).controller!.text;
+
+    testWidgets('se puede elegir el tipo de documento y se ve el tipo de cambio', (tester) async {
+      await pumpFull(tester);
+
+      expect(find.text('Tipo de documento'), findsOneWidget);
+      expect(find.text('Nota de venta'), findsOneWidget);
+      expect(find.text('TC: S/ 3.452'), findsOneWidget);
+      expect(find.byTooltip('Actualizar tipo de cambio'), findsOneWidget);
+    });
+
+    testWidgets('actualizar el tipo de cambio lo vuelve a pedir', (tester) async {
+      final (_, repo, _) = await pumpFull(tester);
+      expect(repo.rateCalls, 1);
+
+      await tester.tap(find.byTooltip('Actualizar tipo de cambio'));
+      await tester.pumpAndSettle();
+
+      expect(repo.rateCalls, 2);
+    });
+
+    testWidgets('sin tipo de cambio avisa en la pantalla', (tester) async {
+      _phoneScreen(tester);
+      final repo = _FakeSaleRepository()..rateFails = true;
+      final session = _session();
+      final sales = _provider(repo)..syncSession(session);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: SalesPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('TC no disponible'), findsOneWidget);
+    });
+
+    testWidgets('crear cliente solo aparece con el permiso clientes.store', (tester) async {
+      await pumpFull(tester);
+      expect(find.byTooltip('Crear cliente'), findsNothing);
+    });
+
+    testWidgets('crear una empresa trae sus datos del RUC y queda elegida en la venta', (tester) async {
+      final (sales, _, clients) = await pumpFull(tester, permissions: const {'ventas.store', 'clientes.store'});
+
+      await tester.tap(find.byTooltip('Crear cliente'));
+      await tester.pumpAndSettle();
+      expect(find.text('Crear cliente'), findsOneWidget);
+
+      await tester.tap(find.text('Empresa'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_field('RUC'), '20123456789');
+      await tester.tap(find.byTooltip('Buscar en SUNAT'));
+      await tester.pumpAndSettle();
+
+      expect(clients.calls, contains('lookup:e:20123456789'));
+      expect(textOf(tester, 'Razón social'), 'ACME SAC');
+      expect(textOf(tester, 'Dirección (opcional)'), 'AV. UNO 123');
+      // El distrito de la SUNAT quedó elegido.
+      expect(clients.calls, containsAll(['provinces:15', 'districts:1501']));
+
+      await tester.enterText(_field('Nombre del contacto'), 'Carlos');
+      await tester.enterText(_field('Teléfono'), '987 654 321');
+      await tester.enterText(_field('Correo'), 'ventas@acme.pe');
+      await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
+      await tester.pumpAndSettle();
+
+      final created = clients.created!;
+      expect(created.tipo, 'e');
+      expect(created.dniRuc, '20123456789');
+      expect(created.razonSocial, 'ACME SAC');
+      expect(created.telefono, '+51987654321');
+      expect(created.districtId, '150101');
+      expect(sales.client?.id, 55);
+      expect(sales.client?.name, 'ACME SAC');
+      expect(find.text('Crear cliente'), findsNothing);
+    });
+
+    testWidgets('si faltan datos el modal sigue abierto y dice qué falta', (tester) async {
+      final (sales, _, clients) = await pumpFull(tester, permissions: const {'ventas.store', 'clientes.store'});
+
+      await tester.tap(find.byTooltip('Crear cliente'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_field('DNI'), '12345678');
+      await tester.tap(find.byTooltip('Buscar en RENIEC'));
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'Nombre'), 'JUAN');
+      expect(textOf(tester, 'Apellidos (opcional)'), 'PEREZ GOMEZ');
+
+      await tester.enterText(_field('Teléfono'), '987654321');
+      await tester.enterText(_field('Correo'), 'juan@mail.com');
+      await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('departamento, la provincia y el distrito'), findsOneWidget);
+      expect(find.text('Crear cliente'), findsOneWidget);
+      expect(clients.created, isNull);
+      expect(sales.client, isNull);
+    });
+
+    testWidgets('un RUC inválido avisa antes de consultar', (tester) async {
+      final (_, _, clients) = await pumpFull(tester, permissions: const {'ventas.store', 'clientes.store'});
+
+      await tester.tap(find.byTooltip('Crear cliente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Empresa'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_field('RUC'), '123');
+      await tester.tap(find.byTooltip('Buscar en SUNAT'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('El RUC debe tener 11 dígitos'), findsOneWidget);
+      expect(clients.calls.where((c) => c.startsWith('lookup')), isEmpty);
+    });
+
+    testWidgets('con una boleta menor a S/700 se puede vender sin documento del cliente', (tester) async {
+      final (sales, _, _) = await pumpFull(tester, certificado: true);
+      sales.selectWarehouse(1);
+      sales.addProduct(_product(), cantidad: 2);
+      sales.selectTipoDocumento(SaleDocumentType.boleta);
+      await tester.pumpAndSettle();
+
+      const label = 'Emitir sin documento del cliente (venta menor a S/700)';
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+
+      expect(sales.client?.esVarios, isTrue);
+      expect(find.text('CLIENTE VARIOS'), findsOneWidget);
+      expect(find.byTooltip('Crear cliente'), findsNothing);
+    });
+
+    testWidgets('no se puede facturar a una persona y la pantalla lo dice', (tester) async {
+      final (sales, _, _) = await pumpFull(tester, certificado: true);
+      sales.selectClient(const ClientEntity(id: 8, name: 'JUAN', tipo: 'p', documento: '12345678'));
+      sales.selectTipoDocumento(SaleDocumentType.factura);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se puede emitir Factura a un cliente de tipo Persona.'), findsOneWidget);
+    });
+
+    testWidgets('una cotización se crea sin forma de pago y pregunta por la reserva', (tester) async {
+      final (sales, repo, _) = await pumpFull(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 2);
+      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Forma de pago'), findsNothing);
+      expect(find.text('Observaciones'), findsWidgets);
+      expect(find.text('Registrar venta'), findsNothing);
+
+      await tester.tap(find.text('Crear cotización'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reservar stock'), findsOneWidget);
+      expect(find.text('Límite para reservar stock'), findsNothing);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('Límite para reservar stock'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
+      await tester.pumpAndSettle();
+
+      final sent = repo.sent!;
+      expect(sent.tipoDocumento, SaleDocumentType.cotizacion);
+      expect(sent.reservarStock, isTrue);
+      expect(sent.vencimientoStock, isNotNull);
+      expect(find.text('Cotización registrada'), findsOneWidget);
+      expect(find.text('C001-0002'), findsOneWidget);
+    });
+
+    testWidgets('una cotización sin reserva no manda fecha', (tester) async {
+      final (sales, repo, _) = await pumpFull(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product());
+      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crear cotización'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
+      await tester.pumpAndSettle();
+
+      expect(repo.sent!.reservarStock, isFalse);
+      expect(repo.sent!.vencimientoStock, isNull);
+    });
+  });
+
+  // GOLDEN-TMP-START (temporal: imagenes de la pantalla con fuentes reales)
+  group('golden-tmp', () {
+    testWidgets('arriba de ventas y modal de cliente', (tester) async {
+      await (FontLoader('Roboto')
+            ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf')))
+          .load();
+      await (FontLoader('MaterialIcons')
+            ..addFont(Future.value(ByteData.sublistView(
+                File(r'C:\Users\vctr\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf')
+                    .readAsBytesSync()))))
+          .load();
+
+      tester.view.physicalSize = const Size(360 * 2, 780 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+
+      final repo = _FakeSaleRepository();
+      final clientRepo = _FakeClientRepository();
+      final session = _session(permissions: const {'ventas.store', 'clientes.store'}, certificado: true);
+      final sales = _provider(repo)..syncSession(session);
+      await sales.ensureLoaded();
+      await Future<void>.delayed(Duration.zero);
+      sales.selectWarehouse(1);
+      sales.addProduct(_product(name: 'PARLANTE 6.5" 140 RMS', codigo: 'GX6.4B'), cantidad: 2);
+      sales.selectTipoDocumento(SaleDocumentType.boleta);
+
+      final base = AppTheme.light;
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+            ChangeNotifierProvider<ClientsProvider>.value(value: _clientsProvider(clientRepo, session: session)),
+          ],
+          child: MaterialApp(
+            theme: base.copyWith(textTheme: base.textTheme.apply(fontFamily: 'Roboto')),
+            home: const Scaffold(body: SalesPage()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/tmp_top.png'));
+
+      await tester.tap(find.byTooltip('Crear cliente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Empresa'));
+      await tester.pumpAndSettle();
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/tmp_client.png'));
+    });
+  });
+  // GOLDEN-TMP-END
 }

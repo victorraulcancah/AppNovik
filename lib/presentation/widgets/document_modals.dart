@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/document_entity.dart';
@@ -60,24 +61,39 @@ Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
                 value: formatMoney(d.descuento, symbol: d.simboloMoneda),
               ),
             if (d.esDolares && d.tipoCambio != null)
-              AppDetailRow(label: 'Tipo de cambio', value: 'S/ ${d.tipoCambio}'),
+              AppDetailRow(
+                label: 'Tipo de cambio',
+                value: 'S/ ${d.tipoCambio}',
+              ),
             AppDetailRow(
               label: 'Estado',
-              valueWidget: AppStatusBadge(label: status.label, tone: status.tone),
+              valueWidget: AppStatusBadge(
+                label: status.label,
+                tone: status.tone,
+              ),
             ),
-            if (d.esCotizacion && d.reservado == true && d.vencimientoStock != null)
+            if (d.esCotizacion &&
+                d.reservado == true &&
+                d.vencimientoStock != null)
               AppDetailRow(
                 label: 'Stock reservado hasta',
-                value: DateFormat(AppConstants.dateFormat).format(d.vencimientoStock!),
+                value: DateFormat(AppConstants.dateFormat)
+                    .format(d.vencimientoStock!),
               ),
             if (d.boleta?.tieneNotaCredito == true)
               const AppDetailRow(label: 'Nota de crédito', value: 'Emitida'),
             if (d.boleta?.tieneGuia == true)
               const AppDetailRow(label: 'Guía de remisión', value: 'Creada'),
             if (!d.activo && d.kind == DocumentKind.venta) ...[
-              AppDetailRow(label: 'Anulado por', value: d.anuladoPor ?? 'Sin registro'),
+              AppDetailRow(
+                label: 'Anulado por',
+                value: d.anuladoPor ?? 'Sin registro',
+              ),
               if (d.anuladoAt != null)
-                AppDetailRow(label: 'Anulado el', value: _dateTime(d.anuladoAt)),
+                AppDetailRow(
+                  label: 'Anulado el',
+                  value: _dateTime(d.anuladoAt),
+                ),
             ],
             if (d.observaciones != null && d.observaciones!.isNotEmpty)
               AppDetailRow(label: 'Observaciones', value: d.observaciones),
@@ -102,18 +118,25 @@ Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
                       child: AppItemCard(
                         title: i.name,
                         subtitle: [
-                          if (i.codigo != null && i.codigo!.isNotEmpty) i.codigo!,
+                          if (i.codigo != null && i.codigo!.isNotEmpty)
+                            i.codigo!,
                           if (i.marca != null && i.marca!.isNotEmpty) i.marca!,
                         ].join(' · '),
                         columns: [
                           AppItemColumn('Cant.', formatQuantity(i.cantidad)),
                           AppItemColumn(
                             'Precio',
-                            formatMoney(i.precio, symbol: i.dolares ? r'$' : 'S/'),
+                            formatMoney(
+                              i.precio,
+                              symbol: i.dolares ? r'$' : 'S/',
+                            ),
                           ),
                           AppItemColumn(
                             'Subtotal',
-                            formatMoney(i.subtotal, symbol: i.dolares ? r'$' : 'S/'),
+                            formatMoney(
+                              i.subtotal,
+                              symbol: i.dolares ? r'$' : 'S/',
+                            ),
                           ),
                         ],
                       ),
@@ -161,41 +184,53 @@ Future<bool?> showCreditNoteForm(BuildContext context, DocumentEntity d) {
     primaryLabel: 'Crear',
     formKey: formKey,
     error: error,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Se emitirá una nota de crédito sobre ${d.comprobante.toLowerCase()} ${d.numero} '
-          'y se enviará a SUNAT. No se puede deshacer.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 16),
-        Text('Fecha de emisión', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 6),
-        ValueListenableBuilder<DateTime>(
-          valueListenable: date,
-          builder: (context, selected, _) => Wrap(
-            spacing: 8,
-            children: [
-              for (final (label, days) in const [('Hoy', 0), ('Ayer', 1), ('Anteayer', 2)])
-                ChoiceChip(
-                  label: Text(label),
-                  selected: selected == today.subtract(Duration(days: days)),
-                  onSelected: (_) => date.value = today.subtract(Duration(days: days)),
-                ),
-            ],
+    child: AppDisposer(
+      onDispose: [description.dispose, error.dispose, date.dispose],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Se emitirá una nota de crédito sobre ${d.comprobante.toLowerCase()} ${d.numero} '
+            'y se enviará a SUNAT. No se puede deshacer.',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
-        ),
-        const SizedBox(height: 16),
-        AppTextField(
-          controller: description,
-          label: 'Descripción (razón para anular)',
-          maxLines: 3,
-          keyboardType: TextInputType.multiline,
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'La descripción es obligatoria' : null,
-        ),
-      ],
+          const SizedBox(height: 16),
+          Text(
+            'Fecha de emisión',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 6),
+          ValueListenableBuilder<DateTime>(
+            valueListenable: date,
+            builder: (context, selected, _) => Wrap(
+              spacing: 8,
+              children: [
+                for (final (label, days) in const [
+                  ('Hoy', 0),
+                  ('Ayer', 1),
+                  ('Anteayer', 2),
+                ])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: selected == today.subtract(Duration(days: days)),
+                    onSelected: (_) =>
+                        date.value = today.subtract(Duration(days: days)),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          AppTextField(
+            controller: description,
+            label: 'Descripción (razón para anular)',
+            maxLines: 3,
+            keyboardType: TextInputType.multiline,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? 'La descripción es obligatoria'
+                : null,
+          ),
+        ],
+      ),
     ),
     onPrimary: () async {
       error.value = null;
@@ -212,9 +247,5 @@ Future<bool?> showCreditNoteForm(BuildContext context, DocumentEntity d) {
     },
   );
 
-  return result.whenComplete(() {
-    description.dispose();
-    error.dispose();
-    date.dispose();
-  });
+  return result;
 }

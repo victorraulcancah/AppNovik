@@ -41,14 +41,16 @@ class AppSection extends StatelessWidget {
             ],
           ),
         ),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLowest,
+        // Un Material (no un Container con color) para que las listas, interruptores y casillas
+        // de dentro puedan dibujar su fondo y su efecto al tocarlos.
+        Material(
+          color: scheme.surfaceContainerLowest,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
+            side: BorderSide(color: scheme.outlineVariant),
           ),
-          child: child,
+          child: Padding(padding: const EdgeInsets.all(14), child: child),
         ),
       ],
     );

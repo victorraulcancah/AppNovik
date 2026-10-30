@@ -16,6 +16,8 @@ class SalesProvider extends ChangeNotifier {
   final GetPriceListsUseCase _getPriceLists;
   final GetPaymentMethodsUseCase _getPaymentMethods;
   final GetSaleProductFiltersUseCase _getProductFilters;
+  final GetExchangeRateUseCase _getExchangeRate;
+  final GetWalkInClientUseCase _getWalkInClient;
   final SearchClientsUseCase _searchClients;
   final SearchSaleProductsUseCase _searchProducts;
   final CreateSaleUseCase _createSale;
@@ -28,6 +30,8 @@ class SalesProvider extends ChangeNotifier {
     required GetPriceListsUseCase getPriceListsUseCase,
     required GetPaymentMethodsUseCase getPaymentMethodsUseCase,
     required GetSaleProductFiltersUseCase getSaleProductFiltersUseCase,
+    required GetExchangeRateUseCase getExchangeRateUseCase,
+    required GetWalkInClientUseCase getWalkInClientUseCase,
     required SearchClientsUseCase searchClientsUseCase,
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
@@ -36,6 +40,8 @@ class SalesProvider extends ChangeNotifier {
         _getPriceLists = getPriceListsUseCase,
         _getPaymentMethods = getPaymentMethodsUseCase,
         _getProductFilters = getSaleProductFiltersUseCase,
+        _getExchangeRate = getExchangeRateUseCase,
+        _getWalkInClient = getWalkInClientUseCase,
         _searchClients = searchClientsUseCase,
         _searchProducts = searchSaleProductsUseCase,
         _createSale = createSaleUseCase,
@@ -64,6 +70,11 @@ class SalesProvider extends ChangeNotifier {
   bool loading = false;
   String? error;
 
+  /// Tipo de cambio comercial vigente, para mostrarlo en pantalla.
+  ExchangeRateEntity? exchangeRate;
+  bool exchangeRateLoading = false;
+  String? exchangeRateError;
+
   // Borrador de la venta.
   SaleDocumentType tipoDocumento = SaleDocumentType.ticket;
   ClientEntity? client;
@@ -73,27 +84,56 @@ class SalesProvider extends ChangeNotifier {
   String observaciones = '';
   List<SaleLineEntity> lines = [];
 
+  /// Boleta sin documento del cliente: se vende a "CLIENTE VARIOS" (solo boletas menores a S/ 700).
+  bool sinDocumento = false;
+  bool sinDocumentoLoading = false;
+
   bool submitting = false;
   String? submitError;
 
   /// Última venta registrada, para mostrar la confirmación.
   SaleResultEntity? lastSale;
 
-  /// Boleta y factura solo si la empresa tiene certificado digital.
+  /// Boleta y factura solo si la empresa tiene certificado digital. La cotización siempre.
   List<SaleDocumentType> get documentTypes => _emiteComprobantes
       ? SaleDocumentType.values
-      : const [SaleDocumentType.ticket];
+      : const [SaleDocumentType.ticket, SaleDocumentType.cotizacion];
+
+  /// Se puede vender sin documento del cliente: boleta, en soles y menor a S/ 700 (regla SUNAT).
+  bool get puedeSinDocumento =>
+      tipoDocumento == SaleDocumentType.boleta && total > 0 && total < 700;
+
+  /// La factura no se emite a un cliente de tipo persona.
+  bool get facturaAPersona =>
+      tipoDocumento == SaleDocumentType.factura && (client?.esPersona ?? false);
+
+  @override
+  void notifyListeners() {
+    // Si dejan de cumplirse las condiciones (otro comprobante, un total de S/ 700 o más),
+    // la venta sin documento se descarta, igual que en la web.
+    if (sinDocumento && !puedeSinDocumento) {
+      sinDocumento = false;
+      client = null;
+    }
+    super.notifyListeners();
+  }
 
   double get total =>
       roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotal));
 
-  SaleFormEntity get form => SaleFormEntity(
+  SaleFormEntity get form => _buildForm();
+
+  SaleFormEntity _buildForm({bool reservarStock = false, DateTime? vencimientoStock}) =>
+      SaleFormEntity(
         tipoDocumento: tipoDocumento,
         client: client,
         warehouseId: warehouseId,
         paymentMethodId: paymentMethodId,
         lines: lines,
         observaciones: observaciones,
+        priceListId: priceListId,
+        reservarStock: reservarStock,
+        vencimientoStock: vencimientoStock,
       );
 
   /// Se llama cuando cambia la sesión. Al cambiar de empresa se descarta todo.
@@ -114,6 +154,9 @@ class SalesProvider extends ChangeNotifier {
     paymentMethods = [];
     productFilters = const SaleProductFiltersEntity();
     _productFiltersLoaded = false;
+    exchangeRate = null;
+    exchangeRateLoading = false;
+    exchangeRateError = null;
     loading = false;
     error = null;
     lastSale = null;
@@ -128,6 +171,8 @@ class SalesProvider extends ChangeNotifier {
     paymentMethodId = null;
     observaciones = '';
     lines = [];
+    sinDocumento = false;
+    sinDocumentoLoading = false;
     submitting = false;
     submitError = null;
     _listaElegidaAMano = false;
@@ -184,6 +229,59 @@ class SalesProvider extends ChangeNotifier {
     _initialized = true;
     loading = false;
     notifyListeners();
+
+    // El tipo de cambio no bloquea la venta: se pide aparte y, si falla, solo se avisa.
+    loadExchangeRate();
+  }
+
+  /// Pide el tipo de cambio comercial vigente (también al tocar actualizar).
+  Future<void> loadExchangeRate() async {
+    final companyId = _companyId;
+    if (companyId == null || exchangeRateLoading) return;
+    exchangeRateLoading = true;
+    exchangeRateError = null;
+    notifyListeners();
+
+    final result = await _getExchangeRate();
+    if (companyId != _companyId) return;
+    exchangeRateLoading = false;
+    result.fold(
+      (failure) {
+        exchangeRate = null;
+        exchangeRateError = failure.message;
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (rate) => exchangeRate = rate,
+    );
+    notifyListeners();
+  }
+
+  /// Marca o desmarca "sin documento del cliente". Al marcar se elige a "CLIENTE VARIOS";
+  /// al desmarcar se quita el cliente. Devuelve el motivo si no se pudo.
+  Future<String?> toggleSinDocumento(bool on) async {
+    if (!on) {
+      sinDocumento = false;
+      client = null;
+      notifyListeners();
+      return null;
+    }
+    final companyId = _companyId;
+    if (companyId == null || !puedeSinDocumento) return null;
+
+    sinDocumentoLoading = true;
+    notifyListeners();
+    final result = await _getWalkInClient(companyId);
+    sinDocumentoLoading = false;
+    if (companyId != _companyId) return null;
+
+    if (result.isLeft) {
+      _checkSession(result);
+      notifyListeners();
+      return result.left.message;
+    }
+    sinDocumento = true;
+    selectClient(result.right);
+    return null;
   }
 
   int? _pick(List<int> ids, int? preferred) {
@@ -429,8 +527,9 @@ class SalesProvider extends ChangeNotifier {
     return submitError == null;
   }
 
-  /// Registra la venta. Si sale bien, deja el borrador limpio para la siguiente.
-  Future<bool> submit() async {
+  /// Registra la venta o la cotización. Si sale bien, deja el borrador limpio para la siguiente.
+  /// [reservarStock] y [vencimientoStock] solo valen para cotizaciones.
+  Future<bool> submit({bool reservarStock = false, DateTime? vencimientoStock}) async {
     final companyId = _companyId;
     final userId = _userId;
     if (companyId == null || userId == null || submitting) return false;
@@ -439,7 +538,11 @@ class SalesProvider extends ChangeNotifier {
     submitError = null;
     notifyListeners();
 
-    final result = await _createSale(companyId: companyId, userId: userId, form: form);
+    final result = await _createSale(
+      companyId: companyId,
+      userId: userId,
+      form: _buildForm(reservarStock: reservarStock, vencimientoStock: vencimientoStock),
+    );
 
     submitting = false;
     var ok = false;
@@ -449,7 +552,7 @@ class SalesProvider extends ChangeNotifier {
         // Una caída de red o un error del servidor puede haber dejado la venta registrada.
         final incierto = failure is NetworkFailure || failure is ServerFailure || failure is UnknownFailure;
         submitError = incierto
-            ? '${failure.message}. Antes de reintentar, revisa en Documentos si la venta ya quedó registrada.'
+            ? '${failure.message}. Antes de reintentar, revisa en Documentos si ${tipoDocumento.esCotizacion ? 'la cotización' : 'la venta'} ya quedó registrada.'
             : failure.message;
         if (failure is AuthenticationFailure) _onSessionExpired?.call();
       },

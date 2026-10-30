@@ -30,7 +30,10 @@ Future<bool> showSaleProductPicker(BuildContext context) async {
     primaryLabel: 'Agregar a la venta',
     primaryEnabled: hasSelection,
     error: error,
-    child: _PickerBody(sales: sales, selection: selection),
+    child: AppDisposer(
+      onDispose: [selection.dispose, hasSelection.dispose, error.dispose],
+      child: _PickerBody(sales: sales, selection: selection),
+    ),
     onPrimary: () {
       error.value = null;
       final problems = sales.addProducts(selection.value.values.toList());
@@ -42,9 +45,6 @@ Future<bool> showSaleProductPicker(BuildContext context) async {
     },
   );
 
-  selection.dispose();
-  hasSelection.dispose();
-  error.dispose();
   return added == true;
 }
 

@@ -4,6 +4,7 @@ export 'app_action_button.dart';
 export 'app_card_list.dart';
 export 'app_charts.dart';
 export 'app_detail.dart';
+export 'app_disposer.dart';
 export 'app_dropdown_field.dart';
 export 'app_filter_sheet.dart';
 export 'app_import_modal.dart';
