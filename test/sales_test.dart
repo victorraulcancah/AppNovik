@@ -59,6 +59,14 @@ class _FakeSaleRepository implements SaleRepository {
   int? sentCompany;
   int? sentUser;
   Either<Failure, SaleResultEntity>? result;
+  List<SaleProductEntity>? products;
+
+  @override
+  Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters() async =>
+      Either.right(const SaleProductFiltersEntity(
+        categorias: [(id: 20, name: 'AUDIO'), (id: 21, name: 'ACCESORIOS')],
+        marcas: [(id: 30, name: 'PIONEER'), (id: 31, name: 'JBL')],
+      ));
 
   @override
   Future<Either<Failure, List<ClientEntity>>> searchClients({
@@ -72,7 +80,7 @@ class _FakeSaleRepository implements SaleRepository {
     required int companyId,
     required String search,
   }) async =>
-      Either.right([_product()]);
+      Either.right(products ?? [_product()]);
 
   @override
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods() async =>
@@ -144,15 +152,22 @@ AuthProvider _auth(SessionContextEntity session) {
 
 SaleProductEntity _product({
   int id = 100,
+  String name = 'SUBWOOFER 12"',
+  String codigo = 'SUB-12',
   Map<int, double> stock = const {1: 5, 2: 0},
   Map<int, double> prices = const {10: 50, 11: 40},
   bool sinStock = false,
+  int categoryId = 20,
+  int brandId = 30,
 }) =>
     SaleProductEntity(
       id: id,
-      codigo: 'SUB-12',
-      name: 'SUBWOOFER 12"',
+      codigo: codigo,
+      name: name,
       marca: 'PIONEER',
+      categoryId: categoryId,
+      brandId: brandId,
+      unidad: 'Unidad',
       ventaSinStock: sinStock,
       stockPorAlmacen: stock,
       precioPorLista: prices,
@@ -187,6 +202,7 @@ SalesProvider _provider(_FakeSaleRepository sales) {
     getWarehousesUseCase: GetWarehousesUseCase(repository: stock),
     getPriceListsUseCase: GetPriceListsUseCase(repository: stock),
     getPaymentMethodsUseCase: GetPaymentMethodsUseCase(repository: sales),
+    getSaleProductFiltersUseCase: GetSaleProductFiltersUseCase(repository: sales),
     searchClientsUseCase: SearchClientsUseCase(repository: sales),
     searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: sales),
     createSaleUseCase: CreateSaleUseCase(repository: sales),
@@ -228,6 +244,11 @@ void _phoneScreen(WidgetTester tester) {
     tester.platformDispatcher.clearTextScaleFactorTestValue();
   });
 }
+
+/// El campo de búsqueda del selector de productos (no el de la pantalla de atrás).
+Finder _pickerSearchField() => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == 'Nombre, código, marca…',
+    );
 
 void main() {
   group('modelos', () {
@@ -498,6 +519,68 @@ void main() {
       expect(p.submitError, 'Elige el cliente');
     });
 
+    test('agregar con cantidad suma a lo que ya hay', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(1);
+
+      expect(p.addProduct(_product(), cantidad: 3), isNull);
+      expect(p.lines.single.cantidad, 3);
+      expect(p.addProduct(_product(), cantidad: 2), isNull);
+      expect(p.lines.single.cantidad, 5);
+      expect(p.cantidadEnVenta(100), 5);
+      expect(p.disponibleParaAgregar(_product()), 0);
+    });
+
+    test('agregar varios productos es todo o nada', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(1);
+      final amp = _product(id: 101, name: 'AMPLIFICADOR', stock: const {1: 2});
+
+      final problems = p.addProducts([
+        (product: _product(), cantidad: 2),
+        (product: amp, cantidad: 3), // solo hay 2
+      ]);
+      expect(problems.single, contains('Solo hay 2 de "AMPLIFICADOR"'));
+      expect(p.lines, isEmpty);
+
+      expect(
+        p.addProducts([
+          (product: _product(), cantidad: 2),
+          (product: amp, cantidad: 2),
+        ]),
+        isEmpty,
+      );
+      expect(p.lines.map((l) => l.product.id), [100, 101]);
+      expect(p.total, 160);
+    });
+
+    test('una cantidad menor a 1 no se agrega', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(1);
+      expect(p.addProduct(_product(), cantidad: 0), contains('cantidad mínima'));
+      expect(p.lines, isEmpty);
+    });
+
+    test('sin tope para servicios y productos de venta sin stock', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(2); // sin stock
+      final libre = _product(sinStock: true);
+      expect(p.disponibleParaAgregar(libre), isNull);
+      expect(p.addProduct(libre, cantidad: 50), isNull);
+      expect(p.lines.single.cantidad, 50);
+    });
+
+    test('las categorías y marcas del buscador se piden una vez', () async {
+      final p = await _ready(_FakeSaleRepository());
+      expect(p.productFilters.categorias, isEmpty);
+
+      await p.ensureProductFilters();
+
+      expect(p.productFilters.categorias.map((c) => c.name), ['AUDIO', 'ACCESORIOS']);
+      expect(p.productFilters.marcas, hasLength(2));
+      expect(p.productFilters.categoriaName(21), 'ACCESORIOS');
+    });
+
     test('al cambiar de empresa se descarta el borrador y los catálogos', () async {
       final p = await _ready(_FakeSaleRepository());
       p.selectWarehouse(1);
@@ -565,16 +648,21 @@ void main() {
       sales.selectWarehouse(1);
       await tester.tap(find.text('Agregar producto'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(SearchBar), 'sub');
+      expect(find.text('Buscar productos'), findsOneWidget);
+      await tester.enterText(_pickerSearchField(), 'sub');
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
+      expect(find.text('1 producto'), findsOneWidget);
+      expect(find.text('0 seleccionados'), findsOneWidget);
+
       await tester.tap(find.text('SUBWOOFER 12"'));
       await tester.pumpAndSettle();
-      expect(sales.lines.single.cantidad, 1);
-      expect(find.text('×1'), findsOneWidget);
-
-      await tester.tap(find.text('Listo'));
+      expect(find.text('1 seleccionado'), findsOneWidget);
+      await tester.tap(find.text('Agregar a la venta'));
       await tester.pumpAndSettle();
+
+      expect(sales.lines.single.cantidad, 1);
+      expect(find.text('Buscar productos'), findsNothing);
       expect(find.text('SUBWOOFER 12"'), findsOneWidget);
       expect(find.text('S/ 40.00'), findsWidgets);
 
@@ -630,6 +718,147 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Sin acceso'), findsOneWidget);
       expect(find.text('Registrar venta'), findsNothing);
+    });
+  });
+
+  group('Selector de productos', () {
+    final audio = _product(id: 100, name: 'SUBWOOFER 12"', codigo: 'SUB-12');
+    final accesorio = _product(
+      id: 101,
+      name: 'CABLE RCA',
+      codigo: 'CAB-1',
+      categoryId: 21,
+      brandId: 31,
+      stock: const {1: 40},
+      prices: const {11: 12.5},
+    );
+    final agotado = _product(
+      id: 102,
+      name: 'RADIO DEH',
+      codigo: 'RAD-1',
+      stock: const {1: 0},
+    );
+
+    Future<SalesProvider> open(WidgetTester tester, {List<SaleProductEntity>? products}) async {
+      _phoneScreen(tester);
+      final repo = _FakeSaleRepository()..products = products ?? [audio, accesorio, agotado];
+      final session = _session();
+      final sales = _provider(repo)..syncSession(session);
+      await sales.ensureLoaded();
+      sales.selectWarehouse(1);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const Scaffold(body: SalesPage()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Agregar producto'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_pickerSearchField(), 'a');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      return sales;
+    }
+
+    testWidgets('muestra stock, unidad, precio y categoría de cada producto', (tester) async {
+      final sales = await open(tester);
+      await sales.ensureProductFilters();
+      await tester.pumpAndSettle();
+
+      expect(find.text('3 productos'), findsOneWidget);
+      expect(find.text('5 Unidad'), findsOneWidget);
+      expect(find.text('40 Unidad'), findsOneWidget);
+      expect(find.text('Sin stock'), findsOneWidget);
+      expect(find.text('S/ 40.00'), findsNWidgets(2)); // el subwoofer y el radio
+      expect(find.text('S/ 12.50'), findsOneWidget);
+      expect(find.text('SUB-12 · PIONEER · AUDIO'), findsOneWidget);
+      expect(find.text('Unidad'), findsWidgets);
+    });
+
+    testWidgets('marcar varios con su cantidad los agrega de una vez', (tester) async {
+      final sales = await open(tester);
+
+      await tester.tap(find.text('SUBWOOFER 12"'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CABLE RCA'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 seleccionados'), findsOneWidget);
+
+      // El segundo producto (el cable): cantidad 7.
+      final fields = find.widgetWithText(TextField, '1');
+      await tester.enterText(fields.at(1), '7');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Agregar a la venta'));
+      await tester.pumpAndSettle();
+
+      expect(sales.lines.map((l) => (l.product.id, l.cantidad)), [(100, 1), (101, 7)]);
+      expect(find.text('Buscar productos'), findsNothing);
+    });
+
+    testWidgets('la cantidad no pasa del stock disponible', (tester) async {
+      final sales = await open(tester);
+
+      await tester.tap(find.text('SUBWOOFER 12"')); // hay 5
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '1').first, '99');
+      await tester.pumpAndSettle();
+      expect(find.text('5'), findsWidgets);
+
+      await tester.tap(find.text('Agregar a la venta'));
+      await tester.pumpAndSettle();
+      expect(sales.lines.single.cantidad, 5);
+    });
+
+    testWidgets('un producto sin stock no se puede marcar', (tester) async {
+      await open(tester);
+
+      await tester.tap(find.text('RADIO DEH'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('0 seleccionados'), findsOneWidget);
+      final checkbox = tester.widgetList<Checkbox>(find.byType(Checkbox)).last;
+      expect(checkbox.onChanged, isNull);
+    });
+
+    testWidgets('filtrar por categoría deja solo sus productos', (tester) async {
+      final sales = await open(tester);
+      await sales.ensureProductFilters();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      expect(find.text('Categoría'), findsOneWidget);
+      expect(find.text('Marca'), findsOneWidget);
+
+      await tester.tap(find.text('Todas').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ACCESORIOS').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 producto'), findsOneWidget);
+      expect(find.text('CABLE RCA'), findsOneWidget);
+      expect(find.text('SUBWOOFER 12"'), findsNothing);
+    });
+
+    testWidgets('el botón de agregar espera a que se marque algo', (tester) async {
+      await open(tester);
+      final button = tester.widget<FilledButton>(find.ancestor(
+        of: find.text('Agregar a la venta'),
+        matching: find.byType(FilledButton),
+      ));
+      expect(button.onPressed, isNull);
     });
   });
 }

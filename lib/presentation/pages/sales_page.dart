@@ -7,6 +7,7 @@ import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/sale_modals.dart';
+import '../widgets/sale_product_picker.dart';
 
 /// Módulo Ventas: registra una venta al contado en soles — comprobante, cliente,
 /// productos con su precio y stock, y una forma de pago. Las ventas a crédito,
@@ -67,44 +68,7 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
-  Future<void> _addProduct() async {
-    final sales = context.read<SalesProvider>();
-    final warehouse = sales.warehouseId;
-    await showAppSearchSheet<SaleProductEntity>(
-      context,
-      title: 'Agregar producto',
-      subtitle: 'Toca un producto para sumarlo a la venta',
-      icon: Icons.add_shopping_cart_outlined,
-      hint: 'Código, nombre, marca o categoría',
-      closeOnSelect: false,
-      closeLabel: 'Listo',
-      refresh: sales,
-      search: sales.searchProducts,
-      itemOf: (p) {
-        final list = sales.priceListId;
-        final stock = warehouse == null ? null : p.maximoEn(warehouse);
-        final enVenta = sales.lines
-            .where((l) => l.product.id == p.id)
-            .fold<int>(0, (sum, l) => sum + l.cantidad);
-        return AppSearchItem(
-          title: p.name,
-          subtitle: [
-            p.codigo,
-            if (p.marca != null) p.marca!,
-            if (p.esServicio)
-              'Servicio'
-            else if (p.ventaSinStock)
-              'Venta sin stock'
-            else
-              'Stock ${formatQuantity(stock ?? 0)}',
-          ].join(' · '),
-          trailing: list == null ? null : formatMoney(p.precioEn(list)),
-          selectedCount: enVenta,
-        );
-      },
-      onSelect: sales.addProduct,
-    );
-  }
+  Future<void> _addProduct() => showSaleProductPicker(context);
 
   Future<void> _submit() async {
     final sales = context.read<SalesProvider>();

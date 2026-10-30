@@ -108,6 +108,8 @@ class DependencyInjection {
             getWarehousesUseCase: GetWarehousesUseCase(repository: _stockRepository),
             getPriceListsUseCase: GetPriceListsUseCase(repository: _stockRepository),
             getPaymentMethodsUseCase: GetPaymentMethodsUseCase(repository: _saleRepository),
+            getSaleProductFiltersUseCase:
+                GetSaleProductFiltersUseCase(repository: _saleRepository),
             searchClientsUseCase: SearchClientsUseCase(repository: _saleRepository),
             searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: _saleRepository),
             createSaleUseCase: CreateSaleUseCase(repository: _saleRepository),
