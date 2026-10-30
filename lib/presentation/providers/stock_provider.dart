@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
+import '../../core/utils/either.dart';
+import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../../domain/entities/product_form_entity.dart';
 import '../../domain/entities/stock_entity.dart';
 import '../../domain/usecases/stock_usecases.dart';
@@ -12,6 +14,7 @@ class StockProvider extends ChangeNotifier {
   final GetWarehousesUseCase _getWarehouses;
   final GetPriceListsUseCase _getPriceLists;
   final GetStockUseCase _getStock;
+  final ExportStockUseCase _exportStock;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -20,10 +23,12 @@ class StockProvider extends ChangeNotifier {
     required GetWarehousesUseCase getWarehousesUseCase,
     required GetPriceListsUseCase getPriceListsUseCase,
     required GetStockUseCase getStockUseCase,
+    required ExportStockUseCase exportStockUseCase,
     VoidCallback? onSessionExpired,
   })  : _getWarehouses = getWarehousesUseCase,
         _getPriceLists = getPriceListsUseCase,
         _getStock = getStockUseCase,
+        _exportStock = exportStockUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
@@ -48,6 +53,7 @@ class StockProvider extends ChangeNotifier {
   double costoTotal = 0;
   double totalVenta = 0;
   String? error;
+  bool exporting = false;
 
   PriceListEntity? get priceList {
     for (final p in priceLists) {
@@ -168,6 +174,31 @@ class StockProvider extends ChangeNotifier {
   Future<void> setSearch(String text) {
     search = text.split(RegExp(r'[\s,]+')).where((t) => t.isNotEmpty).toList();
     return refresh();
+  }
+
+  /// Excel del almacén elegido (todos sus productos), con la búsqueda actual.
+  Future<Either<Failure, DownloadedFile>> exportCurrent() async {
+    final warehouse = warehouseId;
+    if (warehouse == null || exporting) {
+      return Either.left(const ValidationFailure('Elige un almacén para exportar'));
+    }
+    var name = 'Stock';
+    for (final w in warehouses) {
+      if (w.id == warehouse) name = w.name;
+    }
+
+    exporting = true;
+    notifyListeners();
+    final result = await _exportStock(
+      warehouseId: warehouse,
+      priceListId: priceListId,
+      search: search,
+      name: '$name.xlsx',
+    );
+    exporting = false;
+    if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
+    notifyListeners();
+    return result;
   }
 
   Future<void> _fetch({required int page}) async {

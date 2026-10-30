@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
 import '../../core/network/api_request.dart';
@@ -9,6 +10,12 @@ import '../models/stock_model.dart';
 abstract class StockRemoteDataSource {
   Future<List<CatalogItemEntity>> getWarehouses(String token, int companyId);
   Future<List<PriceListEntity>> getPriceLists(String token, int companyId);
+  Future<Uint8List> exportStock({
+    required String token,
+    required int warehouseId,
+    int? priceListId,
+    required List<String> search,
+  });
   Future<StockPageModel> getStock({
     required String token,
     required int companyId,
@@ -40,6 +47,22 @@ class StockRemoteDataSourceImpl implements StockRemoteDataSource {
       priceListsFromJson(
         await _get(token, '/lista-de-precios/list', {'company_id': '$companyId'}),
       );
+
+  @override
+  Future<Uint8List> exportStock({
+    required String token,
+    required int warehouseId,
+    int? priceListId,
+    required List<String> search,
+  }) {
+    // Igual que la web: el Excel trae todos los productos del almacén y solo lo acota la búsqueda.
+    final uri = Uri.parse('${ApiConstants.baseUrl}/almacenes/export').replace(queryParameters: {
+      'warehouse_id': ['$warehouseId'],
+      if (priceListId != null) 'list_price_id': ['$priceListId'],
+      if (search.isNotEmpty) 'search[]': search,
+    });
+    return sendApiBytes(() => client.post(uri, headers: ApiConstants.authHeaders(token)));
+  }
 
   @override
   Future<StockPageModel> getStock({

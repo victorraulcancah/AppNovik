@@ -33,6 +33,16 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 Cada módulo se entrega primero en **solo lectura** y después se agregan las acciones de crear/editar.
 
+### Estado de Stock
+
+- **Botón Acciones** (abajo a la derecha, igual que en Productos y Documentos): **Exportar** (`POST /almacenes/export` con el almacén, la lista de precios y la búsqueda; Excel que se comparte con el menú del sistema) y **Totales**.
+- **Totales** (modal): *Costo Total* y *Total Venta* del almacén. Solo con el permiso `almacenes.show.totales` y rol Admin Global, Ceo Empresa o Contador, como la web. Sin ese acceso, el botón flotante es solo **Exportar**.
+- Los cards informativos son un componente reutilizable: `showAppSummary` / `AppMetricCard` (`components/app_summary.dart`), usado también por los totales de Documentos.
+
+### Comprobante en PDF (Documentos)
+
+El ERP **no tiene API** para el PDF de una venta o cotización: la web lo dibuja en el navegador con `boleta.tsx` / `boleta-ticket.tsx` (`comprobante-de-pago`). La app replica esos componentes con el paquete `pdf` (A4 y ticket 80 mm, mismas secciones y reglas de cabecera, fuente Roboto embebida por las tildes). Las franjas grises van en color sólido porque el PDF ignora la transparencia. Solo existen en el backend los PDF de estado de cuenta y de deudas.
+
 ### Estado de Documentos
 
 Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra el servidor:

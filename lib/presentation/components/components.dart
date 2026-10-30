@@ -17,6 +17,7 @@ export 'app_page_header.dart';
 export 'app_pickers.dart';
 export 'app_search_bar.dart';
 export 'app_search_sheet.dart';
+export 'app_summary.dart';
 export 'app_section.dart';
 export 'app_speed_dial.dart';
 export 'app_tabs.dart';

@@ -74,6 +74,10 @@ String _safe(String text) {
 
 final _date = DateFormat(AppConstants.dateFormat);
 
+/// Gris de las franjas (el 10 % de negro sobre blanco, como `bg-black/10` de la web). Va como
+/// color sólido: la transparencia no se aplica en el PDF y saldría negro.
+const _band = PdfColor(0.9, 0.9, 0.9);
+
 Future<pw.ThemeData>? _theme;
 
 /// La fuente del PDF (Roboto, incluida en la app), cargada una sola vez.
@@ -167,7 +171,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
   pw.Widget cell(String text, {bool header = false, pw.Alignment align = pw.Alignment.centerLeft}) =>
       pw.Container(
         alignment: align,
-        color: header ? const PdfColor(0, 0, 0, 0.1) : null,
+        color: header ? _band : null,
         padding: pw.EdgeInsets.symmetric(horizontal: 5, vertical: header ? 3 : 4),
         child: pw.Text(
           _safe(text),
@@ -258,7 +262,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
     pw.Container(
       width: double.infinity,
       alignment: pw.Alignment.center,
-      color: const PdfColor(0, 0, 0, 0.1),
+      color: _band,
       padding: const pw.EdgeInsets.symmetric(vertical: 4),
       child: pw.Text('INFORMACIÓN GENERAL', style: bold.copyWith(fontSize: 9)),
     ),
@@ -405,10 +409,8 @@ pw.Widget _ticket(_ReceiptData r, pw.MemoryImage? logo) {
         ]),
       );
 
-  final dash = pw.Container(
-    margin: const pw.EdgeInsets.symmetric(vertical: 4),
-    decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(width: 0.6))),
-  );
+  // Separador punteado, como el `border-dashed` del ticket de la web.
+  final dash = pw.Divider(height: 8, thickness: 0.7, borderStyle: pw.BorderStyle.dashed);
 
   return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
     if (logo != null) pw.Center(child: pw.SizedBox(height: 50, child: pw.Image(logo))),

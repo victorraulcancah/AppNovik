@@ -1,5 +1,6 @@
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../entities/document_entity.dart' show DownloadedFile;
 import '../entities/product_form_entity.dart';
 import '../entities/stock_entity.dart';
 
@@ -9,6 +10,15 @@ abstract class StockRepository {
 
   /// Listas de precios que el usuario puede usar.
   Future<Either<Failure, List<PriceListEntity>>> getPriceLists(int companyId);
+
+  /// Excel del almacén (todos sus productos, con o sin stock), acotado por la búsqueda.
+  /// [name] es el nombre del archivo (el del almacén).
+  Future<Either<Failure, DownloadedFile>> exportStock({
+    required int warehouseId,
+    int? priceListId,
+    List<String> search = const [],
+    required String name,
+  });
 
   /// Existencias de un almacén. [includeZero] suma los productos sin stock.
   Future<Either<Failure, StockPageEntity>> getStock({

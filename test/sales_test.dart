@@ -48,6 +48,15 @@ class _FakeStockRepository implements StockRepository {
       ]);
 
   @override
+  Future<Either<Failure, DownloadedFile>> exportStock({
+    required int warehouseId,
+    int? priceListId,
+    List<String> search = const [],
+    required String name,
+  }) =>
+      throw UnimplementedError();
+
+  @override
   Future<Either<Failure, StockPageEntity>> getStock({
     required int companyId,
     required int warehouseId,

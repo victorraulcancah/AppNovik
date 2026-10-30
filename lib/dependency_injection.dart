@@ -142,6 +142,7 @@ class DependencyInjection {
             getWarehousesUseCase: GetWarehousesUseCase(repository: _stockRepository),
             getPriceListsUseCase: GetPriceListsUseCase(repository: _stockRepository),
             getStockUseCase: GetStockUseCase(repository: _stockRepository),
+            exportStockUseCase: ExportStockUseCase(repository: _stockRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!

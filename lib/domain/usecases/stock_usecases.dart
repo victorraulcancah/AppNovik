@@ -1,5 +1,6 @@
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../entities/document_entity.dart' show DownloadedFile;
 import '../entities/product_form_entity.dart';
 import '../entities/stock_entity.dart';
 import '../repositories/stock_repository.dart';
@@ -18,6 +19,24 @@ class GetPriceListsUseCase {
 
   Future<Either<Failure, List<PriceListEntity>>> call(int companyId) =>
       repository.getPriceLists(companyId);
+}
+
+class ExportStockUseCase {
+  final StockRepository repository;
+  ExportStockUseCase({required this.repository});
+
+  Future<Either<Failure, DownloadedFile>> call({
+    required int warehouseId,
+    int? priceListId,
+    List<String> search = const [],
+    required String name,
+  }) =>
+      repository.exportStock(
+        warehouseId: warehouseId,
+        priceListId: priceListId,
+        search: search,
+        name: name,
+      );
 }
 
 class GetStockUseCase {

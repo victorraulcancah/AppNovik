@@ -262,30 +262,26 @@ Future<void> showDocumentTotals(
   required double totalDolares,
 }) {
   final isSale = kind == DocumentKind.venta;
-  final theme = Theme.of(context);
 
-  return showAppModal(
+  return showAppSummary(
     context,
     title: 'Totales',
     subtitle: isSale ? 'Ventas' : 'Cotizaciones',
-    icon: Icons.functions,
-    primaryLabel: null,
-    secondaryLabel: 'Cerrar',
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppDetailRow(label: 'Periodo', value: documentFilterRange(filters)),
-        AppDetailRow(label: isSale ? 'Ventas' : 'Cotizaciones', value: '$total'),
-        const Divider(height: 24),
-        AppDetailRow(label: 'Total Soles', value: formatMoney(totalSoles, symbol: 'S/.')),
-        AppDetailRow(label: 'Total Dólares', value: formatMoney(totalDolares, symbol: r'$')),
-        const SizedBox(height: 12),
-        Text(
-          'Suma todo lo filtrado, no solo lo que ya cargó la lista. '
-          '${isSale ? 'Las ventas eliminadas' : 'Las cotizaciones usadas o eliminadas'} no cuentan.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ],
-    ),
+    metrics: [
+      AppSummaryMetric(label: 'Periodo', value: documentFilterRange(filters)),
+      AppSummaryMetric(label: isSale ? 'Ventas' : 'Cotizaciones', value: '$total'),
+      AppSummaryMetric(
+        label: 'Total Soles',
+        value: formatMoney(totalSoles, symbol: 'S/.'),
+        color: const Color(0xFF16A34A),
+      ),
+      AppSummaryMetric(
+        label: 'Total Dólares',
+        value: formatMoney(totalDolares, symbol: r'$'),
+        color: const Color(0xFFD97706),
+      ),
+    ],
+    note: 'Suma todo lo filtrado, no solo lo que ya cargó la lista. '
+        '${isSale ? 'Las ventas eliminadas' : 'Las cotizaciones usadas o eliminadas'} no cuentan.',
   );
 }

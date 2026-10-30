@@ -1,5 +1,6 @@
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../../domain/entities/product_form_entity.dart';
 import '../../domain/entities/stock_entity.dart';
 import '../../domain/repositories/stock_repository.dart';
@@ -25,6 +26,23 @@ class StockRepositoryImpl with TokenGuard implements StockRepository {
   @override
   Future<Either<Failure, List<PriceListEntity>>> getPriceLists(int companyId) =>
       withToken((token) => remoteDataSource.getPriceLists(token, companyId));
+
+  @override
+  Future<Either<Failure, DownloadedFile>> exportStock({
+    required int warehouseId,
+    int? priceListId,
+    List<String> search = const [],
+    required String name,
+  }) =>
+      withToken((token) async => DownloadedFile(
+            name: name,
+            bytes: await remoteDataSource.exportStock(
+              token: token,
+              warehouseId: warehouseId,
+              priceListId: priceListId,
+              search: search,
+            ),
+          ));
 
   @override
   Future<Either<Failure, StockPageEntity>> getStock({
