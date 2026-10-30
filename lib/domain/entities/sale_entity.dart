@@ -4,14 +4,19 @@ import 'document_entity.dart';
 enum SaleDocumentType {
   ticket('Ticket de Venta', 'Nota de venta'),
   boleta('Boleta de Venta', 'Boleta'),
-  factura('Factura', 'Factura');
+  factura('Factura', 'Factura'),
+
+  /// No es una venta: no descuenta stock (salvo que se reserve) ni se cobra.
+  cotizacion('cotizacion', 'Cotización');
 
   final String apiValue;
   final String label;
   const SaleDocumentType(this.apiValue, this.label);
 
   /// Boleta y factura se envían a SUNAT.
-  bool get esFiscal => this != ticket;
+  bool get esFiscal => this == boleta || this == factura;
+
+  bool get esCotizacion => this == cotizacion;
 }
 
 /// Cliente al que se le vende.
@@ -156,6 +161,13 @@ class SaleFormEntity {
   final List<SaleLineEntity> lines;
   final String? observaciones;
 
+  /// Lista de precios con la que se armó la venta (la cotización la guarda).
+  final int? priceListId;
+
+  /// Solo cotizaciones: si reserva el stock y hasta qué día.
+  final bool reservarStock;
+  final DateTime? vencimientoStock;
+
   const SaleFormEntity({
     required this.tipoDocumento,
     required this.client,
@@ -163,11 +175,41 @@ class SaleFormEntity {
     required this.paymentMethodId,
     required this.lines,
     this.observaciones,
+    this.priceListId,
+    this.reservarStock = false,
+    this.vencimientoStock,
   });
 
   double get total =>
       roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotal));
 }
 
-/// Resultado de registrar la venta.
+/// Tipo de cambio comercial vigente (interbancario + margen de la empresa), el que se
+/// aplica en cotizaciones y ventas en dólares.
+class ExchangeRateEntity {
+  /// Con margen: el valor que se usa.
+  final double valorFinal;
+
+  /// Interbancario del que se parte, su fuente (`bloomberg`, `manual`...) y su fecha.
+  final double valorFuente;
+  final String fuente;
+  final DateTime? fechaFuente;
+  final double margen;
+
+  const ExchangeRateEntity({
+    required this.valorFinal,
+    this.valorFuente = 0,
+    this.fuente = '',
+    this.fechaFuente,
+    this.margen = 0,
+  });
+
+  String get fuenteNombre {
+    if (fuente == 'bloomberg') return 'Bloomberg';
+    if (fuente.startsWith('manual')) return 'Manual';
+    return fuente;
+  }
+}
+
+/// Resultado de registrar la venta (o la cotización).
 typedef SaleResultEntity = DocumentEntity;

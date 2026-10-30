@@ -15,13 +15,19 @@ abstract class SaleRepository {
     required String search,
   });
 
+  /// Tipo de cambio comercial vigente (el que se aplica en cotizaciones y ventas en dólares).
+  Future<Either<Failure, ExchangeRateEntity>> getExchangeRate();
+
+  /// El cliente genérico "CLIENTE VARIOS" de la empresa (ventas sin documento del cliente).
+  Future<Either<Failure, ClientEntity>> getWalkInClient(int companyId);
+
   /// Categorías y marcas de la empresa, para filtrar el buscador de productos.
   Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters();
 
   /// Formas de pago que el usuario puede usar.
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods();
 
-  /// Registra la venta y devuelve el documento creado.
+  /// Registra la venta, o la cotización si el tipo de documento lo es, y devuelve el documento creado.
   Future<Either<Failure, SaleResultEntity>> createSale({
     required int companyId,
     required int userId,

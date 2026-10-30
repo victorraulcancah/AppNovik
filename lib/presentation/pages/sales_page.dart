@@ -487,16 +487,17 @@ class _SaleLineTileState extends State<_SaleLineTile> {
     final line = widget.line;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 4, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: widget.problem == null ? scheme.outlineVariant : scheme.error,
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Producto y botón para quitarlo.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -510,11 +511,11 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                         line.product.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        [line.product.codigo, if (line.product.marca != null) line.product.marca!]
-                            .join(' · '),
+                        [line.product.codigo, ?line.product.marca].join(' · '),
                         style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     ],
@@ -528,78 +529,96 @@ class _SaleLineTileState extends State<_SaleLineTile> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          // Cantidad y precio, cada uno con todo el ancho que necesita.
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Stepper(
-                  controller: _quantity,
-                  focusNode: _quantityFocus,
-                  onMinus: () => widget.onQuantity(line.cantidad - 1),
-                  onPlus: () => widget.onQuantity(line.cantidad + 1),
-                  onChanged: (text) {
-                    final n = int.tryParse(text);
-                    if (n != null && n >= 1) widget.onQuantity(n);
-                  },
+                Expanded(
+                  flex: 5,
+                  child: _QuantityField(
+                    controller: _quantity,
+                    focusNode: _quantityFocus,
+                    onMinus: () => widget.onQuantity(line.cantidad - 1),
+                    onPlus: () => widget.onQuantity(line.cantidad + 1),
+                    onChanged: (text) {
+                      final n = int.tryParse(text);
+                      if (n != null && n >= 1) widget.onQuantity(n);
+                    },
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
+                  flex: 4,
                   child: TextField(
                     controller: _price,
                     focusNode: _priceFocus,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Precio',
-                      prefixText: 'S/ ',
-                      isDense: true,
-                    ),
+                    decoration: const InputDecoration(labelText: 'Precio S/', hintText: '0'),
                     onChanged: (text) => widget.onPrice(double.tryParse(text) ?? 0),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // El aviso (si lo hay) a la izquierda y el subtotal de la línea a la derecha.
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: widget.problem == null
+                      ? const SizedBox.shrink()
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                widget.problem!,
+                                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
                 const SizedBox(width: 12),
+                Text(
+                  'Subtotal  ',
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
                 Text(
                   formatMoney(line.subtotal),
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
             ),
           ),
-          if (widget.problem != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, right: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      widget.problem!,
-                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
 }
 
-/// Cantidad: campo numérico entre los botones − y +.
-class _Stepper extends StatelessWidget {
+/// Cantidad: un campo numérico con los botones − y + dentro, para que ocupe el mismo
+/// ancho y alto que el campo de precio.
+class _QuantityField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
   final ValueChanged<String> onChanged;
 
-  const _Stepper({
+  const _QuantityField({
     required this.controller,
     required this.focusNode,
     required this.onMinus,
@@ -609,32 +628,30 @@ class _Stepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton.outlined(
+    const buttonSize = BoxConstraints(minWidth: 38, minHeight: 44);
+
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      textAlign: TextAlign.center,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: 'Cantidad',
+        prefixIcon: IconButton(
           tooltip: 'Menos',
           onPressed: onMinus,
-          icon: const Icon(Icons.remove, size: 18),
+          icon: const Icon(Icons.remove, size: 20),
         ),
-        SizedBox(
-          width: 52,
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(isDense: true),
-            onChanged: onChanged,
-          ),
-        ),
-        IconButton.outlined(
+        prefixIconConstraints: buttonSize,
+        suffixIcon: IconButton(
           tooltip: 'Más',
           onPressed: onPlus,
-          icon: const Icon(Icons.add, size: 18),
+          icon: const Icon(Icons.add, size: 20),
         ),
-      ],
+        suffixIconConstraints: buttonSize,
+      ),
+      onChanged: onChanged,
     );
   }
 }

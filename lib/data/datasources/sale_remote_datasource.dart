@@ -10,6 +10,8 @@ import '../models/sale_model.dart';
 abstract class SaleRemoteDataSource {
   Future<List<ClientEntity>> searchClients(String token, int companyId, String search);
   Future<List<SaleProductEntity>> searchProducts(String token, int companyId, String search);
+  Future<ExchangeRateEntity> getExchangeRate(String token);
+  Future<ClientEntity> getWalkInClient(String token, int companyId);
   Future<SaleProductFiltersEntity> getProductFilters(String token);
   Future<List<PaymentMethodEntity>> getPaymentMethods(String token);
   Future<SaleResultEntity> createSale({
@@ -51,6 +53,25 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
       ));
 
   @override
+  Future<ExchangeRateEntity> getExchangeRate(String token) async {
+    final body = await sendApiRequest(
+      () => client.get(_uri('/tipo-cambio/comercial'), headers: ApiConstants.authHeaders(token)),
+    );
+    return exchangeRateFromJson(body as Map<String, dynamic>);
+  }
+
+  @override
+  Future<ClientEntity> getWalkInClient(String token, int companyId) async {
+    final body = await sendApiRequest(
+      () => client.get(
+        _uri('/clientes/varios', {'company_id': '$companyId'}),
+        headers: ApiConstants.authHeaders(token),
+      ),
+    );
+    return clientFromJson(body as Map<String, dynamic>);
+  }
+
+  @override
   Future<SaleProductFiltersEntity> getProductFilters(String token) async {
     // Los mismos catálogos que usa el formulario de producto (la API los limita a la empresa del usuario).
     Future<dynamic> load(String path) => sendApiRequest(
@@ -76,14 +97,22 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
     required int userId,
     required SaleFormEntity form,
   }) async {
-    final payload = json.encode(saleToJson(form, companyId: companyId, userId: userId));
+    final isQuote = form.tipoDocumento.esCotizacion;
+    final payload = json.encode(
+      isQuote
+          ? quoteToJson(form, companyId: companyId, userId: userId)
+          : saleToJson(form, companyId: companyId, userId: userId),
+    );
     final body = await sendApiRequest(
       () => client.post(
-        _uri('/ventas'),
+        _uri(isQuote ? '/cotizaciones' : '/ventas'),
         headers: ApiConstants.authHeaders(token),
         body: payload,
       ),
     );
-    return documentFromJson(body as Map<String, dynamic>, DocumentKind.venta);
+    return documentFromJson(
+      body as Map<String, dynamic>,
+      isQuote ? DocumentKind.cotizacion : DocumentKind.venta,
+    );
   }
 }

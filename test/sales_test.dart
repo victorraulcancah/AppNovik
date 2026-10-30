@@ -790,6 +790,12 @@ void main() {
       stock: const {1: 0},
     );
 
+    /// Los campos de cantidad de las tarjetas (dentro de la hoja, no los del formulario de atrás).
+    Finder quantityFields() => find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.widgetWithText(TextField, '1'),
+        );
+
     Future<SalesProvider> open(WidgetTester tester, {List<SaleProductEntity>? products}) async {
       _phoneScreen(tester);
       final repo = _FakeSaleRepository()..products = products ?? [audio, accesorio, agotado];
@@ -847,8 +853,7 @@ void main() {
       expect(find.text('2 seleccionados'), findsOneWidget);
 
       // El segundo producto (el cable): cantidad 7.
-      final fields = find.widgetWithText(TextField, '1');
-      await tester.enterText(fields.at(1), '7');
+      await tester.enterText(quantityFields().at(1), '7');
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Agregar a la venta'));
@@ -863,9 +868,9 @@ void main() {
 
       await tester.tap(find.text('SUBWOOFER 12"')); // hay 5
       await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextField, '1').first, '99');
+      await tester.enterText(quantityFields().first, '99');
       await tester.pumpAndSettle();
-      expect(find.text('5'), findsWidgets);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.widgetWithText(TextField, '5')), findsOneWidget);
 
       await tester.tap(find.text('Agregar a la venta'));
       await tester.pumpAndSettle();

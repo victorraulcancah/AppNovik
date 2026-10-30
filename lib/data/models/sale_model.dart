@@ -106,6 +106,55 @@ List<PaymentMethodEntity> paymentMethodsFromJson(dynamic json) {
   return result;
 }
 
+/// Respuesta de `GET /tipo-cambio/comercial`.
+ExchangeRateEntity exchangeRateFromJson(Map<String, dynamic> json) => ExchangeRateEntity(
+      valorFinal: _double(json['valor_final']) ?? 0,
+      valorFuente: _double(json['valor_fuente']) ?? 0,
+      fuente: _text(json['fuente']) ?? '',
+      fechaFuente: json['fecha_fuente'] is String ? DateTime.tryParse(json['fecha_fuente'] as String) : null,
+      margen: _double(json['margen']) ?? 0,
+    );
+
+String _day(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Cuerpo de `POST /cotizaciones`: las mismas líneas que una venta, la lista de precios y, si
+/// reserva stock, hasta qué día. El tipo de cambio lo fija el servidor.
+Map<String, dynamic> quoteToJson(
+  SaleFormEntity form, {
+  required int companyId,
+  required int userId,
+}) {
+  final observaciones = form.observaciones?.trim();
+  return {
+    'totales_soles': form.total,
+    'totales_dolares': 0,
+    'company_id': companyId,
+    'user_id': userId,
+    'client_id': form.client!.id,
+    'warehouse_id': form.warehouseId,
+    'list_price_id': form.priceListId,
+    'reservar_stock': form.reservarStock,
+    if (form.reservarStock && form.vencimientoStock != null)
+      'vencimiento_stock': _day(form.vencimientoStock!),
+    if (observaciones != null && observaciones.isNotEmpty) 'observaciones': observaciones,
+    'product_sales': [
+      for (final l in form.lines)
+        {
+          'product_id': l.product.id,
+          'cantidad': l.cantidad,
+          'precio': l.precio,
+          'dto_fijo': false,
+          'dolares': false,
+          'dto': 0,
+          'monto_dto': 0,
+          'subtotal': l.subtotal,
+          'subtotal_con_dto': l.subtotal,
+        },
+    ],
+  };
+}
+
 /// Cuerpo de `POST /ventas` para una venta al contado en soles, con los mismos
 /// campos que arma la web. `punto_venta` y `tipo_de_cambio` los lee el backend
 /// aunque no apliquen, por eso se envían siempre.

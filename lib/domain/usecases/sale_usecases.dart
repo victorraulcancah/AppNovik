@@ -30,6 +30,20 @@ class SearchSaleProductsUseCase {
   }
 }
 
+class GetExchangeRateUseCase {
+  final SaleRepository repository;
+  GetExchangeRateUseCase({required this.repository});
+
+  Future<Either<Failure, ExchangeRateEntity>> call() => repository.getExchangeRate();
+}
+
+class GetWalkInClientUseCase {
+  final SaleRepository repository;
+  GetWalkInClientUseCase({required this.repository});
+
+  Future<Either<Failure, ClientEntity>> call(int companyId) => repository.getWalkInClient(companyId);
+}
+
 class GetSaleProductFiltersUseCase {
   final SaleRepository repository;
   GetSaleProductFiltersUseCase({required this.repository});
