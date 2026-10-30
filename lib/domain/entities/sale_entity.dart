@@ -58,11 +58,21 @@ class SaleProductEntity {
   final Map<int, double> stockPorAlmacen;
   final Map<int, double> precioPorLista;
 
+  /// Para filtrar el buscador por categoría o marca.
+  final int? categoryId;
+  final int? brandId;
+
+  /// Unidad de medida del producto ("Kilogramo", "Unidad"...).
+  final String? unidad;
+
   const SaleProductEntity({
     required this.id,
     required this.codigo,
     required this.name,
     this.marca,
+    this.categoryId,
+    this.brandId,
+    this.unidad,
     this.esServicio = false,
     this.ventaSinStock = false,
     this.stockPorAlmacen = const {},
@@ -77,6 +87,21 @@ class SaleProductEntity {
   /// Cuánto se puede vender en [warehouseId]; `null` si no hay tope.
   double? maximoEn(int warehouseId) =>
       (ventaSinStock || esServicio) ? null : stockEn(warehouseId);
+}
+
+/// Categorías y marcas de la empresa para filtrar el buscador de productos.
+class SaleProductFiltersEntity {
+  final List<({int id, String name})> categorias;
+  final List<({int id, String name})> marcas;
+
+  const SaleProductFiltersEntity({this.categorias = const [], this.marcas = const []});
+
+  String? categoriaName(int? id) {
+    for (final c in categorias) {
+      if (c.id == id) return c.name;
+    }
+    return null;
+  }
 }
 
 /// Forma de pago disponible para el usuario.

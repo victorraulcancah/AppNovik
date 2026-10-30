@@ -53,11 +53,15 @@ SaleProductEntity saleProductFromJson(Map<String, dynamic> json) {
   }
 
   final brand = json['brand'];
+  final measure = json['measure'];
   return SaleProductEntity(
     id: _int(json['id']) ?? 0,
     codigo: (json['codigo'] ?? '') as String,
     name: (json['name'] ?? '') as String,
     marca: brand is Map ? _text(brand['name']) : null,
+    brandId: _int(json['brand_id']) ?? (brand is Map ? _int(brand['id']) : null),
+    categoryId: _int(json['category_id']),
+    unidad: measure is Map ? _text(measure['name']) : null,
     esServicio: json['tipo'] == 's',
     ventaSinStock: _bool(json['vender_sin_stock']),
     stockPorAlmacen: pivots(json['warehouses'], 'stock'),
@@ -68,6 +72,25 @@ SaleProductEntity saleProductFromJson(Map<String, dynamic> json) {
 List<SaleProductEntity> saleProductsFromJson(dynamic json) => json is List
     ? json.whereType<Map<String, dynamic>>().map(saleProductFromJson).toList()
     : const [];
+
+/// `GET /categorias` y `GET /marcas`: `[{id, name}]`.
+List<({int id, String name})> _idNames(dynamic json) {
+  if (json is! List) return const [];
+  final result = <({int id, String name})>[];
+  for (final e in json) {
+    if (e is! Map) continue;
+    final id = _int(e['id']);
+    final name = _text(e['name']);
+    if (id != null && name != null) result.add((id: id, name: name));
+  }
+  return result;
+}
+
+SaleProductFiltersEntity saleProductFiltersFromJson({
+  required dynamic categorias,
+  required dynamic marcas,
+}) =>
+    SaleProductFiltersEntity(categorias: _idNames(categorias), marcas: _idNames(marcas));
 
 List<PaymentMethodEntity> paymentMethodsFromJson(dynamic json) {
   if (json is! List) return const [];

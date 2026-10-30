@@ -15,6 +15,9 @@ abstract class SaleRepository {
     required String search,
   });
 
+  /// Categorías y marcas de la empresa, para filtrar el buscador de productos.
+  Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters();
+
   /// Formas de pago que el usuario puede usar.
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods();
 

@@ -15,6 +15,7 @@ class SalesProvider extends ChangeNotifier {
   final GetWarehousesUseCase _getWarehouses;
   final GetPriceListsUseCase _getPriceLists;
   final GetPaymentMethodsUseCase _getPaymentMethods;
+  final GetSaleProductFiltersUseCase _getProductFilters;
   final SearchClientsUseCase _searchClients;
   final SearchSaleProductsUseCase _searchProducts;
   final CreateSaleUseCase _createSale;
@@ -26,6 +27,7 @@ class SalesProvider extends ChangeNotifier {
     required GetWarehousesUseCase getWarehousesUseCase,
     required GetPriceListsUseCase getPriceListsUseCase,
     required GetPaymentMethodsUseCase getPaymentMethodsUseCase,
+    required GetSaleProductFiltersUseCase getSaleProductFiltersUseCase,
     required SearchClientsUseCase searchClientsUseCase,
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
@@ -33,6 +35,7 @@ class SalesProvider extends ChangeNotifier {
   })  : _getWarehouses = getWarehousesUseCase,
         _getPriceLists = getPriceListsUseCase,
         _getPaymentMethods = getPaymentMethodsUseCase,
+        _getProductFilters = getSaleProductFiltersUseCase,
         _searchClients = searchClientsUseCase,
         _searchProducts = searchSaleProductsUseCase,
         _createSale = createSaleUseCase,
@@ -54,6 +57,10 @@ class SalesProvider extends ChangeNotifier {
   /// Solo listas en soles: las ventas en dólares llegan en una próxima versión.
   List<PriceListEntity> priceLists = [];
   List<PaymentMethodEntity> paymentMethods = [];
+
+  /// Categorías y marcas del buscador de productos; se piden la primera vez que se abre.
+  SaleProductFiltersEntity productFilters = const SaleProductFiltersEntity();
+  bool _productFiltersLoaded = false;
   bool loading = false;
   String? error;
 
@@ -105,6 +112,8 @@ class SalesProvider extends ChangeNotifier {
     warehouses = [];
     priceLists = [];
     paymentMethods = [];
+    productFilters = const SaleProductFiltersEntity();
+    _productFiltersLoaded = false;
     loading = false;
     error = null;
     lastSale = null;
@@ -207,6 +216,21 @@ class SalesProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Categorías y marcas para el buscador. Si fallan, el buscador sigue sin esos filtros.
+  Future<void> ensureProductFilters() async {
+    final companyId = _companyId;
+    if (companyId == null || _productFiltersLoaded) return;
+    final result = await _getProductFilters();
+    if (companyId != _companyId) return;
+    if (result.isRight) {
+      productFilters = result.right;
+      _productFiltersLoaded = true;
+      notifyListeners();
+    } else {
+      _checkSession(result);
+    }
+  }
+
   void _checkSession(Either<Failure, Object?> result) {
     if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
   }
@@ -264,34 +288,76 @@ class SalesProvider extends ChangeNotifier {
     lines = [for (final l in lines) l.copyWith(precio: l.product.precioEn(list))];
   }
 
-  /// Agrega el producto, o suma una unidad si ya estaba. Devuelve el motivo si no se pudo.
-  String? addProduct(SaleProductEntity product) {
+  /// Unidades de [productId] que ya están en la venta.
+  int cantidadEnVenta(int productId) {
+    for (final l in lines) {
+      if (l.product.id == productId) return l.cantidad;
+    }
+    return 0;
+  }
+
+  /// Cuántas unidades más se pueden agregar de [product] con el almacén actual;
+  /// `null` si no hay tope (servicio o venta sin stock).
+  double? disponibleParaAgregar(SaleProductEntity product) {
     final warehouse = warehouseId;
-    final list = priceListId;
-    if (warehouse == null) return 'Elige el almacén primero';
-    if (list == null) return 'Elige una lista de precios primero';
-
+    if (warehouse == null) return 0;
     final max = product.maximoEn(warehouse);
-    final index = lines.indexWhere((l) => l.product.id == product.id);
-    final current = index == -1 ? 0 : lines[index].cantidad;
-    if (max != null && current + 1 > max) {
-      return max <= 0
-          ? '"${product.name}" no tiene stock en este almacén'
-          : 'Solo hay ${formatQuantity(max)} de "${product.name}" en este almacén';
-    }
+    if (max == null) return null;
+    final left = max - cantidadEnVenta(product.id);
+    return left < 0 ? 0 : left;
+  }
 
-    if (index == -1) {
-      lines = [
-        ...lines,
-        SaleLineEntity(product: product, cantidad: 1, precio: product.precioEn(list)),
-      ];
-    } else {
-      setCantidad(index, current + 1);
-      return null;
+  /// Motivo por el que no se pueden agregar [cantidad] unidades más de [product].
+  String? _problemaAlAgregar(SaleProductEntity product, int cantidad) {
+    if (cantidad < 1) return '"${product.name}": la cantidad mínima es 1';
+    final available = disponibleParaAgregar(product);
+    if (available == null || cantidad <= available) return null;
+
+    final enVenta = cantidadEnVenta(product.id);
+    final max = product.maximoEn(warehouseId!)!;
+    if (max <= 0) return '"${product.name}" no tiene stock en este almacén';
+    return 'Solo hay ${formatQuantity(max)} de "${product.name}" en este almacén'
+        '${enVenta > 0 ? ' (ya hay $enVenta en la venta)' : ''}';
+  }
+
+  /// Agrega el producto, o suma [cantidad] si ya estaba. Devuelve el motivo si no se pudo.
+  String? addProduct(SaleProductEntity product, {int cantidad = 1}) {
+    final problems = addProducts([(product: product, cantidad: cantidad)]);
+    return problems.isEmpty ? null : problems.first;
+  }
+
+  /// Agrega varios productos a la vez, cada uno con su cantidad (los que ya están suman).
+  /// Si alguno no se puede (sin stock, cantidad inválida...) no se agrega ninguno y se
+  /// devuelven los motivos.
+  List<String> addProducts(List<({SaleProductEntity product, int cantidad})> entries) {
+    if (warehouseId == null) return ['Elige el almacén primero'];
+    final list = priceListId;
+    if (list == null) return ['Elige una lista de precios primero'];
+
+    final problems = <String>[];
+    for (final e in entries) {
+      final problem = _problemaAlAgregar(e.product, e.cantidad);
+      if (problem != null) problems.add(problem);
     }
+    if (problems.isNotEmpty || entries.isEmpty) return problems;
+
+    final next = [...lines];
+    for (final e in entries) {
+      final index = next.indexWhere((l) => l.product.id == e.product.id);
+      if (index == -1) {
+        next.add(SaleLineEntity(
+          product: e.product,
+          cantidad: e.cantidad,
+          precio: e.product.precioEn(list),
+        ));
+      } else {
+        next[index] = next[index].copyWith(cantidad: next[index].cantidad + e.cantidad);
+      }
+    }
+    lines = next;
     submitError = null;
     notifyListeners();
-    return null;
+    return const [];
   }
 
   /// Fija la cantidad. Devuelve el motivo si se recortó por falta de stock.

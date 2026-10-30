@@ -30,6 +30,13 @@ class SearchSaleProductsUseCase {
   }
 }
 
+class GetSaleProductFiltersUseCase {
+  final SaleRepository repository;
+  GetSaleProductFiltersUseCase({required this.repository});
+
+  Future<Either<Failure, SaleProductFiltersEntity>> call() => repository.getProductFilters();
+}
+
 class GetPaymentMethodsUseCase {
   final SaleRepository repository;
   GetPaymentMethodsUseCase({required this.repository});

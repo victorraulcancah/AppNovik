@@ -10,6 +10,7 @@ import '../models/sale_model.dart';
 abstract class SaleRemoteDataSource {
   Future<List<ClientEntity>> searchClients(String token, int companyId, String search);
   Future<List<SaleProductEntity>> searchProducts(String token, int companyId, String search);
+  Future<SaleProductFiltersEntity> getProductFilters(String token);
   Future<List<PaymentMethodEntity>> getPaymentMethods(String token);
   Future<SaleResultEntity> createSale({
     required String token,
@@ -48,6 +49,16 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
           headers: ApiConstants.authHeaders(token),
         ),
       ));
+
+  @override
+  Future<SaleProductFiltersEntity> getProductFilters(String token) async {
+    // Los mismos catálogos que usa el formulario de producto (la API los limita a la empresa del usuario).
+    Future<dynamic> load(String path) => sendApiRequest(
+          () => client.get(_uri(path), headers: ApiConstants.authHeaders(token)),
+        );
+    final results = await Future.wait([load('/categorias'), load('/marcas')]);
+    return saleProductFiltersFromJson(categorias: results[0], marcas: results[1]);
+  }
 
   @override
   Future<List<PaymentMethodEntity>> getPaymentMethods(String token) async =>

@@ -32,6 +32,10 @@ class SaleRepositoryImpl with TokenGuard implements SaleRepository {
       withToken((token) => remoteDataSource.searchProducts(token, companyId, search));
 
   @override
+  Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters() =>
+      withToken(remoteDataSource.getProductFilters);
+
+  @override
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods() =>
       withToken(remoteDataSource.getPaymentMethods);
 
