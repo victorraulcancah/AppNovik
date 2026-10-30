@@ -10,104 +10,10 @@ const _months = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.',
 String documentFilterDate(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} ${d.year}';
 
-String _range(DocumentFilters f) => f.desde == null || f.hasta == null
+/// El rango de fechas de los filtros: `28 oct. 2026 - 28 oct. 2026`, o `Todas las fechas`.
+String documentFilterRange(DocumentFilters f) => f.desde == null || f.hasta == null
     ? 'Todas las fechas'
     : '${documentFilterDate(f.desde!)} - ${documentFilterDate(f.hasta!)}';
-
-/// Una etiqueta de la fila de filtros. [remove] devuelve los filtros sin ese valor; es
-/// `null` en lo que ya es como al entrar (no hay nada que quitar).
-class DocumentFilterTag {
-  final String key;
-  final String text;
-  final DocumentFilters Function(DocumentFilters)? remove;
-
-  const DocumentFilterTag(this.key, this.text, [this.remove]);
-}
-
-/// Las etiquetas de la fila de filtros, como las de la web: el rango de fechas y las
-/// sucursales siempre ("Sucursal: Todas (3)" si no se eligió ninguna) y los demás filtros
-/// puestos. Con uno solo elegido se ve su nombre; con varios, la cantidad.
-List<DocumentFilterTag> documentFilterTags({
-  required DocumentKind kind,
-  required DocumentFilters filters,
-  required DocumentFilterCatalogs catalogs,
-  required DateTime now,
-}) {
-  final base = DocumentFilters.hoy(now);
-  String names(List<int> ids, List<({int id, String name})> options) {
-    if (ids.length != 1) return '${ids.length}';
-    for (final o in options) {
-      if (o.id == ids.first) return o.name;
-    }
-    return '#${ids.first}';
-  }
-
-  final datesAreDefault = filters.desde == base.desde && filters.hasta == base.hasta;
-  final tags = <DocumentFilterTag>[
-    DocumentFilterTag(
-      'fechas',
-      _range(filters),
-      datesAreDefault ? null : (f) => f.copyWith(desde: base.desde, hasta: base.hasta),
-    ),
-    if (filters.vendedores.isNotEmpty)
-      DocumentFilterTag(
-        'vendedores',
-        'Ejecutivo: ${names(filters.vendedores, catalogs.vendedores)}',
-        (f) => f.copyWith(vendedores: const <int>[]),
-      ),
-    if (filters.clientes.isNotEmpty)
-      DocumentFilterTag(
-        'clientes',
-        'Cliente: ${names(filters.clientes, catalogs.clientes)}',
-        (f) => f.copyWith(clientes: const <int>[]),
-      ),
-    if (filters.sucursales.isNotEmpty)
-      DocumentFilterTag(
-        'sucursales',
-        'Sucursal: ${names(filters.sucursales, catalogs.sucursales)}',
-        (f) => f.copyWith(sucursales: const <int>[]),
-      )
-    else if (catalogs.sucursales.isNotEmpty)
-      DocumentFilterTag('sucursales', 'Sucursal: Todas (${catalogs.sucursales.length})'),
-  ];
-
-  if (kind == DocumentKind.venta) {
-    if (filters.tipo != null) {
-      tags.add(DocumentFilterTag(
-        'tipo',
-        switch (filters.tipo!) {
-          DocumentTipo.boleta => 'Boleta',
-          DocumentTipo.factura => 'Factura',
-          DocumentTipo.notaVenta => 'Nota de venta',
-        },
-        (f) => f.copyWith(tipo: null),
-      ));
-    }
-    if (filters.estado != null) {
-      tags.add(DocumentFilterTag(
-        'estado',
-        filters.estado == DocumentEstado.activos ? 'Activos' : 'Eliminados',
-        (f) => f.copyWith(estado: null),
-      ));
-    }
-  } else {
-    if (filters.estadoCotizacion != DocumentQuoteState.todas) {
-      tags.add(DocumentFilterTag(
-        'estadoCotizacion',
-        filters.estadoCotizacion == DocumentQuoteState.pendientes ? 'Pendientes' : 'Procesadas',
-        (f) => f.copyWith(estadoCotizacion: DocumentQuoteState.todas),
-      ));
-    }
-    if (filters.reserva != DocumentReserve.todas) {
-      tags.add(DocumentFilterTag(
-        'reserva',
-        filters.reserva == DocumentReserve.reservadas ? 'Reservadas' : 'No reservadas',
-        (f) => f.copyWith(reserva: DocumentReserve.todas),
-      ));
-    }
-  }
-  return tags;
-}
 
 /// Abre el panel de filtros avanzados y aplica lo elegido al pulsar "Aplicar filtros".
 Future<void> showDocumentFilters(BuildContext context) async {
@@ -233,7 +139,7 @@ class _FiltersBody extends StatelessWidget {
             const SizedBox(height: 12),
             AppPickerField(
               label: 'Rango de fechas',
-              value: _range(f),
+              value: documentFilterRange(f),
               icon: Icons.date_range,
               onTap: () => pickDates(f),
               onClear: f.desde == null ? null : () => draft.value = f.copyWith(desde: null, hasta: null),

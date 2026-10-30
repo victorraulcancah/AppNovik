@@ -7,6 +7,7 @@ import '../../core/utils/format.dart';
 import '../../domain/entities/document_entity.dart';
 import '../components/components.dart';
 import '../providers/documents_provider.dart';
+import 'document_filters.dart';
 
 String _dateTime(DateTime? d) =>
     d == null ? '-' : DateFormat(AppConstants.dateTimeFormat).format(d);
@@ -248,4 +249,43 @@ Future<bool?> showCreditNoteForm(BuildContext context, DocumentEntity d) {
   );
 
   return result;
+}
+
+/// Totales de lo que se está viendo en Documentos: cuántos documentos hay y la suma de todo lo
+/// filtrado (no solo lo cargado), cada moneda por separado. Los eliminados no cuentan.
+Future<void> showDocumentTotals(
+  BuildContext context, {
+  required DocumentKind kind,
+  required DocumentFilters filters,
+  required int total,
+  required double totalSoles,
+  required double totalDolares,
+}) {
+  final isSale = kind == DocumentKind.venta;
+  final theme = Theme.of(context);
+
+  return showAppModal(
+    context,
+    title: 'Totales',
+    subtitle: isSale ? 'Ventas' : 'Cotizaciones',
+    icon: Icons.functions,
+    primaryLabel: null,
+    secondaryLabel: 'Cerrar',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppDetailRow(label: 'Periodo', value: documentFilterRange(filters)),
+        AppDetailRow(label: isSale ? 'Ventas' : 'Cotizaciones', value: '$total'),
+        const Divider(height: 24),
+        AppDetailRow(label: 'Total Soles', value: formatMoney(totalSoles, symbol: 'S/.')),
+        AppDetailRow(label: 'Total Dólares', value: formatMoney(totalDolares, symbol: r'$')),
+        const SizedBox(height: 12),
+        Text(
+          'Suma todo lo filtrado, no solo lo que ya cargó la lista. '
+          '${isSale ? 'Las ventas eliminadas' : 'Las cotizaciones usadas o eliminadas'} no cuentan.',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    ),
+  );
 }

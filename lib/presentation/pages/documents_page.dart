@@ -78,7 +78,11 @@ class _DocumentsPageState extends State<DocumentsPage> {
     final result = await context.read<DocumentsProvider>().exportCurrent();
     if (!mounted) return;
     if (result.isLeft) return _snack(result.left.message);
-    await shareDownloadedFile(result.right);
+    try {
+      await shareDownloadedFile(result.right);
+    } catch (_) {
+      if (mounted) _snack('No se pudo abrir el menú para compartir el archivo');
+    }
   }
 
   void _openReceipt(DocumentEntity d) {
@@ -109,139 +113,93 @@ class _DocumentsPageState extends State<DocumentsPage> {
     if (done == true && mounted) _snack('Nota de crédito creada con éxito');
   }
 
+  /// Las acciones del botón flotante: descargar el Excel de lo que se ve y ver los totales.
+  List<AppSpeedDialAction> _actions(DocumentsProvider documents) => [
+        AppSpeedDialAction(
+          label: 'Descargar Excel',
+          icon: Icons.download_outlined,
+          color: const Color(0xFF0D9488),
+          onPressed: documents.exporting ? () {} : _export,
+        ),
+        AppSpeedDialAction(
+          label: 'Totales',
+          icon: Icons.functions,
+          color: const Color(0xFF0E90C7),
+          onPressed: () => showDocumentTotals(
+            context,
+            kind: documents.kind,
+            filters: documents.filters,
+            total: documents.total,
+            totalSoles: documents.totalSoles,
+            totalDolares: documents.totalDolares,
+          ),
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final documents = context.watch<DocumentsProvider>();
     final kinds = _kinds();
 
-    return Column(
+    return Stack(
       children: [
-        const AppPageHeader(
-          icon: Icons.description_outlined,
-          title: 'Documentos',
-          subtitle: 'Ventas y cotizaciones de tu empresa.',
-          trailing: AppAccountMenu(),
-        ),
-        if (kinds.length > 1)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<DocumentKind>(
-                showSelectedIcon: false,
-                selected: {documents.kind},
-                onSelectionChanged: (s) => documents.selectKind(s.first),
-                segments: [
-                  for (final k in kinds)
-                    ButtonSegment(
-                      value: k,
-                      label: Text(k == DocumentKind.venta ? 'Ventas' : 'Cotizaciones'),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        AppSearchBar(
-          hint: 'Buscar por número de documento',
-          onChanged: _onSearchChanged,
-          onFilter: () => showDocumentFilters(context),
-          filterActive: documents.filtersActive,
-          actions: [
-            if (kinds.isNotEmpty)
-              IconButton(
-                tooltip: 'Descargar Excel',
-                onPressed: documents.exporting ? null : _export,
-                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-                icon: documents.exporting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_outlined),
-              ),
-          ],
-        ),
-        if (kinds.isNotEmpty && documents.search.isEmpty) _tagsRow(documents),
-        if (kinds.isNotEmpty) _summary(documents),
-        Expanded(child: _body(documents, kinds)),
-      ],
-    );
-  }
-
-  /// Las etiquetas de los filtros puestos: cada una se quita con su ✕, y "Restablecer"
-  /// vuelve a como se entra (los documentos de hoy).
-  Widget _tagsRow(DocumentsProvider documents) {
-    final tags = documentFilterTags(
-      kind: documents.kind,
-      filters: documents.filters,
-      catalogs: documents.catalogs,
-      now: documents.now,
-    );
-    final canReset = tags.any((t) => t.remove != null);
-
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        children: [
-          for (final tag in tags)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Chip(
-                label: Text(tag.text),
-                visualDensity: VisualDensity.compact,
-                onDeleted: tag.remove == null
-                    ? null
-                    : () => documents.applyFilters(tag.remove!(documents.filters)),
-              ),
-            ),
-          if (canReset)
-            TextButton.icon(
-              onPressed: documents.resetFilters,
-              icon: const Icon(Icons.restart_alt, size: 18),
-              label: const Text('Restablecer'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Cuántos documentos hay y la suma de todo lo filtrado (no solo lo cargado), cada moneda
-  /// por separado; los eliminados no cuentan.
-  Widget _summary(DocumentsProvider documents) {
-    if (documents.total == 0) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final label = documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Wrap(
-          spacing: 14,
-          runSpacing: 2,
+        Column(
           children: [
-            Text('${documents.total} $label', style: theme.textTheme.bodySmall?.copyWith(color: muted)),
-            Text.rich(
-              TextSpan(children: [
-                const TextSpan(text: 'Total Soles: ', style: TextStyle(fontWeight: FontWeight.w700)),
-                TextSpan(text: formatMoney(documents.totalSoles, symbol: 'S/.')),
-              ]),
-              style: theme.textTheme.bodySmall,
+            const AppPageHeader(
+              icon: Icons.description_outlined,
+              title: 'Documentos',
+              subtitle: 'Ventas y cotizaciones de tu empresa.',
+              trailing: AppAccountMenu(),
             ),
-            Text.rich(
-              TextSpan(children: [
-                const TextSpan(text: 'Total Dólares: ', style: TextStyle(fontWeight: FontWeight.w700)),
-                TextSpan(text: formatMoney(documents.totalDolares, symbol: r'$')),
-              ]),
-              style: theme.textTheme.bodySmall,
+            if (kinds.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<DocumentKind>(
+                    showSelectedIcon: false,
+                    selected: {documents.kind},
+                    onSelectionChanged: (s) => documents.selectKind(s.first),
+                    segments: [
+                      for (final k in kinds)
+                        ButtonSegment(
+                          value: k,
+                          label: Text(k == DocumentKind.venta ? 'Ventas' : 'Cotizaciones'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            AppSearchBar(
+              hint: 'Buscar por número de documento',
+              onChanged: _onSearchChanged,
+              onFilter: () => showDocumentFilters(context),
+              filterActive: documents.filtersActive,
             ),
+            if (documents.total > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${documents.total} ${documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ),
+            Expanded(child: _body(documents, kinds)),
           ],
         ),
-      ),
+        // Botón "Acciones": abajo a la derecha, sobre la lista, como en Productos.
+        if (kinds.isNotEmpty)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: AppSpeedDial(actions: _actions(documents)),
+          ),
+      ],
     );
   }
 
@@ -275,6 +233,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       onRefresh: documents.refresh,
       onLoadMore: documents.loadMore,
       loadingMore: documents.loadingMore,
+      bottomPadding: 96,
       itemBuilder: (context, d, number) => _card(context, d, number),
     );
   }

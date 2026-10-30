@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/data/models/sale_model.dart';
@@ -29,7 +28,6 @@ import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/widgets/sale_modals.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -1636,59 +1634,4 @@ void main() {
       expect(repo.sent!.vencimientoStock, isNull);
     });
   });
-
-  // GOLDEN-TMP-START (temporal: imagenes de la pantalla con fuentes reales)
-  group('golden-tmp', () {
-    testWidgets('arriba de ventas y modal de cliente', (tester) async {
-      await (FontLoader('Roboto')
-            ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf')))
-          .load();
-      await (FontLoader('MaterialIcons')
-            ..addFont(Future.value(ByteData.sublistView(
-                File(r'C:\Users\vctr\flutter\bin\cache\artifacts\material_fonts\materialicons-regular.otf')
-                    .readAsBytesSync()))))
-          .load();
-
-      tester.view.physicalSize = const Size(360 * 2, 780 * 2);
-      tester.view.devicePixelRatio = 2;
-      addTearDown(tester.view.reset);
-
-      final repo = _FakeSaleRepository();
-      final clientRepo = _FakeClientRepository();
-      final session = _session(permissions: const {'ventas.store', 'clientes.store'}, certificado: true);
-      final sales = _provider(repo)..syncSession(session);
-      await sales.ensureLoaded();
-      await Future<void>.delayed(Duration.zero);
-      sales.selectWarehouse(1);
-      sales.addProduct(_product(name: 'PARLANTE 6.5" 140 RMS', codigo: 'GX6.4B'), cantidad: 2);
-      sales.selectTipoDocumento(SaleDocumentType.boleta);
-
-      final base = AppTheme.light;
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ThemeProvider>(
-              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
-            ),
-            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
-            ChangeNotifierProvider<SalesProvider>.value(value: sales),
-            ChangeNotifierProvider<ClientsProvider>.value(value: _clientsProvider(clientRepo, session: session)),
-          ],
-          child: MaterialApp(
-            theme: base.copyWith(textTheme: base.textTheme.apply(fontFamily: 'Roboto')),
-            home: const Scaffold(body: SalesPage()),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/tmp_top.png'));
-
-      await tester.tap(find.byTooltip('Crear cliente'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Empresa'));
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/tmp_client.png'));
-    });
-  });
-  // GOLDEN-TMP-END
 }

@@ -2,18 +2,28 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
+import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/data/datasources/document_remote_datasource.dart';
 import 'package:app_novik/data/models/document_model.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
+import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
+import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/document_repository.dart';
+import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/document_usecases.dart';
+import 'package:app_novik/presentation/pages/documents_page.dart';
 import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
+import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/documents_provider.dart';
+import 'package:app_novik/presentation/providers/theme_provider.dart';
+import 'package:app_novik/theme/app_theme.dart';
 import 'package:app_novik/presentation/widgets/document_filters.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -171,6 +181,51 @@ class _Http {
         all.add(request);
         return http.Response(body, status, headers: {'content-type': 'application/json'});
       });
+}
+
+class _FakeThemeStorage implements ThemeLocalDataSource {
+  @override
+  Future<ThemeMode?> read() async => null;
+
+  @override
+  Future<void> write(ThemeMode mode) async {}
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Future<Either<Failure, UserEntity>> login(String usuario, String password) async =>
+      Either.right(const UserEntity(id: 9, name: 'Ana', usuario: 'ana'));
+
+  @override
+  Future<Either<Failure, void>> logout() async => Either.rightVoid();
+
+  @override
+  Future<Either<Failure, SessionContextEntity?>> getSessionContext() async => Either.right(null);
+
+  @override
+  Future<String?> getToken() async => null;
+
+  @override
+  Future<Either<Failure, SavedCredentialsEntity?>> getSavedCredentials() async => Either.right(null);
+
+  @override
+  Future<Either<Failure, void>> saveCredentials(String usuario, String password) async =>
+      Either.rightVoid();
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async => Either.rightVoid();
+}
+
+AuthProvider _auth(SessionContextEntity session) {
+  final repo = _FakeAuthRepository();
+  return AuthProvider(
+    loginUseCase: LoginUseCase(repository: repo),
+    logoutUseCase: LogoutUseCase(repository: repo),
+    getSessionContextUseCase: GetSessionContextUseCase(repository: repo),
+    getSavedCredentialsUseCase: GetSavedCredentialsUseCase(repository: repo),
+    saveCredentialsUseCase: SaveCredentialsUseCase(repository: repo),
+    clearSavedCredentialsUseCase: ClearSavedCredentialsUseCase(repository: repo),
+  )..session = session;
 }
 
 void main() {
@@ -394,71 +449,17 @@ void main() {
     });
   });
 
-  group('documentFilterTags', () {
-    const catalogs = DocumentFilterCatalogs(
-      sucursales: [(id: 1, name: 'LIMA'), (id: 2, name: 'AREQUIPA'), (id: 3, name: 'CUSCO')],
-      vendedores: [(id: 9, name: 'ANA')],
-      clientes: [(id: 5, name: 'ACME SAC')],
-    );
-
-    test('por defecto: la fecha de hoy y las sucursales, sin nada que quitar', () {
-      final tags = documentFilterTags(
-        kind: DocumentKind.venta,
-        filters: DocumentFilters.hoy(_now),
-        catalogs: catalogs,
-        now: _now,
+  group('rango de fechas de los filtros', () {
+    test('se muestra como la web y sin fechas dice "Todas las fechas"', () {
+      expect(documentFilterRange(DocumentFilters.hoy(_now)), '28 oct. 2026 - 28 oct. 2026');
+      expect(
+        documentFilterRange(DocumentFilters.hoy(_now).copyWith(desde: DateTime(2026, 1, 5))),
+        '05 ene. 2026 - 28 oct. 2026',
       );
-      expect(tags.map((t) => t.text), ['28 oct. 2026 - 28 oct. 2026', 'Sucursal: Todas (3)']);
-      expect(tags.every((t) => t.remove == null), isTrue);
-    });
-
-    test('los filtros puestos se ven con su nombre o su cantidad y se quitan uno a uno', () {
-      final filters = DocumentFilters.hoy(_now).copyWith(
-        desde: DateTime(2026, 10, 1),
-        vendedores: [9],
-        clientes: [5, 6],
-        sucursales: [2],
-        tipo: DocumentTipo.notaVenta,
-        estado: DocumentEstado.eliminados,
+      expect(
+        documentFilterRange(DocumentFilters.hoy(_now).copyWith(desde: null, hasta: null)),
+        'Todas las fechas',
       );
-      final tags = documentFilterTags(
-        kind: DocumentKind.venta,
-        filters: filters,
-        catalogs: catalogs,
-        now: _now,
-      );
-
-      expect(tags.map((t) => t.text), [
-        '01 oct. 2026 - 28 oct. 2026',
-        'Ejecutivo: ANA',
-        'Cliente: 2',
-        'Sucursal: AREQUIPA',
-        'Nota de venta',
-        'Eliminados',
-      ]);
-
-      final sinCliente = tags[2].remove!(filters);
-      expect(sinCliente.clientes, isEmpty);
-      expect(sinCliente.vendedores, [9]);
-      // Quitar las fechas vuelve a hoy, no a "todas".
-      expect(tags[0].remove!(filters).desde, DateTime(2026, 10, 28));
-    });
-
-    test('sin fechas dice "Todas las fechas"; en cotizaciones salen estado y reserva', () {
-      final filters = DocumentFilters.hoy(_now).copyWith(
-        desde: null,
-        hasta: null,
-        estadoCotizacion: DocumentQuoteState.pendientes,
-        reserva: DocumentReserve.noReservadas,
-        tipo: DocumentTipo.factura, // no corresponde a cotizaciones
-      );
-      final tags = documentFilterTags(
-        kind: DocumentKind.cotizacion,
-        filters: filters,
-        catalogs: const DocumentFilterCatalogs(),
-        now: _now,
-      );
-      expect(tags.map((t) => t.text), ['Todas las fechas', 'Pendientes', 'No reservadas']);
     });
   });
 
@@ -1001,6 +1002,90 @@ void main() {
         logo: Uint8List.fromList([1, 2, 3]),
       );
       expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    });
+  });
+
+  group('DocumentsPage', () {
+    Future<(_FakeDocumentRepository, DocumentsProvider)> pump(WidgetTester tester) async {
+      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+
+      final repo = _FakeDocumentRepository();
+      final session = _session(permissions: const {'documentos.ventas.index'});
+      final documents = _provider(repo, session: session);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<DocumentsProvider>.value(value: documents),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: DocumentsPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (repo, documents);
+    }
+
+    testWidgets('no muestra etiquetas de filtros ni totales sueltos; descargar y totales van en Acciones', (tester) async {
+      await pump(tester);
+
+      expect(find.byType(Chip), findsNothing);
+      expect(find.byType(InputChip), findsNothing);
+      expect(find.textContaining('Total Soles'), findsNothing);
+      expect(find.text('Restablecer'), findsNothing);
+      expect(find.byTooltip('Descargar Excel'), findsNothing);
+      // La lista y el contador de documentos sí están.
+      expect(find.text('V001-0001'), findsOneWidget);
+      expect(find.text('2 ventas'), findsOneWidget);
+      expect(find.text('Acciones'), findsOneWidget);
+    });
+
+    testWidgets('Acciones ofrece descargar el Excel y ver los totales', (tester) async {
+      await pump(tester);
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Descargar Excel'), findsOneWidget);
+      expect(find.byTooltip('Totales'), findsOneWidget);
+    });
+
+    testWidgets('Totales abre un modal con el periodo, la cantidad y los totales en soles y dólares', (tester) async {
+      await pump(tester);
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Totales'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Periodo'), findsOneWidget);
+      expect(find.text('28 oct. 2026 - 28 oct. 2026'), findsOneWidget);
+      expect(find.text('Total Soles'), findsOneWidget);
+      expect(find.text('S/. 150.50'), findsOneWidget);
+      expect(find.text('Total Dólares'), findsOneWidget);
+      expect(find.text(r'$ 20.00'), findsOneWidget);
+      expect(find.text('Cerrar'), findsOneWidget);
+    });
+
+    testWidgets('Descargar Excel pide el Excel de lo que se ve', (tester) async {
+      final (repo, _) = await pump(tester);
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Descargar Excel'));
+      await tester.pumpAndSettle();
+
+      expect(repo.actions, contains('export:venta'));
     });
   });
 }
