@@ -6,8 +6,9 @@ class ApiConstants {
   /// En producción el backend vive en una subcarpeta (`/7power/public`).
   static const String baseDomain = String.fromEnvironment(
     'API_DOMAIN',
-    // LOCAL (emulador): no commitear. Producción: 'https://novi-k.com/7power/public'.
-    defaultValue: 'http://10.0.2.2',
+    // LOCAL (celular en el mismo Wi-Fi que la PC): no commitear.
+    // Emulador Android: 'http://10.0.2.2'. Producción: 'https://novi-k.com/7power/public'.
+    defaultValue: 'http://192.168.18.23',
   );
 
   static const String baseUrl = "$baseDomain/api";
