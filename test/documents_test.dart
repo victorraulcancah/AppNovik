@@ -8,16 +8,20 @@ import 'package:app_novik/data/models/document_model.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
+import 'package:app_novik/domain/entities/other_document_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/document_repository.dart';
+import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/document_usecases.dart';
+import 'package:app_novik/domain/usecases/other_document_usecases.dart';
 import 'package:app_novik/presentation/pages/documents_page.dart';
 import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/documents_provider.dart';
+import 'package:app_novik/presentation/providers/other_documents_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:app_novik/presentation/widgets/document_filters.dart';
@@ -26,6 +30,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+/// Las otras listas de Documentos (traslados, guías...), con un traslado de ejemplo.
+class _FakeOtherRepository implements OtherDocumentRepository {
+  final List<OtherDocumentKind> pedidas = [];
+
+  @override
+  Future<Either<Failure, OtherDocumentPageEntity>> getPage({
+    required int companyId,
+    required OtherDocumentKind kind,
+    required OtherDocumentFilters filters,
+    int? number,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    pedidas.add(kind);
+    return Either.right(const OtherDocumentPageEntity(
+      items: [
+        OtherDocumentEntity(
+          kind: OtherDocumentKind.traslado,
+          id: 1,
+          numero: 'T001-0007',
+          usuario: 'ANA',
+          desde: 'LIMA',
+          hacia: 'AREQUIPA',
+          lines: [OtherDocumentLine(cantidad: 3, name: 'SUBWOOFER')],
+        ),
+      ],
+      currentPage: 1,
+      lastPage: 1,
+      total: 1,
+    ));
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteTransfer(int id) async => Either.rightVoid();
+}
 
 class _Call {
   final DocumentKind kind;
@@ -1006,7 +1046,11 @@ void main() {
   });
 
   group('DocumentsPage', () {
-    Future<(_FakeDocumentRepository, DocumentsProvider)> pump(WidgetTester tester) async {
+    Future<(_FakeDocumentRepository, DocumentsProvider)> pump(
+      WidgetTester tester, {
+      Set<String> permissions = const {'documentos.ventas.index'},
+      _FakeOtherRepository? other,
+    }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
       tester.view.physicalSize = const Size(360 * 3, 780 * 3);
       tester.view.devicePixelRatio = 3;
@@ -1017,8 +1061,13 @@ void main() {
       });
 
       final repo = _FakeDocumentRepository();
-      final session = _session(permissions: const {'documentos.ventas.index'});
+      final session = _session(permissions: permissions);
       final documents = _provider(repo, session: session);
+      final otherRepo = other ?? _FakeOtherRepository();
+      final otherDocuments = OtherDocumentsProvider(
+        getDocumentsUseCase: GetOtherDocumentsUseCase(repository: otherRepo),
+        deleteTransferUseCase: DeleteTransferUseCase(repository: otherRepo),
+      )..syncCompany(7);
 
       await tester.pumpWidget(
         MultiProvider(
@@ -1028,6 +1077,7 @@ void main() {
             ),
             ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
             ChangeNotifierProvider<DocumentsProvider>.value(value: documents),
+            ChangeNotifierProvider<OtherDocumentsProvider>.value(value: otherDocuments),
           ],
           child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: DocumentsPage())),
         ),
@@ -1075,6 +1125,94 @@ void main() {
       expect(find.text('Total Dólares'), findsOneWidget);
       expect(find.text(r'$ 20.00'), findsOneWidget);
       expect(find.text('Cerrar'), findsOneWidget);
+    });
+
+
+    const todas = {
+      'documentos.ventas.index',
+      'documentos.cotizaciones.index',
+      'despachos.transferir.index',
+      'documentos.guia_remision.index',
+      'documentos.nota_credito.index',
+      'documentos.stock.index',
+    };
+
+    testWidgets('con acceso a todo, el selector ofrece las seis listas de la web en su orden', (tester) async {
+      await pump(tester, permissions: todas);
+
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget); // el selector
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+
+      final orden = [
+        'Ventas',
+        'Cotizaciones',
+        'Traslados de Stock',
+        'Guías de Remisión',
+        'Notas de Crédito',
+        'Entrada de Stock',
+      ];
+      var antes = -1.0;
+      for (final label in orden) {
+        final y = tester.getTopLeft(find.text(label).last).dy;
+        expect(y, greaterThan(antes), reason: label);
+        antes = y;
+      }
+    });
+
+    testWidgets('cada lista sale solo con su permiso, como en la web', (tester) async {
+      await pump(
+        tester,
+        permissions: const {'documentos.ventas.index', 'documentos.stock.index'},
+      );
+
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Entrada de Stock'), findsOneWidget);
+      expect(find.text('Cotizaciones'), findsNothing);
+      expect(find.text('Traslados de Stock'), findsNothing);
+      expect(find.text('Guías de Remisión'), findsNothing);
+      expect(find.text('Notas de Crédito'), findsNothing);
+    });
+
+    testWidgets('con una sola lista no hay selector', (tester) async {
+      await pump(tester);
+
+      expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    });
+
+    testWidgets('elegir Traslados de Stock muestra esa lista, sin el botón Acciones de las ventas', (tester) async {
+      final other = _FakeOtherRepository();
+      await pump(tester, permissions: todas, other: other);
+      expect(find.text('Acciones'), findsOneWidget);
+
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Traslados de Stock').last);
+      await tester.pumpAndSettle();
+
+      expect(other.pedidas, [OtherDocumentKind.traslado]);
+      expect(find.text('T001-0007'), findsOneWidget);
+      expect(find.text('LIMA → AREQUIPA'), findsOneWidget);
+      expect(find.text('Acciones'), findsNothing);
+      expect(find.text('V001-0001'), findsNothing);
+    });
+
+    testWidgets('volver a Ventas muestra otra vez sus documentos y sus Acciones', (tester) async {
+      await pump(tester, permissions: todas);
+
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Entrada de Stock').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Entrada de Stock').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ventas').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('V001-0001'), findsOneWidget);
+      expect(find.text('Acciones'), findsOneWidget);
     });
 
     testWidgets('Descargar Excel pide el Excel de lo que se ve', (tester) async {

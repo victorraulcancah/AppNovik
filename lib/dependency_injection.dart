@@ -7,6 +7,7 @@ import 'data/datasources/auth_local_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
+import 'data/datasources/other_document_remote_datasource.dart';
 import 'data/datasources/product_remote_datasource.dart';
 import 'data/datasources/report_remote_datasource.dart';
 import 'data/datasources/sale_remote_datasource.dart';
@@ -15,6 +16,7 @@ import 'data/datasources/theme_local_datasource.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/client_repository_impl.dart';
 import 'data/repositories/document_repository_impl.dart';
+import 'data/repositories/other_document_repository_impl.dart';
 import 'data/repositories/product_repository_impl.dart';
 import 'data/repositories/report_repository_impl.dart';
 import 'data/repositories/sale_repository_impl.dart';
@@ -24,6 +26,7 @@ import 'data/repositories/stock_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/client_repository.dart';
 import 'domain/repositories/document_repository.dart';
+import 'domain/repositories/other_document_repository.dart';
 import 'domain/repositories/product_repository.dart';
 import 'domain/repositories/report_repository.dart';
 import 'domain/repositories/sale_repository.dart';
@@ -31,6 +34,7 @@ import 'domain/repositories/stock_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
+import 'domain/usecases/other_document_usecases.dart';
 import 'domain/usecases/product_usecases.dart';
 import 'domain/usecases/report_usecases.dart';
 import 'domain/usecases/sale_usecases.dart';
@@ -38,6 +42,7 @@ import 'domain/usecases/stock_usecases.dart';
 
 // Presentation Layer
 import 'presentation/providers/auth_provider.dart';
+import 'presentation/providers/other_documents_provider.dart';
 import 'presentation/providers/clients_provider.dart';
 import 'presentation/providers/documents_provider.dart';
 import 'presentation/providers/products_provider.dart';
@@ -99,6 +104,16 @@ class DependencyInjection {
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
+        ChangeNotifierProxyProvider<AuthProvider, OtherDocumentsProvider>(
+          create: (context) => OtherDocumentsProvider(
+            getDocumentsUseCase: GetOtherDocumentsUseCase(repository: _otherDocumentRepository),
+            deleteTransferUseCase: DeleteTransferUseCase(repository: _otherDocumentRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) =>
+              previous!..syncCompany(auth.session?.company.id),
         ),
 
         ChangeNotifierProxyProvider<AuthProvider, ReportsProvider>(
@@ -165,6 +180,11 @@ class DependencyInjection {
 
   static DocumentRepository get _documentRepository => DocumentRepositoryImpl(
         remoteDataSource: DocumentRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static OtherDocumentRepository get _otherDocumentRepository => OtherDocumentRepositoryImpl(
+        remoteDataSource: OtherDocumentRemoteDataSourceImpl(client: _httpClient),
         authLocalDataSource: _authLocalDataSource,
       );
 
