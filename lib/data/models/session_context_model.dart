@@ -74,6 +74,8 @@ class SessionContextModel extends SessionContextEntity {
       web: c['web'] as String?,
       igv: _double(c['igv']),
       renta: _double(c['renta']),
+      programaDePuntos: _bool(c['programa_de_puntos']),
+      minimoCanjePuntos: _double(c['minimo_canje_puntos']) ?? 0,
       emiteComprobantes: c['certificado'] != null && '${c['certificado']}'.isNotEmpty,
       plan: profile == null
           ? null

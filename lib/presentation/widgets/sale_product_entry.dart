@@ -68,7 +68,7 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
             else
               'Stock ${formatQuantity(stock)}${p.unidad != null ? ' ${p.unidad}' : ''}',
           ].join(' · '),
-          trailing: list == null ? null : formatMoney(p.precioEn(list)),
+          trailing: list == null ? null : formatMoney(p.precioEn(list), symbol: sales.moneySymbol),
           selectedCount: sales.cantidadEnVenta(p.id),
         );
       },
@@ -223,7 +223,10 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
                 controller: _price,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
-                decoration: const InputDecoration(labelText: 'Precio S/', hintText: '0'),
+                decoration: InputDecoration(
+                  labelText: 'Precio ${context.watch<SalesProvider>().moneySymbol}',
+                  hintText: '0',
+                ),
               ),
             ),
           ],

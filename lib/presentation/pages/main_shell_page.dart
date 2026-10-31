@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
+import '../providers/shell_navigation.dart';
 import 'documents_page.dart';
 import 'products_page.dart';
 import 'reports_page.dart';
@@ -49,6 +50,18 @@ class _MainShellPageState extends State<MainShellPage> {
 
     final modulos =
         _catalogo.where((m) => session.hasModule(m.slug)).toList();
+    // Otra pantalla pidió pasar a un módulo (por ejemplo, Documentos → Ventas al culminar una
+    // cotización): se atiende en cuanto termina de dibujarse este cuadro.
+    final navigation = context.watch<ShellNavigation>();
+    final requested = navigation.requested;
+    if (requested != null) {
+      final target = modulos.indexWhere((m) => m.slug == requested);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigation.take();
+        if (mounted && target >= 0 && target != _index) setState(() => _index = target);
+      });
+    }
+
     final index = modulos.isEmpty ? 0 : _index.clamp(0, modulos.length - 1);
     final actual = modulos.isEmpty ? null : modulos[index];
 

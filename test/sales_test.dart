@@ -598,12 +598,17 @@ void main() {
       );
     });
 
-    test('el crédito, el plazo y los puntos aún no se manejan; la contraentrega sí', () {
-      expect(const PaymentMethodEntity(id: 1, name: 'CRÉDITO').soportado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'PLAZO 30 DÍAS').soportado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'PUNTOS').soportado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'CONTRAENTREGA').soportado, isTrue);
-      expect(const PaymentMethodEntity(id: 1, name: 'YAPE').soportado, isTrue);
+    test('cada forma de pago sabe si es crédito, plazo o puntos', () {
+      PaymentMethodEntity m(String name) => PaymentMethodEntity(id: 1, name: name);
+
+      expect(m('CRÉDITO').kind, PaymentKind.credito);
+      expect(m('CREDITO').kind, PaymentKind.credito);
+      expect(m('PLAZO 30 DÍAS').kind, PaymentKind.plazo);
+      expect(m('PUNTOS').kind, PaymentKind.puntos);
+      expect(m('CONTRAENTREGA').kind, PaymentKind.normal);
+      expect(m('YAPE').kind, PaymentKind.normal);
+      // Llevan cuotas el crédito y el plazo.
+      expect([m('CRÉDITO'), m('PLAZO 15'), m('PUNTOS'), m('EFECTIVO')].map((x) => x.conCuotas), [true, true, false, false]);
     });
 
     test('el ticket se emite hasta 30 días atrás; la boleta y la factura, hoy y 2 días antes', () {
@@ -622,8 +627,8 @@ void main() {
   group('SalesProvider', () {
     test('carga solo listas en soles y las formas de pago que la app maneja, con los predeterminados', () async {
       final p = await _ready(_FakeSaleRepository());
-      expect(p.priceLists.map((l) => l.id), [10, 11]);
-      expect(p.paymentMethods.map((m) => m.name), ['EFECTIVO', 'YAPE', 'CONTRAENTREGA']);
+      expect(p.priceLists.map((l) => l.id), [10, 11, 12]); // 12 es la lista en dólares
+      expect(p.paymentMethods.map((m) => m.name), ['CRÉDITO', 'EFECTIVO', 'YAPE', 'PUNTOS', 'CONTRAENTREGA']);
       expect(p.warehouseId, 2); // el del usuario
       expect(p.priceListId, 11); // el del usuario
       expect(p.defaultPaymentMethodId, 2); // EFECTIVO
@@ -676,13 +681,16 @@ void main() {
       expect(p.lines.single.precio, 40);
     });
 
-    test('la lista del cliente manda, salvo que se haya elegido a mano o sea en dólares', () async {
+    test('la lista del cliente manda (también la de dólares), salvo que se haya elegido a mano', () async {
       final p = await _ready(_FakeSaleRepository());
       p.selectClient(const ClientEntity(id: 1, name: 'A', listPriceId: 10));
       expect(p.priceListId, 10);
+      expect(p.esDolares, isFalse);
 
       p.selectClient(const ClientEntity(id: 2, name: 'B', listPriceId: 12)); // dólares
-      expect(p.priceListId, 10);
+      expect(p.priceListId, 12);
+      expect(p.esDolares, isTrue);
+      expect(p.moneySymbol, r'$');
 
       p.selectPriceList(11);
       p.selectClient(const ClientEntity(id: 3, name: 'C', listPriceId: 10));
@@ -1025,7 +1033,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Método de pago 2'), findsOneWidget);
       // El primer pago cubre todo, el segundo queda en 0: no se puede crear.
-      expect(find.text('Los pagos suman el total'), findsOneWidget);
+      expect(find.text('Escribe el monto de cada forma de pago'), findsOneWidget);
       FilledButton createButton() => tester.widget<FilledButton>(
             find.widgetWithText(FilledButton, 'Crear'),
           );

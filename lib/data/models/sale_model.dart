@@ -29,6 +29,9 @@ ClientEntity clientFromJson(Map<String, dynamic> json) {
     paymentMethodId: _int(json['payment_method_id']),
     ejecutivoComercialId: _int(json['ejecutivo_comercial_id']),
     ejecutivoComercial: ejecutivo is Map ? _text(ejecutivo['name']) : null,
+    credito: _double(json['credito']) ?? 0,
+    creditoDisponible: _double(json['credito_disponible']) ?? 0,
+    creditoAFavor: _double(json['credito_a_favor']) ?? 0,
   );
 }
 
@@ -131,8 +134,8 @@ Map<String, dynamic> quoteToJson(
 }) {
   final observaciones = form.observaciones?.trim();
   return {
-    'totales_soles': form.total,
-    'totales_dolares': 0,
+    'totales_soles': form.dolares ? 0 : form.total,
+    'totales_dolares': form.dolares ? form.total : 0,
     'company_id': companyId,
     'user_id': userId,
     'client_id': form.client!.id,
@@ -149,7 +152,7 @@ Map<String, dynamic> quoteToJson(
           'cantidad': l.cantidad,
           'precio': l.precio,
           'dto_fijo': false,
-          'dolares': false,
+          'dolares': form.dolares,
           'dto': 0,
           'monto_dto': 0,
           'subtotal': l.subtotal,
@@ -171,15 +174,16 @@ Map<String, dynamic> saleToJson(
   final observaciones = form.observaciones?.trim();
 
   return {
+    if (form.fromQuoteId != null) 'from_cotizacion': form.fromQuoteId,
     'tipo_documento': form.tipoDocumento.apiValue,
-    'totales_soles': total,
-    'totales_dolares': 0,
+    'totales_soles': form.dolares ? 0 : total,
+    'totales_dolares': form.dolares ? total : 0,
     'company_id': companyId,
     'user_id': userId,
     'client_id': form.client!.id,
     'warehouse_id': form.warehouseId,
     'punto_venta': false,
-    'tipo_de_cambio': 1,
+    'tipo_de_cambio': form.dolares ? form.tipoCambio : 1,
     'metodo_entrega': form.delivery.apiValue,
     if (form.fechaEmision != null) 'created_at': _dayTime(form.fechaEmision!),
     if (observaciones != null && observaciones.isNotEmpty) 'observaciones': observaciones,
@@ -190,7 +194,7 @@ Map<String, dynamic> saleToJson(
           'cantidad': l.cantidad,
           'precio': l.precio,
           'dto_fijo': false,
-          'dolares': false,
+          'dolares': form.dolares,
           'dto': 0,
           'monto_dto': 0,
           'subtotal': l.subtotal,
@@ -198,7 +202,17 @@ Map<String, dynamic> saleToJson(
         },
     ],
     'payment_methods': [
-      for (final p in form.payments) {'payment_method_id': p.paymentMethodId, 'monto': p.monto},
+      for (final p in form.payments)
+        {
+          'payment_method_id': p.paymentMethodId,
+          'monto': p.monto,
+          if (p.plazo != null) 'plazo': p.plazo!.apiValue,
+          if (p.installments.isNotEmpty)
+            'installments': [
+              for (final i in p.installments)
+                {'monto': i.monto, 'fecha_vencimiento': _day(i.fechaVencimiento)},
+            ],
+        },
     ],
   };
 }

@@ -145,6 +145,7 @@ OtherDocumentEntity otherDocumentFromJson(Map<String, dynamic> json, OtherDocume
           fechaEmision: _date(json['fecha_emision']),
           fechaTraslado: _date(json['fecha_traslado']),
           tipoGuia: _text(json['tipo_guia']),
+          codTraslado: _text(json['cod_traslado']),
           documentoTransportista: _text(json['doc_transportista']),
           transportista: _text(json['rzn_social_transportista']),
           matricula: _text(json['matricula_transportista']),

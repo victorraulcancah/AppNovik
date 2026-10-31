@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'quote_draft_entity.dart';
+
 /// Qué lista de la pantalla Documentos se está viendo.
 enum DocumentKind { venta, cotizacion }
 
@@ -129,6 +131,9 @@ class DocumentEntity {
   final List<DocumentItemEntity> items;
   final List<DocumentPaymentEntity> pagos;
 
+  /// Solo cotizaciones: lo necesario para culminarla como venta o editarla.
+  final QuoteDraftEntity? quoteDraft;
+
   const DocumentEntity({
     required this.id,
     required this.kind,
@@ -157,6 +162,7 @@ class DocumentEntity {
     this.boleta,
     this.items = const [],
     this.pagos = const [],
+    this.quoteDraft,
   });
 
   String get simboloMoneda => esDolares ? r'$' : 'S/';

@@ -63,7 +63,7 @@ double receiptIgvDivisor(CompanyEntity company) {
 
 /// Roboto dibuja tildes, ñ y signos, pero no emojis ni otros símbolos fuera del plano básico
 /// ni caracteres de control: se quitan para no dejar recuadros en el comprobante.
-String _safe(String text) {
+String pdfSafe(String text) {
   final out = StringBuffer();
   for (final rune in text.runes) {
     if (rune > 0xFFFF || (rune < 0x20 && rune != 0x0A)) continue;
@@ -164,7 +164,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
         padding: const pw.EdgeInsets.only(bottom: 3),
         child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.SizedBox(width: 96, child: pw.Text(label, style: bold.copyWith(fontSize: 8))),
-          pw.Expanded(child: pw.Text(_safe(value), style: const pw.TextStyle(fontSize: 8))),
+          pw.Expanded(child: pw.Text(pdfSafe(value), style: const pw.TextStyle(fontSize: 8))),
         ]),
       );
 
@@ -174,7 +174,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
         color: header ? pdfBand : null,
         padding: pw.EdgeInsets.symmetric(horizontal: 5, vertical: header ? 3 : 4),
         child: pw.Text(
-          _safe(text),
+          pdfSafe(text),
           style: header ? bold.copyWith(fontSize: 8) : const pw.TextStyle(fontSize: 8),
         ),
       );
@@ -221,20 +221,20 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
       pw.Expanded(
         flex: 3,
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text(_safe(r.company.razonSocial), style: bold.copyWith(fontSize: 13)),
+          pw.Text(pdfSafe(r.company.razonSocial), style: bold.copyWith(fontSize: 13)),
           pw.SizedBox(height: 3),
-          pw.Text(_safe(r.header.direccion), style: const pw.TextStyle(fontSize: 8)),
+          pw.Text(pdfSafe(r.header.direccion), style: const pw.TextStyle(fontSize: 8)),
           pw.RichText(text: pw.TextSpan(children: [
             pw.TextSpan(text: 'Cel: ', style: bold.copyWith(fontSize: 8)),
-            pw.TextSpan(text: _safe(r.header.telefono), style: const pw.TextStyle(fontSize: 8)),
+            pw.TextSpan(text: pdfSafe(r.header.telefono), style: const pw.TextStyle(fontSize: 8)),
           ])),
           pw.RichText(text: pw.TextSpan(children: [
             pw.TextSpan(text: 'Email: ', style: bold.copyWith(fontSize: 8)),
-            pw.TextSpan(text: _safe(r.header.email), style: const pw.TextStyle(fontSize: 8)),
+            pw.TextSpan(text: pdfSafe(r.header.email), style: const pw.TextStyle(fontSize: 8)),
           ])),
           pw.RichText(text: pw.TextSpan(children: [
             pw.TextSpan(text: 'Web: ', style: bold.copyWith(fontSize: 8)),
-            pw.TextSpan(text: _safe(r.header.web), style: const pw.TextStyle(fontSize: 8)),
+            pw.TextSpan(text: pdfSafe(r.header.web), style: const pw.TextStyle(fontSize: 8)),
           ])),
         ]),
       ),
@@ -250,7 +250,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
           child: pw.Column(children: [
             pw.Text('RUC: ${r.company.ruc ?? '-'}', style: const pw.TextStyle(fontSize: 10)),
             pw.SizedBox(height: 6),
-            pw.Text(_safe(receiptTitle(d).toUpperCase()),
+            pw.Text(pdfSafe(receiptTitle(d).toUpperCase()),
                 textAlign: pw.TextAlign.center, style: bold.copyWith(fontSize: 12)),
             pw.SizedBox(height: 6),
             pw.Text('Nro: ${d.numero}', style: const pw.TextStyle(fontSize: 10)),
@@ -362,7 +362,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
           pw.Expanded(
             child: pw.Column(children: [
               if ((d.datosAlmacen?.usaDatos ?? false) && d.datosAlmacen?.comentarios != null)
-                pw.Text(_safe(d.datosAlmacen!.comentarios!),
+                pw.Text(pdfSafe(d.datosAlmacen!.comentarios!),
                     style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
               pw.Text('Representación Impresa de la Factura Electrónica',
                   style: const pw.TextStyle(fontSize: 8)),
@@ -377,7 +377,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
                 ? pw.SizedBox()
                 : pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                     pw.Text('Observaciones:', style: bold.copyWith(fontSize: 8)),
-                    pw.Text(_safe(d.observaciones!), style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text(pdfSafe(d.observaciones!), style: const pw.TextStyle(fontSize: 8)),
                   ]),
           ),
         ]),
@@ -405,7 +405,7 @@ pw.Widget _ticket(_ReceiptData r, pw.MemoryImage? logo) {
         padding: const pw.EdgeInsets.only(bottom: 1.5),
         child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.SizedBox(width: 52, child: pw.Text(label, style: bold)),
-          pw.Expanded(child: pw.Text(_safe(value), style: base)),
+          pw.Expanded(child: pw.Text(pdfSafe(value), style: base)),
         ]),
       );
 
@@ -415,14 +415,14 @@ pw.Widget _ticket(_ReceiptData r, pw.MemoryImage? logo) {
   return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
     if (logo != null) pw.Center(child: pw.SizedBox(height: 50, child: pw.Image(logo))),
     pw.SizedBox(height: 4),
-    pw.Center(child: pw.Text(_safe(r.company.razonSocial), style: bold.copyWith(fontSize: 9), textAlign: pw.TextAlign.center)),
+    pw.Center(child: pw.Text(pdfSafe(r.company.razonSocial), style: bold.copyWith(fontSize: 9), textAlign: pw.TextAlign.center)),
     pw.Center(child: pw.Text('RUC: ${r.company.ruc ?? '-'}', style: base)),
-    pw.Center(child: pw.Text(_safe(r.header.direccion), style: base, textAlign: pw.TextAlign.center)),
-    pw.Center(child: pw.Text('Cel: ${_safe(r.header.telefono)}', style: base)),
-    pw.Center(child: pw.Text('Email: ${_safe(r.header.email)}', style: base)),
-    pw.Center(child: pw.Text('Web: ${_safe(r.header.web)}', style: base)),
+    pw.Center(child: pw.Text(pdfSafe(r.header.direccion), style: base, textAlign: pw.TextAlign.center)),
+    pw.Center(child: pw.Text('Cel: ${pdfSafe(r.header.telefono)}', style: base)),
+    pw.Center(child: pw.Text('Email: ${pdfSafe(r.header.email)}', style: base)),
+    pw.Center(child: pw.Text('Web: ${pdfSafe(r.header.web)}', style: base)),
     dash,
-    pw.Center(child: pw.Text(_safe(receiptTitle(d).toUpperCase()), style: bold.copyWith(fontSize: 9))),
+    pw.Center(child: pw.Text(pdfSafe(receiptTitle(d).toUpperCase()), style: bold.copyWith(fontSize: 9))),
     pw.Center(child: pw.Text('Nro: ${d.numero}', style: base)),
     dash,
     field('RUC/DNI :', d.clienteDocumento ?? '-'),
@@ -444,7 +444,7 @@ pw.Widget _ticket(_ReceiptData r, pw.MemoryImage? logo) {
       pw.Padding(
         padding: const pw.EdgeInsets.only(bottom: 2),
         child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Expanded(flex: 3, child: pw.Text(_safe(i.codigo ?? i.name), style: base)),
+          pw.Expanded(flex: 3, child: pw.Text(pdfSafe(i.codigo ?? i.name), style: base)),
           pw.Expanded(flex: 1, child: pw.Text(formatQuantity(i.cantidad), style: base, textAlign: pw.TextAlign.center)),
           pw.Expanded(flex: 2, child: pw.Text(formatMoney(i.precio, symbol: ''), style: base, textAlign: pw.TextAlign.right)),
           pw.Expanded(flex: 2, child: pw.Text(formatMoney(i.subtotal, symbol: ''), style: base, textAlign: pw.TextAlign.right)),
@@ -464,7 +464,7 @@ pw.Widget _ticket(_ReceiptData r, pw.MemoryImage? logo) {
     if ((d.observaciones ?? '').trim().isNotEmpty) ...[
       dash,
       pw.Text('Observaciones:', style: bold),
-      pw.Text(_safe(d.observaciones!), style: base),
+      pw.Text(pdfSafe(d.observaciones!), style: base),
     ],
     dash,
     pw.Center(child: pw.Text('GRACIAS POR SU COMPRA!', style: bold)),

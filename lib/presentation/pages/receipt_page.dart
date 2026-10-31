@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../domain/entities/document_entity.dart';
+import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
 import '../pdf/receipt_pdf.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
+import '../providers/other_documents_provider.dart';
 import '../utils/download_file.dart';
 import '../widgets/document_modals.dart';
+import '../widgets/guide_form.dart';
 
 /// Comprobante de una venta o cotización en PDF: se ve en pantalla (A4 o ticket) y se
 /// puede descargar, compartir o imprimir. Con boleta o factura emitidas ofrece también
@@ -25,6 +28,9 @@ class ReceiptPage extends StatefulWidget {
 class _ReceiptPageState extends State<ReceiptPage> {
   bool _ticket = false;
   bool _downloadingCdr = false;
+
+  /// Se creó una guía de remisión desde esta pantalla.
+  bool _guideCreated = false;
   Future<Uint8List?>? _logo;
 
   @override
@@ -61,6 +67,19 @@ class _ReceiptPageState extends State<ReceiptPage> {
     await downloadFile(context, result.right);
   }
 
+  /// Abre el formulario de la guía de remisión de esta venta (como el botón de la web).
+  Future<void> _createGuide() async {
+    final created = await showGuideForm(context, document: widget.document);
+    if (created == null || !mounted) return;
+    setState(() => _guideCreated = true);
+    _snack('Guía creada con éxito');
+    // Si ya se miraron las guías en Documentos, la lista se actualiza con la nueva.
+    final others = context.read<OtherDocumentsProvider>();
+    if (others.stateOf(OtherDocumentKind.guia).loadedOnce) {
+      others.refresh(OtherDocumentKind.guia);
+    }
+  }
+
   Future<void> _creditNote() async {
     final done = await showCreditNoteForm(context, widget.document);
     if (done == true && mounted) {
@@ -75,6 +94,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
     final scheme = Theme.of(context).colorScheme;
     final canCreditNote = d.sePuedeAnularConNotaCredito && _can('documentos.ventas.destroy');
     final boleta = d.boleta;
+    // Como en la web: la guía se crea sobre una venta activa que aún no tiene; sin comprobante
+    // electrónico es una guía local.
+    final hasGuide = boleta?.tieneGuia == true || _guideCreated;
+    final canGuide = d.activo && !d.esCotizacion && _can('documentos.guia_remision.store');
 
     return Scaffold(
       body: Column(
@@ -118,6 +141,20 @@ class _ReceiptPageState extends State<ReceiptPage> {
                         : const Icon(Icons.folder_zip_outlined, size: 18),
                     label: const Text('CDR'),
                   ),
+                if (!d.esCotizacion && d.activo && hasGuide) ...[
+                  const SizedBox(width: 8),
+                  const OutlinedButton(
+                    onPressed: null,
+                    child: Text('Guía de remisión creada'),
+                  ),
+                ] else if (canGuide) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _createGuide,
+                    icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                    label: Text(boleta == null ? 'Guía de remisión local' : 'Guía de remisión'),
+                  ),
+                ],
                 if (canCreditNote) ...[
                   const SizedBox(width: 8),
                   OutlinedButton.icon(

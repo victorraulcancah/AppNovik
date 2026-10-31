@@ -27,7 +27,7 @@ String _dateTime(DateTime? d) =>
 }
 
 /// Modal "ver detalle" de una venta o cotización: general, productos y pagos.
-Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
+Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d, {String? primaryLabel}) {
   final status = documentStatus(d);
 
   return showAppModal(
@@ -37,7 +37,7 @@ Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d) {
     icon: d.kind == DocumentKind.cotizacion
         ? Icons.request_quote_outlined
         : Icons.receipt_long_outlined,
-    primaryLabel: null,
+    primaryLabel: primaryLabel,
     secondaryLabel: 'Cerrar',
     tabs: [
       AppTabItem(

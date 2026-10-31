@@ -32,6 +32,11 @@ class ClientEntity {
   final int? ejecutivoComercialId;
   final String? ejecutivoComercial;
 
+  /// Línea de crédito y lo que le queda disponible (siempre en soles), y los puntos a favor.
+  final double credito;
+  final double creditoDisponible;
+  final double creditoAFavor;
+
   const ClientEntity({
     required this.id,
     required this.name,
@@ -41,7 +46,13 @@ class ClientEntity {
     this.paymentMethodId,
     this.ejecutivoComercialId,
     this.ejecutivoComercial,
+    this.credito = 0,
+    this.creditoDisponible = 0,
+    this.creditoAFavor = 0,
   });
+
+  /// Puede comprar a crédito o a plazo.
+  bool get tieneCredito => credito > 0 || creditoDisponible > 0;
 
   /// "Cliente varios": ventas sin documento del cliente.
   bool get esVarios => documento == varios;
@@ -92,6 +103,20 @@ class SaleProductEntity {
   /// Cuánto se puede vender en [warehouseId]; `null` si no hay tope.
   double? maximoEn(int warehouseId) =>
       (ventaSinStock || esServicio) ? null : stockEn(warehouseId);
+
+  SaleProductEntity copyWith({Map<int, double>? stockPorAlmacen}) => SaleProductEntity(
+        id: id,
+        codigo: codigo,
+        name: name,
+        marca: marca,
+        categoryId: categoryId,
+        brandId: brandId,
+        unidad: unidad,
+        esServicio: esServicio,
+        ventaSinStock: ventaSinStock,
+        stockPorAlmacen: stockPorAlmacen ?? this.stockPorAlmacen,
+        precioPorLista: precioPorLista,
+      );
 }
 
 /// Categorías y marcas de la empresa para filtrar el buscador de productos.
@@ -116,12 +141,73 @@ class PaymentMethodEntity {
 
   const PaymentMethodEntity({required this.id, required this.name});
 
-  /// El crédito, el plazo y los puntos llevan cuotas o saldos del cliente que
-  /// esta versión de la app aún no maneja.
-  bool get soportado {
-    final n = name.toUpperCase();
-    return !(n.contains('CRÉDITO') || n.contains('CREDITO') || n.contains('PLAZO') || n.contains('PUNTOS'));
+  String get _n => name.toUpperCase();
+
+  /// Crédito del cliente (en cuotas).
+  bool get esCredito => _n == 'CRÉDITO' || _n == 'CREDITO';
+
+  /// Pago a plazo: igual que el crédito, pero el plazo por defecto es diario.
+  bool get esPlazo => _n.contains('PLAZO');
+
+  /// Canje de los puntos a favor del cliente.
+  bool get esPuntos => _n == 'PUNTOS';
+
+  /// Se paga más adelante, con cuotas: crédito o plazo.
+  bool get conCuotas => esCredito || esPlazo;
+
+  PaymentKind get kind => esPuntos
+      ? PaymentKind.puntos
+      : esPlazo
+          ? PaymentKind.plazo
+          : esCredito
+              ? PaymentKind.credito
+              : PaymentKind.normal;
+}
+
+/// Cómo se paga una parte de la venta, para las reglas que cambian según la forma de pago.
+enum PaymentKind { normal, credito, plazo, puntos }
+
+/// Cada cuánto vencen las cuotas de un crédito.
+enum SalePlazo {
+  day('day', 'Diario'),
+  week('week', 'Semanal'),
+  month('month', 'Mensual'),
+  year('year', 'Anual');
+
+  final String apiValue;
+  final String label;
+  const SalePlazo(this.apiValue, this.label);
+
+  /// Fecha de vencimiento [n] periodos después de [from].
+  DateTime after(DateTime from, int n) => switch (this) {
+        SalePlazo.day => DateTime(from.year, from.month, from.day + n),
+        SalePlazo.week => DateTime(from.year, from.month, from.day + 7 * n),
+        SalePlazo.month => _addMonths(from, n),
+        SalePlazo.year => _addMonths(from, 12 * n),
+      };
+
+  static DateTime _addMonths(DateTime d, int months) {
+    final target = DateTime(d.year, d.month + months);
+    final lastDay = DateTime(target.year, target.month + 1, 0).day;
+    return DateTime(target.year, target.month, d.day > lastDay ? lastDay : d.day);
   }
+}
+
+/// Una cuota de un crédito: cuánto se paga y cuándo vence.
+class SaleInstallmentEntity {
+  final double monto;
+  final DateTime fechaVencimiento;
+
+  const SaleInstallmentEntity({required this.monto, required this.fechaVencimiento});
+}
+
+/// Reparte [total] en [cantidad] cuotas iguales al céntimo: lo que sobra va de a un céntimo a las
+/// primeras (igual que `calcularCuotas` de la web).
+List<double> splitInstallments(double total, int cantidad) {
+  if (cantidad <= 0) return const [];
+  final division = (total / cantidad * 100).floor() / 100;
+  final rest = ((total - cantidad * division) * 100).round();
+  return [for (var i = 0; i < cantidad; i++) roundMoney(division + (i < rest ? 0.01 : 0))];
 }
 
 /// Cuándo se entrega lo vendido. `apiValue` es lo que espera el backend (`metodo_entrega`).
@@ -141,8 +227,21 @@ enum SaleDelivery {
 class SalePaymentEntity {
   final int paymentMethodId;
   final double monto;
+  final PaymentKind kind;
 
-  const SalePaymentEntity({required this.paymentMethodId, required this.monto});
+  /// Cuotas (solo crédito o plazo) y cada cuánto vencen.
+  final List<SaleInstallmentEntity> installments;
+  final SalePlazo? plazo;
+
+  const SalePaymentEntity({
+    required this.paymentMethodId,
+    required this.monto,
+    this.kind = PaymentKind.normal,
+    this.installments = const [],
+    this.plazo,
+  });
+
+  bool get conCuotas => kind == PaymentKind.credito || kind == PaymentKind.plazo;
 }
 
 /// Lo que se llena en el modal "Crear venta": fecha, entrega, pagos y observaciones.
@@ -153,13 +252,21 @@ class SaleCheckoutEntity {
   final List<SalePaymentEntity> payments;
   final String observaciones;
 
+  /// Venta en dólares: el tipo de cambio negociado (el oficial por defecto, editable).
+  final double? tipoCambio;
+
   const SaleCheckoutEntity({
     this.fechaEmision,
     this.delivery = SaleDelivery.inmediata,
     required this.payments,
     this.observaciones = '',
+    this.tipoCambio,
   });
 }
+
+/// Rango permitido del tipo de cambio de una venta en dólares (el backend lo exige).
+const saleExchangeRateMin = 3.0;
+const saleExchangeRateMax = 4.3;
 
 /// Días en que se puede emitir el comprobante: un ticket, hasta 30 días atrás; una boleta o
 /// factura, hoy y los dos días anteriores (igual que la web).
@@ -216,6 +323,17 @@ class SaleFormEntity {
   final bool reservarStock;
   final DateTime? vencimientoStock;
 
+  /// Venta en dólares (la lista de precios es en dólares) y el tipo de cambio de la venta.
+  final bool dolares;
+  final double? tipoCambio;
+
+  /// Se culmina o edita esta cotización: la venta la marca como procesada; una cotización se
+  /// actualiza en vez de crear otra.
+  final int? fromQuoteId;
+
+  /// Mínimo de puntos que se pueden canjear (según la empresa).
+  final double minimoCanjePuntos;
+
   const SaleFormEntity({
     required this.tipoDocumento,
     required this.client,
@@ -228,10 +346,17 @@ class SaleFormEntity {
     this.priceListId,
     this.reservarStock = false,
     this.vencimientoStock,
+    this.dolares = false,
+    this.tipoCambio,
+    this.fromQuoteId,
+    this.minimoCanjePuntos = 0,
   });
 
   double get total =>
       roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotal));
+
+  /// Lo que vale la venta en soles (con el tipo de cambio si es en dólares).
+  double get totalEnSoles => dolares ? roundMoney(total * (tipoCambio ?? 1)) : total;
 }
 
 /// Tipo de cambio comercial vigente (interbancario + margen de la empresa), el que se

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../../core/utils/format.dart';
+import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/entities/session_context_entity.dart';
@@ -25,6 +26,9 @@ class SalesProvider extends ChangeNotifier {
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
 
+  /// Hora actual; se puede reemplazar en pruebas.
+  final DateTime Function() _now;
+
   SalesProvider({
     required GetWarehousesUseCase getWarehousesUseCase,
     required GetPriceListsUseCase getPriceListsUseCase,
@@ -36,7 +40,9 @@ class SalesProvider extends ChangeNotifier {
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
     VoidCallback? onSessionExpired,
-  })  : _getWarehouses = getWarehousesUseCase,
+    DateTime Function()? now,
+  })  : _now = now ?? DateTime.now,
+        _getWarehouses = getWarehousesUseCase,
         _getPriceLists = getPriceListsUseCase,
         _getPaymentMethods = getPaymentMethodsUseCase,
         _getProductFilters = getSaleProductFiltersUseCase,
@@ -52,6 +58,10 @@ class SalesProvider extends ChangeNotifier {
   int? _defaultWarehouseId;
   int? _defaultPriceListId;
   bool _emiteComprobantes = false;
+
+  /// Programa de puntos de la empresa: si está activo y el mínimo que se puede canjear.
+  bool _programaDePuntos = false;
+  double _minimoCanjePuntos = 0;
   bool _initialized = false;
   int _request = 0;
 
@@ -60,7 +70,7 @@ class SalesProvider extends ChangeNotifier {
 
   List<CatalogItemEntity> warehouses = [];
 
-  /// Solo listas en soles: las ventas en dólares llegan en una próxima versión.
+  /// Listas de precios en soles y en dólares: la moneda de la venta es la de la lista elegida.
   List<PriceListEntity> priceLists = [];
   List<PaymentMethodEntity> paymentMethods = [];
 
@@ -96,6 +106,27 @@ class SalesProvider extends ChangeNotifier {
   /// Última venta registrada, para mostrar la confirmación.
   SaleResultEntity? lastSale;
 
+  /// Cotización que se está culminando como venta o editando (ver [loadFromQuote]).
+  DocumentEntity? fromQuote;
+  bool quoteLoading = false;
+  String? quoteError;
+
+  /// La lista de precios elegida (en soles o dólares).
+  PriceListEntity? get priceList {
+    for (final p in priceLists) {
+      if (p.id == priceListId) return p;
+    }
+    return null;
+  }
+
+  /// La venta es en dólares: la lista de precios elegida es en dólares.
+  bool get esDolares => priceList?.esDolares ?? false;
+
+  String get moneySymbol => esDolares ? r'$' : 'S/';
+
+  /// Mínimo de puntos que se pueden canjear al pagar.
+  double get minimoCanjePuntos => _minimoCanjePuntos;
+
   /// Boleta y factura solo si la empresa tiene certificado digital. La cotización siempre.
   List<SaleDocumentType> get documentTypes => _emiteComprobantes
       ? SaleDocumentType.values
@@ -103,7 +134,7 @@ class SalesProvider extends ChangeNotifier {
 
   /// Se puede vender sin documento del cliente: boleta, en soles y menor a S/ 700 (regla SUNAT).
   bool get puedeSinDocumento =>
-      tipoDocumento == SaleDocumentType.boleta && total > 0 && total < 700;
+      tipoDocumento == SaleDocumentType.boleta && !esDolares && total > 0 && total < 700;
 
   /// La factura no se emite a un cliente de tipo persona.
   bool get facturaAPersona =>
@@ -131,6 +162,10 @@ class SalesProvider extends ChangeNotifier {
     DateTime? vencimientoStock,
   }) =>
       SaleFormEntity(
+        dolares: esDolares,
+        tipoCambio: checkout?.tipoCambio,
+        fromQuoteId: fromQuote?.quoteDraft?.id,
+        minimoCanjePuntos: _minimoCanjePuntos,
         tipoDocumento: tipoDocumento,
         client: client,
         warehouseId: warehouseId,
@@ -152,6 +187,8 @@ class SalesProvider extends ChangeNotifier {
     _defaultDelivery = session?.defaultDelivery;
     _defaultPaymentMethodId = session?.defaultPaymentMethodId;
     _emiteComprobantes = session?.company.emiteComprobantes ?? false;
+    _programaDePuntos = session?.company.programaDePuntos ?? false;
+    _minimoCanjePuntos = session?.company.minimoCanjePuntos ?? 0;
     final companyId = session?.company.id;
     final userId = session?.user.id;
     if (companyId == _companyId && userId == _userId) return;
@@ -184,6 +221,9 @@ class SalesProvider extends ChangeNotifier {
     sinDocumentoLoading = false;
     submitting = false;
     submitError = null;
+    fromQuote = null;
+    quoteLoading = false;
+    quoteError = null;
     _listaElegidaAMano = false;
   }
 
@@ -224,12 +264,8 @@ class SalesProvider extends ChangeNotifier {
     }
 
     warehouses = results[0].right as List<CatalogItemEntity>;
-    priceLists = (results[1].right as List<PriceListEntity>)
-        .where((p) => !p.esDolares)
-        .toList();
-    paymentMethods = (results[2].right as List<PaymentMethodEntity>)
-        .where((m) => m.soportado)
-        .toList();
+    priceLists = results[1].right as List<PriceListEntity>;
+    paymentMethods = results[2].right as List<PaymentMethodEntity>;
 
     // Como la web: el predeterminado del usuario, o el último de la lista.
     warehouseId ??= _pick(warehouses.map((w) => w.id).toList(), _defaultWarehouseId);
@@ -297,17 +333,35 @@ class SalesProvider extends ChangeNotifier {
     return ids.contains(preferred) ? preferred : ids.last;
   }
 
-  /// La forma de pago con la que abre "Crear venta": la del cliente, la del usuario, EFECTIVO o la
-  /// primera (solo entre las que la app maneja).
-  int? get defaultPaymentMethodId {
-    if (paymentMethods.isEmpty) return null;
-    for (final preferred in [client?.paymentMethodId, _defaultPaymentMethodId]) {
-      if (paymentMethods.any((m) => m.id == preferred)) return preferred;
+  /// El cliente puede pagar con [method]: el crédito y el plazo piden que tenga línea de crédito, y
+  /// los puntos, que la empresa tenga el programa y que el cliente llegue al mínimo para canjear.
+  bool canUsePayment(PaymentMethodEntity method) {
+    if (method.esPuntos) {
+      final points = client?.creditoAFavor ?? 0;
+      return _programaDePuntos && points > 0 && points >= _minimoCanjePuntos;
     }
-    for (final m in paymentMethods) {
+    if (method.conCuotas) return client?.tieneCredito ?? false;
+    return true;
+  }
+
+  /// Las formas de pago que se ofrecen: los puntos solo si la empresa tiene el programa.
+  List<PaymentMethodEntity> get offeredPaymentMethods =>
+      [for (final m in paymentMethods) if (!m.esPuntos || _programaDePuntos) m];
+
+  /// La forma de pago con la que abre "Crear venta": la del cliente, la del usuario (si el cliente
+  /// puede usarla), EFECTIVO o la primera.
+  int? get defaultPaymentMethodId {
+    final methods = offeredPaymentMethods;
+    if (methods.isEmpty) return null;
+    for (final preferred in [client?.paymentMethodId, _defaultPaymentMethodId]) {
+      for (final m in methods) {
+        if (m.id == preferred && canUsePayment(m)) return m.id;
+      }
+    }
+    for (final m in methods) {
       if (m.name.toUpperCase() == 'EFECTIVO') return m.id;
     }
-    return paymentMethods.first.id;
+    return methods.first.id;
   }
 
   SaleDelivery get defaultDelivery => SaleDelivery.fromApi(_defaultDelivery);
@@ -356,8 +410,7 @@ class SalesProvider extends ChangeNotifier {
   void selectClient(ClientEntity? value) {
     client = value;
     submitError = null;
-    // La lista del cliente manda, salvo que el usuario haya elegido otra a mano
-    // o que esté en dólares (esta versión solo vende en soles).
+    // La lista del cliente manda, salvo que el usuario haya elegido otra a mano.
     final listId = value?.listPriceId;
     if (!_listaElegidaAMano && priceLists.any((p) => p.id == listId)) {
       priceListId = listId;
@@ -517,6 +570,98 @@ class SalesProvider extends ChangeNotifier {
   }
 
   void clearDraft() {
+    final keepWarehouse = warehouseId;
+    _resetDraft();
+    warehouseId = keepWarehouse;
+    priceListId = _pick(priceLists.map((p) => p.id).toList(), _defaultPriceListId);
+    notifyListeners();
+  }
+
+  /// Pasa una cotización a la pantalla de venta para culminarla (se emite la venta) o editarla (se
+  /// elige "Cotización" y se guarda): carga su cliente, almacén, lista de precios y líneas, con los
+  /// precios con los que se cotizó. Si la reserva de stock sigue vigente, lo reservado cuenta como
+  /// disponible, como en la web. Devuelve el motivo si no se pudo, o `null`.
+  Future<String?> loadFromQuote(DocumentEntity quote) async {
+    final draft = quote.quoteDraft;
+    final companyId = _companyId;
+    if (draft == null) return 'No se pudo leer la cotización';
+    if (companyId == null) return 'No hay una empresa activa';
+
+    quoteLoading = true;
+    quoteError = null;
+    notifyListeners();
+
+    String? fail(String message) {
+      quoteLoading = false;
+      quoteError = message;
+      notifyListeners();
+      return message;
+    }
+
+    await ensureLoaded();
+    if (warehouses.isEmpty) return fail(error ?? 'No se pudieron cargar los datos de la venta');
+
+    // Cada producto se vuelve a pedir para tener su stock y sus precios de hoy.
+    final results = await Future.wait([
+      for (final l in draft.lines) _searchProducts(companyId: companyId, search: l.codigo),
+    ]);
+
+    final vencimiento = quote.vencimientoStock;
+    final vigente = quote.reservado == true &&
+        vencimiento != null &&
+        vencimiento.add(const Duration(days: 1)).isAfter(_now());
+
+    final reserved = <int, int>{};
+    for (final l in draft.lines) {
+      reserved[l.productId] = (reserved[l.productId] ?? 0) + l.cantidad;
+    }
+
+    final loaded = <SaleLineEntity>[];
+    for (var i = 0; i < draft.lines.length; i++) {
+      final l = draft.lines[i];
+      final result = results[i];
+      if (result.isLeft) {
+        _checkSession(result);
+        return fail(result.left.message);
+      }
+
+      var product = result.right.where((p) => p.id == l.productId).firstOrNull ??
+          SaleProductEntity(id: l.productId, codigo: l.codigo, name: l.name, marca: l.marca);
+      if (vigente) {
+        product = product.copyWith(stockPorAlmacen: {
+          ...product.stockPorAlmacen,
+          draft.warehouseId: product.stockEn(draft.warehouseId) + (reserved[l.productId] ?? 0),
+        });
+      }
+
+      // Un mismo producto en dos líneas se junta en una (la venta lleva una línea por producto).
+      final at = loaded.indexWhere((x) => x.product.id == l.productId);
+      if (at >= 0) {
+        loaded[at] = loaded[at].copyWith(cantidad: loaded[at].cantidad + l.cantidad);
+      } else {
+        loaded.add(SaleLineEntity(product: product, cantidad: l.cantidad, precio: l.precio));
+      }
+    }
+
+    tipoDocumento = SaleDocumentType.ticket;
+    client = draft.client;
+    warehouseId = warehouses.any((w) => w.id == draft.warehouseId) ? draft.warehouseId : warehouseId;
+    if (priceLists.any((p) => p.id == draft.priceListId)) {
+      priceListId = draft.priceListId;
+      _listaElegidaAMano = true;
+    }
+    lines = loaded;
+    observaciones = draft.observaciones ?? '';
+    sinDocumento = false;
+    submitError = null;
+    fromQuote = quote;
+    quoteLoading = false;
+    notifyListeners();
+    return null;
+  }
+
+  /// Deja de trabajar con la cotización y limpia la venta (el botón "Cancelar" de la web).
+  void cancelQuote() {
     final keepWarehouse = warehouseId;
     _resetDraft();
     warehouseId = keepWarehouse;

@@ -50,8 +50,11 @@ class GuideInfo {
   final DateTime? fechaEmision;
   final DateTime? fechaTraslado;
 
-  /// `01` remitente, `02` transportista.
+  /// `01` pública, `02` privada.
   final String? tipoGuia;
+
+  /// Código del motivo de traslado (`01` venta, `02` compra...).
+  final String? codTraslado;
   final String? documentoTransportista;
   final String? transportista;
   final String? matricula;
@@ -68,6 +71,7 @@ class GuideInfo {
     this.fechaEmision,
     this.fechaTraslado,
     this.tipoGuia,
+    this.codTraslado,
     this.documentoTransportista,
     this.transportista,
     this.matricula,

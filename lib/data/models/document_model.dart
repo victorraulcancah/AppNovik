@@ -1,4 +1,6 @@
 import '../../domain/entities/document_entity.dart';
+import '../../domain/entities/quote_draft_entity.dart';
+import 'sale_model.dart' show clientFromJson;
 
 double _double(dynamic v) =>
     v is num ? v.toDouble() : (v is String ? double.tryParse(v) ?? 0 : 0);
@@ -120,6 +122,37 @@ DocumentBoletaEntity? _boleta(dynamic b) {
   );
 }
 
+/// La cotización como borrador de venta; `null` si le faltan el cliente o el almacén.
+QuoteDraftEntity? _quoteDraft(Map<String, dynamic> json) {
+  final client = json['client'];
+  final id = _int(json['id']);
+  final warehouseId = _int(json['warehouse_id']);
+  if (client is! Map<String, dynamic> || id == null || warehouseId == null) return null;
+
+  final products = json['products'];
+  return QuoteDraftEntity(
+    id: id,
+    client: clientFromJson(client),
+    warehouseId: warehouseId,
+    priceListId: _int(json['list_price_id']),
+    observaciones: json['observaciones'] as String?,
+    lines: [
+      if (products is List)
+        for (final p in products.whereType<Map<String, dynamic>>())
+          if (_int(p['id']) != null)
+            QuoteLineEntity(
+              productId: _int(p['id'])!,
+              codigo: (p['codigo'] ?? '') as String,
+              name: (p['name'] ?? '') as String,
+              marca: p['brand'] is Map ? (p['brand'] as Map)['name'] as String? : null,
+              cantidad: _double((p['pivot'] is Map ? p['pivot'] as Map : const {})['cantidad']).round(),
+              precio: _double((p['pivot'] is Map ? p['pivot'] as Map : const {})['precio']),
+              dolares: _bool((p['pivot'] is Map ? p['pivot'] as Map : const {})['dolares'], defaultValue: false),
+            ),
+    ],
+  );
+}
+
 DocumentEntity documentFromJson(Map<String, dynamic> json, DocumentKind kind) {
   final dolares = _double(json['total_dolares']);
   final esDolares = dolares > 0;
@@ -163,6 +196,7 @@ DocumentEntity documentFromJson(Map<String, dynamic> json, DocumentKind kind) {
     reservado: isQuote ? _bool(json['reservar_stock']) : null,
     vencimientoStock: isQuote ? _date(json['vencimiento_stock']) : null,
     boleta: isQuote ? null : _boleta(json['boleta']),
+    quoteDraft: isQuote ? _quoteDraft(json) : null,
     items: items,
     pagos: payments is List
         ? [

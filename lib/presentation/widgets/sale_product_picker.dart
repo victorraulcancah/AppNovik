@@ -474,7 +474,7 @@ class _ProductCardState extends State<_ProductCard> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                price > 0 ? formatMoney(price) : 'Sin precio',
+                                price > 0 ? formatMoney(price, symbol: widget.sales.moneySymbol) : 'Sin precio',
                                 style: theme.textTheme.labelMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: price > 0 ? scheme.onSurface : scheme.error,

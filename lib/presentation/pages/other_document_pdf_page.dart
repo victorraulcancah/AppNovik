@@ -1,23 +1,51 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
 import '../pdf/other_document_pdf.dart';
+import '../providers/auth_provider.dart';
+import '../providers/documents_provider.dart';
 import '../utils/download_file.dart';
 
-/// El PDF de un traslado o una entrada de stock: se ve en pantalla y se puede descargar,
-/// compartir o imprimir.
-class OtherDocumentPdfPage extends StatelessWidget {
+/// El PDF de un traslado, una entrada de stock, una guía de remisión o una nota de crédito: se ve
+/// en pantalla y se puede descargar, compartir o imprimir.
+class OtherDocumentPdfPage extends StatefulWidget {
   final OtherDocumentEntity document;
   final bool showAmounts;
 
   const OtherDocumentPdfPage({super.key, required this.document, this.showAmounts = true});
 
   @override
-  Widget build(BuildContext context) {
-    final d = document;
+  State<OtherDocumentPdfPage> createState() => _OtherDocumentPdfPageState();
+}
 
+class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
+  Future<Uint8List?>? _logo;
+
+  OtherDocumentEntity get d => widget.document;
+
+  @override
+  void initState() {
+    super.initState();
+    // El logo de la empresa solo va en la guía y en la nota de crédito.
+    if (otherDocumentPdfNeedsCompany(d.kind)) {
+      _logo = context.read<DocumentsProvider>().companyLogo();
+    }
+  }
+
+  Future<Uint8List> _build() async {
+    if (!otherDocumentPdfNeedsCompany(d.kind)) {
+      return buildOtherDocumentPdf(document: d, showAmounts: widget.showAmounts);
+    }
+    final company = context.read<AuthProvider>().session!.company;
+    return buildOtherDocumentPdf(document: d, company: company, logo: await _logo);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
@@ -33,7 +61,7 @@ class OtherDocumentPdfPage extends StatelessWidget {
           ),
           Expanded(
             child: PdfPreview(
-              build: (_) => buildOtherDocumentPdf(document: d, showAmounts: showAmounts),
+              build: (_) => _build(),
               pdfFileName: '${d.numero}.pdf',
               canChangePageFormat: false,
               canChangeOrientation: false,

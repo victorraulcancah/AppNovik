@@ -11,6 +11,8 @@ import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
+import '../providers/sales_provider.dart';
+import '../providers/shell_navigation.dart';
 import '../utils/download_file.dart';
 import '../widgets/document_filters.dart';
 import '../widgets/document_modals.dart';
@@ -143,6 +145,30 @@ class _DocumentsPageState extends State<DocumentsPage> {
           ? result.left.message
           : (d.esCotizacion ? 'Cotización eliminada' : 'Venta eliminada'),
     );
+  }
+
+  /// Se puede culminar como venta o editar: una cotización pendiente, si el usuario puede vender.
+  bool _canContinueQuote(DocumentEntity d) =>
+      d.esCotizacion && d.activo && d.quoteDraft != null && _can('ventas.store');
+
+  /// "Culminar Venta o Editar Cotización": pasa la cotización a la pantalla de Ventas, con su
+  /// cliente, almacén, lista de precios y productos; allí se emite la venta o se guarda la edición.
+  void _continueQuote(DocumentEntity d) {
+    final sales = context.read<SalesProvider>();
+    final navigation = context.read<ShellNavigation>();
+    navigation.goTo('ventas');
+    // El resultado (o el motivo si falla) se ve en la pantalla de Ventas.
+    sales.loadFromQuote(d);
+  }
+
+  Future<void> _showDetail(DocumentEntity d) async {
+    final continuar = _canContinueQuote(d);
+    final result = await showDocumentDetail(
+      context,
+      d,
+      primaryLabel: continuar ? 'Culminar venta o editar' : null,
+    );
+    if (result == true && mounted) _continueQuote(d);
   }
 
   Future<void> _creditNote(DocumentEntity d) async {
@@ -321,12 +347,18 @@ class _DocumentsPageState extends State<DocumentsPage> {
       trailingTitle: formatMoney(d.monto, symbol: d.simboloMoneda),
       trailingCaption: status.label,
       trailingCaptionColor: statusColor,
-      onTap: () => showDocumentDetail(context, d),
+      onTap: () => _showDetail(d),
       actions: [
         AppActionButton(
           type: AppActionType.view,
-          onPressed: () => showDocumentDetail(context, d),
+          onPressed: () => _showDetail(d),
         ),
+        if (_canContinueQuote(d))
+          AppActionButton(
+            type: AppActionType.edit,
+            label: 'Culminar venta o editar cotización',
+            onPressed: () => _continueQuote(d),
+          ),
         AppActionButton(
           type: AppActionType.pdf,
           label: 'Ver comprobante PDF',

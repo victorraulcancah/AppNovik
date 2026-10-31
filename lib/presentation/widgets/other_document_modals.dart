@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
+import '../../domain/entities/guide_form_entity.dart' show guideTransferReasons;
 import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
 import '../pages/other_document_pdf_page.dart';
@@ -27,7 +28,7 @@ Future<void> showOtherDocumentDetail(
   bool showAmounts = true,
 }) async {
   final canOpenReceipt = d.comprobante != null;
-  final canOpenPdf = hasOtherDocumentPdf(d.kind);
+  final canOpenPdf = otherDocumentPdfAvailable(d);
 
   final abrir = await showAppModal(
     context,
@@ -98,7 +99,12 @@ class _DetailBody extends StatelessWidget {
               if (g?.tipoGuia != null)
                 AppDetailRow(
                   label: 'Tipo de guía',
-                  value: g!.tipoGuia == '02' ? 'Transportista' : 'Remitente',
+                  value: g!.tipoGuia == '02' ? 'Privada' : 'Pública',
+                ),
+              if (g?.codTraslado != null)
+                AppDetailRow(
+                  label: 'Motivo de traslado',
+                  value: '${g!.codTraslado} - ${guideTransferReasons[g.codTraslado] ?? ''}',
                 ),
               AppDetailRow(label: 'Salida', value: _address(g?.direccionSalida, g?.ubigeoSalida)),
               AppDetailRow(label: 'Llegada', value: _address(g?.direccionLlegada, g?.ubigeoLlegada)),

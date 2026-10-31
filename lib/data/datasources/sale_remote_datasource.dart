@@ -103,12 +103,20 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
           ? quoteToJson(form, companyId: companyId, userId: userId)
           : saleToJson(form, companyId: companyId, userId: userId),
     );
+    // Editar una cotización la actualiza (PUT); lo demás crea un documento nuevo.
+    final editingQuote = isQuote && form.fromQuoteId != null;
     final body = await sendApiRequest(
-      () => client.post(
-        _uri(isQuote ? '/cotizaciones' : '/ventas'),
-        headers: ApiConstants.authHeaders(token),
-        body: payload,
-      ),
+      () => editingQuote
+          ? client.put(
+              _uri('/cotizaciones/${form.fromQuoteId}'),
+              headers: ApiConstants.authHeaders(token),
+              body: payload,
+            )
+          : client.post(
+              _uri(isQuote ? '/cotizaciones' : '/ventas'),
+              headers: ApiConstants.authHeaders(token),
+              body: payload,
+            ),
     );
     return documentFromJson(
       body as Map<String, dynamic>,

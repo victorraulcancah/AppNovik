@@ -12,9 +12,10 @@ import '../widgets/sale_checkout.dart';
 import '../widgets/sale_modals.dart';
 import '../widgets/sale_product_entry.dart';
 
-/// Módulo Ventas: registra una venta al contado en soles — comprobante, cliente,
-/// productos con su precio y stock, y una forma de pago. Las ventas a crédito,
-/// en dólares, con puntos y las cotizaciones llegan después.
+/// Módulo Ventas: registra una venta o una cotización — comprobante, cliente, productos con su
+/// precio y stock, y en el modal "Crear venta" las formas de pago (al contado, a crédito con
+/// cuotas, con puntos), en soles o en dólares según la lista de precios. También culmina una
+/// cotización como venta o la edita.
 class SalesPage extends StatefulWidget {
   const SalesPage({super.key});
 
@@ -116,7 +117,7 @@ class _SalesPageState extends State<SalesPage> {
         context,
         now: DateTime.now(),
         client: client.name,
-        total: formatMoney(sales.total),
+        total: formatMoney(sales.total, symbol: sales.moneySymbol),
       );
       if (options == null || !mounted) return;
       ok = await sales.submit(
@@ -144,7 +145,7 @@ class _SalesPageState extends State<SalesPage> {
         const AppPageHeader(
           icon: Icons.point_of_sale_outlined,
           title: 'Ventas',
-          subtitle: 'Venta al contado en soles.',
+          subtitle: 'Ventas y cotizaciones.',
           trailing: AppAccountMenu(),
         ),
         Expanded(child: _body(sales, canSell)),
@@ -195,6 +196,10 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (sales.fromQuote != null || sales.quoteLoading || sales.quoteError != null) ...[
+                      _quoteBanner(sales),
+                      const SizedBox(height: 16),
+                    ],
                     _comprobante(sales),
                     const SizedBox(height: 16),
                     _cliente(sales),
@@ -214,6 +219,66 @@ class _SalesPageState extends State<SalesPage> {
         ),
         _bottomBar(sales),
       ],
+    );
+  }
+
+  /// Aviso de que se está culminando o editando una cotización, con "Cancelar" (como en la web).
+  Widget _quoteBanner(SalesProvider sales) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final quote = sales.fromQuote;
+
+    return Material(
+      color: scheme.tertiaryContainer,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: quote == null && sales.quoteError != null
+                  ? Text(
+                      sales.quoteError!,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: scheme.error, fontWeight: FontWeight.w600),
+                    )
+                  : quote == null
+                  ? Row(
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Cargando la cotización…',
+                            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onTertiaryContainer),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      'Está trabajando con la Cotización Nro: ${quote.numero}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onTertiaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+            if (quote != null || sales.quoteError != null)
+              TextButton(
+                onPressed: () {
+                  sales.cancelQuote();
+                  _observaciones.clear();
+                },
+                child: Text(quote != null ? 'Cancelar' : 'Cerrar'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -463,7 +528,7 @@ class _SalesPageState extends State<SalesPage> {
                               ),
                             ),
                             Text(
-                              formatMoney(sales.total),
+                              formatMoney(sales.total, symbol: sales.moneySymbol),
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w800,
                                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -623,7 +688,10 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                     focusNode: _priceFocus,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
-                    decoration: const InputDecoration(labelText: 'Precio S/', hintText: '0'),
+                    decoration: InputDecoration(
+                      labelText: 'Precio ${context.watch<SalesProvider>().moneySymbol}',
+                      hintText: '0',
+                    ),
                     onChanged: (text) => widget.onPrice(double.tryParse(text) ?? 0),
                   ),
                 ),
@@ -660,7 +728,7 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                   style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 Text(
-                  formatMoney(line.subtotal),
+                  formatMoney(line.subtotal, symbol: context.watch<SalesProvider>().moneySymbol),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     fontFeatures: const [FontFeature.tabularFigures()],

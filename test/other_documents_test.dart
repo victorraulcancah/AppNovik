@@ -98,6 +98,7 @@ Map<String, dynamic> _guide({bool withBoleta = true}) => {
       'serie': 1,
       'numero': 3,
       'peso_total': '12.5',
+      'cod_traslado': '01',
       'direccion_salida': 'AV. LIMA 123',
       'direccion_llegada': 'CALLE SOL 45',
       'fecha_emision': '2026-10-30T05:00:00.000000Z',
@@ -450,11 +451,60 @@ void main() {
   });
 
   group('PDF', () {
-    test('solo traslados y entradas de stock tienen PDF', () {
-      expect(hasOtherDocumentPdf(OtherDocumentKind.traslado), isTrue);
-      expect(hasOtherDocumentPdf(OtherDocumentKind.entradaStock), isTrue);
-      expect(hasOtherDocumentPdf(OtherDocumentKind.guia), isFalse);
-      expect(hasOtherDocumentPdf(OtherDocumentKind.notaCredito), isFalse);
+    const company = CompanyEntity(
+      id: 7,
+      razonSocial: 'MULTISERVICIOS 7POWER S.A.C.',
+      ruc: '20612345678',
+      direccion: 'AV. PRINCIPAL 123 - LIMA',
+      telefono: '999 888 777',
+      email: 'ventas@7power.pe',
+      web: 'www.7power.pe',
+    );
+
+    test('los cuatro documentos tienen su PDF, como en la web', () {
+      for (final kind in OtherDocumentKind.values) {
+        expect(hasOtherDocumentPdf(kind), isTrue, reason: kind.label);
+      }
+    });
+
+    test('la guía y la nota de crédito necesitan los productos y el cliente de su venta', () {
+      final guia = otherDocumentFromJson(_guide(), OtherDocumentKind.guia);
+      final nota = otherDocumentFromJson(_creditNote(), OtherDocumentKind.notaCredito);
+      final sinVenta = otherDocumentFromJson(
+        {..._guide()..remove('boleta'), 'id': 9},
+        OtherDocumentKind.guia,
+      );
+
+      expect(otherDocumentPdfAvailable(guia), isTrue);
+      expect(otherDocumentPdfAvailable(nota), isTrue);
+      expect(otherDocumentPdfAvailable(sinVenta), isFalse);
+      expect(otherDocumentPdfNeedsCompany(OtherDocumentKind.guia), isTrue);
+      expect(otherDocumentPdfNeedsCompany(OtherDocumentKind.traslado), isFalse);
+    });
+
+    test('se genera el PDF de la guía de remisión (privada y pública) y el de la nota de crédito', () async {
+      final publica = otherDocumentFromJson(
+        {..._guide(), 'matricula_transportista': 'MTC123'},
+        OtherDocumentKind.guia,
+      );
+      final guia = otherDocumentFromJson(
+        {..._guide(), 'tipo_guia': '02', 'placa_chofer': 'ABC-123', 'dni_chofer': '12345678'},
+        OtherDocumentKind.guia,
+      );
+      final nota = otherDocumentFromJson(_creditNote(), OtherDocumentKind.notaCredito);
+      final factura = otherDocumentFromJson(_creditNote(tipo: 'f'), OtherDocumentKind.notaCredito);
+
+      final pdfs = [
+        await buildOtherDocumentPdf(document: guia, company: company),
+        await buildOtherDocumentPdf(document: publica, company: company),
+        await buildOtherDocumentPdf(document: nota, company: company),
+        await buildOtherDocumentPdf(document: factura, company: company),
+      ];
+
+      for (final bytes in pdfs) {
+        expect(String.fromCharCodes(bytes.sublist(0, 5)), '%PDF-');
+        expect(bytes.length, greaterThan(2000));
+      }
     });
 
     test('se genera el PDF del traslado y de la entrada, con y sin importes', () async {
@@ -663,7 +713,7 @@ void main() {
       expect(find.text('2 traslados'), findsOneWidget);
     });
 
-    testWidgets('traslados y entradas de stock tienen su botón de PDF; guías y notas no', (tester) async {
+    testWidgets('los traslados tienen su botón de PDF', (tester) async {
       await pump(tester, OtherDocumentKind.traslado);
       expect(find.byTooltip('Ver PDF'), findsOneWidget);
     });
@@ -677,11 +727,33 @@ void main() {
       expect(find.text('Ver PDF'), findsOneWidget);
     });
 
-    testWidgets('las guías no tienen botón de PDF propio, solo el de su comprobante', (tester) async {
+    testWidgets('las guías y las notas de crédito tienen su PDF y el de su comprobante', (tester) async {
       await pump(tester, OtherDocumentKind.guia, build: (kind, page) => one(_guide(), kind));
 
-      expect(find.byTooltip('Ver PDF'), findsNothing);
+      expect(find.byTooltip('Ver PDF'), findsOneWidget);
       expect(find.byTooltip('Ver comprobante PDF'), findsOneWidget);
+    });
+
+    testWidgets('una nota de crédito tiene el mismo par de botones', (tester) async {
+      await pump(
+        tester,
+        OtherDocumentKind.notaCredito,
+        build: (kind, page) => one(_creditNote(), kind),
+      );
+
+      expect(find.byTooltip('Ver PDF'), findsOneWidget);
+      expect(find.byTooltip('Ver comprobante PDF'), findsOneWidget);
+    });
+
+    testWidgets('una guía cuya venta no llegó no ofrece PDF', (tester) async {
+      await pump(
+        tester,
+        OtherDocumentKind.guia,
+        build: (kind, page) => one({..._guide()..remove('boleta')}, kind),
+      );
+
+      expect(find.byTooltip('Ver PDF'), findsNothing);
+      expect(find.byTooltip('Ver comprobante PDF'), findsNothing);
     });
 
     testWidgets('traslados: ver detalle muestra los datos y cada producto con su recepción', (tester) async {
@@ -754,7 +826,9 @@ void main() {
       expect(find.text('CALLE SOL 45 · CAYMA, AREQUIPA, AREQUIPA'), findsOneWidget);
       expect(find.text('TRANSPORTES SAC'), findsOneWidget);
       expect(find.text('Frágil'), findsOneWidget);
-      expect(find.text('Ver comprobante'), findsOneWidget);
+      expect(find.text('Motivo de traslado'), findsOneWidget);
+      expect(find.text('01 - Venta'), findsOneWidget);
+      expect(find.text('Ver PDF'), findsOneWidget);
     });
 
     testWidgets('notas de crédito: número, comprobante y motivo', (tester) async {
@@ -771,7 +845,7 @@ void main() {
       await tester.tap(find.byTooltip('Ver detalle'));
       await tester.pumpAndSettle();
       expect(find.text('Motivo'), findsOneWidget);
-      expect(find.text('Ver comprobante'), findsOneWidget);
+      expect(find.text('Ver PDF'), findsOneWidget);
     });
 
     testWidgets('entradas de stock: monto en la tarjeta y detalle con costos y total', (tester) async {

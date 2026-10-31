@@ -104,22 +104,81 @@ class CreateSaleUseCase {
       if (form.tipoDocumento != SaleDocumentType.boleta) {
         return 'Sin documento del cliente solo se puede emitir Boleta de Venta';
       }
-      if (form.total >= 700) {
+      if (form.totalEnSoles >= 700) {
         return 'No se puede emitir boleta sin documento para montos de S/700 o más';
       }
     }
     if (form.total <= 0) return 'El total de la venta debe ser mayor a 0';
-    return withPayments ? validatePayments(form.payments, form.total) : null;
+    return withPayments ? validatePayments(form) : null;
   }
 
-  /// Los pagos deben tener forma y monto, y sumar el total de la venta.
-  static String? validatePayments(List<SalePaymentEntity> payments, double total) {
+  /// Los pagos deben tener forma y monto, sumar el total de la venta y cumplir las reglas del
+  /// crédito (cuotas y línea disponible) y de los puntos. En dólares, el tipo de cambio debe estar
+  /// en el rango que exige el backend.
+  static String? validatePayments(SaleFormEntity form) => checkPayments(
+        payments: form.payments,
+        total: form.total,
+        dolares: form.dolares,
+        tipoCambio: form.tipoCambio,
+        client: form.client,
+        minimoCanjePuntos: form.minimoCanjePuntos,
+      );
+
+  /// Las reglas de [validatePayments] sobre lo que se llena en el modal "Crear venta" (sin armar
+  /// la venta entera): el modal las usa para saber cuándo se puede crear.
+  static String? checkPayments({
+    required List<SalePaymentEntity> payments,
+    required double total,
+    required bool dolares,
+    required double? tipoCambio,
+    required ClientEntity? client,
+    required double minimoCanjePuntos,
+  }) {
     if (payments.isEmpty) return 'Elige la forma de pago';
+
+    final tc = tipoCambio ?? 1;
+    if (dolares && (tipoCambio == null || tc < saleExchangeRateMin || tc > saleExchangeRateMax)) {
+      return 'El tipo de cambio debe estar entre 3.000 y 4.300';
+    }
+
+    var paid = 0.0;
+    var credits = 0;
     for (final p in payments) {
       if (p.monto <= 0) return 'Escribe el monto de cada forma de pago';
+      // Los puntos se canjean en soles: en una venta en dólares se convierten.
+      paid += dolares && p.kind == PaymentKind.puntos ? p.monto / tc : p.monto;
+
+      if (p.kind == PaymentKind.puntos) {
+        final points = client?.creditoAFavor ?? 0;
+        if (p.monto > points) return 'El cliente solo tiene S/. ${points.toStringAsFixed(2)} en puntos';
+        if (p.monto < minimoCanjePuntos) {
+          return 'El mínimo para canjear puntos es ${formatQuantity(minimoCanjePuntos)}';
+        }
+      }
+
+      if (p.conCuotas) {
+        credits++;
+        // La línea de crédito está en soles: en una venta en dólares se compara en dólares.
+        final available = (client?.creditoDisponible ?? 0) / (dolares ? tc : 1);
+        if (roundMoney(p.monto) > roundMoney(available)) {
+          return 'No tiene suficiente crédito para esta operación '
+              '(disponible: ${dolares ? r'$' : 'S/.'} ${available.toStringAsFixed(2)})';
+        }
+        if (p.installments.isEmpty) return 'Agrega las cuotas del crédito';
+        var cuotas = 0.0;
+        for (final i in p.installments) {
+          if (i.monto <= 0) return 'Escribe el monto de cada cuota';
+          cuotas += i.monto;
+        }
+        if (roundMoney(cuotas) != roundMoney(p.monto)) {
+          return 'La suma de las cuotas debe ser igual al monto del crédito';
+        }
+      }
     }
-    final paid = roundMoney(payments.fold<double>(0, (sum, p) => sum + p.monto));
-    if (paid != roundMoney(total)) return 'Los métodos de pago deben sumar el total de la venta';
+    if (credits > 1) return 'Solo se puede usar una forma de pago a crédito por venta';
+    if (roundMoney(paid) != roundMoney(total)) {
+      return 'Los métodos de pago deben sumar el total de la venta';
+    }
     return null;
   }
 

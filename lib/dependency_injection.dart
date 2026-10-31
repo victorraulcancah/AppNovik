@@ -7,6 +7,7 @@ import 'data/datasources/auth_local_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
+import 'data/datasources/guide_remote_datasource.dart';
 import 'data/datasources/other_document_remote_datasource.dart';
 import 'data/datasources/product_remote_datasource.dart';
 import 'data/datasources/report_remote_datasource.dart';
@@ -16,6 +17,7 @@ import 'data/datasources/theme_local_datasource.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/client_repository_impl.dart';
 import 'data/repositories/document_repository_impl.dart';
+import 'data/repositories/guide_repository_impl.dart';
 import 'data/repositories/other_document_repository_impl.dart';
 import 'data/repositories/product_repository_impl.dart';
 import 'data/repositories/report_repository_impl.dart';
@@ -26,6 +28,7 @@ import 'data/repositories/stock_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/client_repository.dart';
 import 'domain/repositories/document_repository.dart';
+import 'domain/repositories/guide_repository.dart';
 import 'domain/repositories/other_document_repository.dart';
 import 'domain/repositories/product_repository.dart';
 import 'domain/repositories/report_repository.dart';
@@ -34,6 +37,7 @@ import 'domain/repositories/stock_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
+import 'domain/usecases/guide_usecases.dart';
 import 'domain/usecases/other_document_usecases.dart';
 import 'domain/usecases/product_usecases.dart';
 import 'domain/usecases/report_usecases.dart';
@@ -44,10 +48,12 @@ import 'domain/usecases/stock_usecases.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/other_documents_provider.dart';
 import 'presentation/providers/clients_provider.dart';
+import 'presentation/providers/guide_provider.dart';
 import 'presentation/providers/documents_provider.dart';
 import 'presentation/providers/products_provider.dart';
 import 'presentation/providers/reports_provider.dart';
 import 'presentation/providers/sales_provider.dart';
+import 'presentation/providers/shell_navigation.dart';
 import 'presentation/providers/stock_provider.dart';
 import 'presentation/providers/theme_provider.dart';
 
@@ -69,6 +75,8 @@ class DependencyInjection {
                 ClearSavedCredentialsUseCase(repository: _authRepository),
           ),
         ),
+
+        ChangeNotifierProvider<ShellNavigation>(create: (_) => ShellNavigation()),
 
         ChangeNotifierProvider<ThemeProvider>(
           create: (context) =>
@@ -156,6 +164,16 @@ class DependencyInjection {
           update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),
 
+        ChangeNotifierProxyProvider<AuthProvider, GuideProvider>(
+          create: (context) => GuideProvider(
+            getDefaultsUseCase: GetGuideDefaultsUseCase(repository: _guideRepository),
+            findDriverUseCase: FindDriverUseCase(repository: _guideRepository),
+            createGuideUseCase: CreateGuideUseCase(repository: _guideRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
         ChangeNotifierProxyProvider<AuthProvider, StockProvider>(
           create: (context) => StockProvider(
             getWarehousesUseCase: GetWarehousesUseCase(repository: _stockRepository),
@@ -186,6 +204,11 @@ class DependencyInjection {
 
   static OtherDocumentRepository get _otherDocumentRepository => OtherDocumentRepositoryImpl(
         remoteDataSource: OtherDocumentRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static GuideRepository get _guideRepository => GuideRepositoryImpl(
+        remoteDataSource: GuideRemoteDataSourceImpl(client: _httpClient),
         authLocalDataSource: _authLocalDataSource,
       );
 

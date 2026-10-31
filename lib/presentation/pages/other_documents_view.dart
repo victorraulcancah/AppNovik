@@ -228,7 +228,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
             label: 'Ver comprobante PDF',
             onPressed: () => _openReceipt(d),
           ),
-        if (hasOtherDocumentPdf(d.kind))
+        if (otherDocumentPdfAvailable(d))
           AppActionButton(type: AppActionType.pdf, label: 'Ver PDF', onPressed: () => _openPdf(d)),
         if (d.sePuedeEliminar && _can('transferir-stock.destroy'))
           AppActionButton(type: AppActionType.delete, onPressed: () => _delete(d)),

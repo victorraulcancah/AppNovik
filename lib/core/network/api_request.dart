@@ -8,8 +8,11 @@ import '../errors/exceptions.dart';
 
 /// Hace una petición a la API de 7power y devuelve el JSON de la respuesta.
 /// Traduce los errores del backend y de la red a las excepciones de la app.
-Future<dynamic> sendApiRequest(Future<http.Response> Function() request) async {
-  final response = await _send(request);
+///
+/// [timeout] reemplaza el tiempo de espera de siempre en las peticiones que tardan más (por
+/// ejemplo, emitir un documento ante la SUNAT).
+Future<dynamic> sendApiRequest(Future<http.Response> Function() request, {Duration? timeout}) async {
+  final response = await _send(request, timeout: timeout);
   try {
     return json.decode(response.body);
   } on FormatException catch (e) {
@@ -23,9 +26,9 @@ Future<Uint8List> sendApiBytes(Future<http.Response> Function() request) async {
   return response.bodyBytes;
 }
 
-Future<http.Response> _send(Future<http.Response> Function() request) async {
+Future<http.Response> _send(Future<http.Response> Function() request, {Duration? timeout}) async {
   try {
-    final response = await request().timeout(ApiConstants.connectionTimeout);
+    final response = await request().timeout(timeout ?? ApiConstants.connectionTimeout);
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response;

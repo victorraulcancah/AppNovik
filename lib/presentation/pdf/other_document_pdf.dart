@@ -4,15 +4,28 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
+import '../../domain/entities/company_entity.dart';
 import '../../domain/entities/other_document_entity.dart';
 import 'receipt_pdf.dart' show loadPdfTheme, pdfBand;
+import 'sunat_document_pdf.dart';
 
 final _date = DateFormat(AppConstants.dateFormat);
 
-/// Los documentos de la web que se pueden bajar en PDF desde Documentos (las guías de remisión y
-/// las notas de crédito llevan datos de SUNAT y aún no).
-bool hasOtherDocumentPdf(OtherDocumentKind kind) =>
-    kind == OtherDocumentKind.traslado || kind == OtherDocumentKind.entradaStock;
+/// Los cuatro documentos de Documentos tienen su PDF, como en la web.
+bool hasOtherDocumentPdf(OtherDocumentKind kind) => true;
+
+/// El PDF de una guía o una nota de crédito lleva los productos y el cliente de su venta: si la
+/// lista no los trajo, no se puede armar.
+bool otherDocumentPdfAvailable(OtherDocumentEntity d) =>
+    switch (d.kind) {
+      OtherDocumentKind.traslado || OtherDocumentKind.entradaStock => true,
+      OtherDocumentKind.guia => d.guia != null && d.comprobante != null,
+      OtherDocumentKind.notaCredito => d.nota != null && d.comprobante != null,
+    };
+
+/// Guías de remisión y notas de crédito llevan la cabecera de la empresa y su logo.
+bool otherDocumentPdfNeedsCompany(OtherDocumentKind kind) =>
+    kind == OtherDocumentKind.guia || kind == OtherDocumentKind.notaCredito;
 
 const _line = PdfColor(0.9, 0.9, 0.9);
 const _rule = PdfColor(0.75, 0.74, 0.74);
@@ -27,8 +40,17 @@ String _moneda(double v) => 'S/. ${_money.format(v)}';
 Future<Uint8List> buildOtherDocumentPdf({
   required OtherDocumentEntity document,
   bool showAmounts = true,
+  CompanyEntity? company,
+  Uint8List? logo,
 }) async {
-  assert(hasOtherDocumentPdf(document.kind), 'Solo traslados y entradas de stock tienen PDF');
+  // La guía y la nota de crédito tienen su propio diseño (con la cabecera de la empresa).
+  if (otherDocumentPdfNeedsCompany(document.kind)) {
+    assert(company != null, 'La guía y la nota de crédito necesitan la empresa');
+    final c = company ?? const CompanyEntity(id: 0, razonSocial: '-');
+    return document.kind == OtherDocumentKind.guia
+        ? buildGuidePdf(document: document, company: c, logo: logo)
+        : buildCreditNotePdf(document: document, company: c, logo: logo);
+  }
   final d = document;
   final isTransfer = d.kind == OtherDocumentKind.traslado;
   // Los traslados siempre muestran los importes; las entradas, salvo para el Jefe de Almacén.

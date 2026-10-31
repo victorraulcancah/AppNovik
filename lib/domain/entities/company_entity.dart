@@ -28,6 +28,10 @@ class CompanyEntity {
 
   /// Impuesto a la renta (fracción, 0.015 = 1.5 %): se descuenta del margen neto en Reportes.
   final double? renta;
+
+  /// Programa de puntos: si está activo y el mínimo de puntos que se pueden canjear al pagar.
+  final bool programaDePuntos;
+  final double minimoCanjePuntos;
   final PlanEntity? plan;
 
   /// Tiene certificado digital: puede emitir boletas y facturas a SUNAT.
@@ -44,6 +48,8 @@ class CompanyEntity {
     this.web,
     this.igv,
     this.renta,
+    this.programaDePuntos = false,
+    this.minimoCanjePuntos = 0,
     this.plan,
     this.emiteComprobantes = false,
   });
