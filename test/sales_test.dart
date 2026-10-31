@@ -1,5 +1,7 @@
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
+import 'package:app_novik/data/datasources/sale_remote_datasource.dart';
+import 'package:app_novik/data/models/document_model.dart';
 import 'package:app_novik/data/models/sale_model.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/data/models/client_model.dart';
@@ -29,6 +31,8 @@ import 'package:app_novik/presentation/widgets/sale_modals.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 class _FakeStockRepository implements StockRepository {
@@ -78,6 +82,7 @@ class _FakeSaleRepository implements SaleRepository {
   int rateCalls = 0;
   bool rateFails = false;
   bool walkInFails = false;
+  bool searchFails = false;
 
   @override
   Future<Either<Failure, ExchangeRateEntity>> getExchangeRate() async {
@@ -117,7 +122,9 @@ class _FakeSaleRepository implements SaleRepository {
     required int companyId,
     required String search,
   }) async =>
-      Either.right(products ?? [_product()]);
+      searchFails
+          ? Either.left(const NetworkFailure('Sin conexión a internet'))
+          : Either.right(products ?? [_product()]);
 
   @override
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods() async =>
@@ -239,10 +246,18 @@ SessionContextEntity _session({
   bool certificado = false,
   List<String> roles = const [],
   Set<String> permissions = const {'ventas.store'},
+  bool puntos = false,
+  double minimoCanje = 0,
 }) =>
     SessionContextEntity(
       user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
-      company: CompanyEntity(id: companyId, razonSocial: 'ACME', emiteComprobantes: certificado),
+      company: CompanyEntity(
+        id: companyId,
+        razonSocial: 'ACME',
+        emiteComprobantes: certificado,
+        programaDePuntos: puntos,
+        minimoCanjePuntos: minimoCanje,
+      ),
       modules: const [],
       permissions: permissions,
       roles: roles,
@@ -266,8 +281,14 @@ SalesProvider _provider(_FakeSaleRepository sales) {
   );
 }
 
-Future<SalesProvider> _ready(_FakeSaleRepository repo, {bool certificado = false}) async {
-  final p = _provider(repo)..syncSession(_session(certificado: certificado));
+Future<SalesProvider> _ready(
+  _FakeSaleRepository repo, {
+  bool certificado = false,
+  bool puntos = false,
+  double minimoCanje = 0,
+}) async {
+  final p = _provider(repo)
+    ..syncSession(_session(certificado: certificado, puntos: puntos, minimoCanje: minimoCanje));
   await p.ensureLoaded();
   return p;
 }
@@ -1857,6 +1878,842 @@ void main() {
 
       expect(repo.sent!.reservarStock, isFalse);
       expect(repo.sent!.vencimientoStock, isNull);
+    });
+  });
+
+  group('Ventas en dólares, a crédito y con puntos (reglas)', () {
+    test('las cuotas se reparten al céntimo y lo que sobra va a las primeras', () {
+      expect(splitInstallments(100, 3), [33.34, 33.33, 33.33]);
+      expect(splitInstallments(10, 4), [2.5, 2.5, 2.5, 2.5]);
+      expect(splitInstallments(0.05, 3), [0.02, 0.02, 0.01]);
+      expect(splitInstallments(100, 1), [100]);
+      expect(splitInstallments(100, 0), isEmpty);
+    });
+
+    test('el vencimiento de las cuotas cuenta por día, semana, mes o año', () {
+      final from = DateTime(2026, 10, 31);
+
+      expect(SalePlazo.day.after(from, 1), DateTime(2026, 11, 1));
+      expect(SalePlazo.week.after(from, 2), DateTime(2026, 11, 14));
+      expect(SalePlazo.month.after(from, 1), DateTime(2026, 11, 30)); // noviembre no tiene 31
+      expect(SalePlazo.month.after(DateTime(2026, 1, 31), 1), DateTime(2026, 2, 28));
+      expect(SalePlazo.month.after(from, 3), DateTime(2027, 1, 31));
+      expect(SalePlazo.year.after(DateTime(2024, 2, 29), 1), DateTime(2025, 2, 28));
+    });
+
+    String? check({
+      required List<SalePaymentEntity> payments,
+      double total = 100,
+      bool dolares = false,
+      double? tc,
+      ClientEntity? client = _acme,
+      double minimo = 0,
+    }) =>
+        CreateSaleUseCase.checkPayments(
+          payments: payments,
+          total: total,
+          dolares: dolares,
+          tipoCambio: tc,
+          client: client,
+          minimoCanjePuntos: minimo,
+        );
+
+    const efectivo = SalePaymentEntity(paymentMethodId: 2, monto: 100);
+
+    test('en dólares el tipo de cambio debe estar entre 3.000 y 4.300', () {
+      const dolar = SalePaymentEntity(paymentMethodId: 2, monto: 40);
+
+      expect(check(payments: [dolar], total: 40, dolares: true, tc: null), contains('entre 3.000 y 4.300'));
+      expect(check(payments: [dolar], total: 40, dolares: true, tc: 2.999), contains('entre 3.000 y 4.300'));
+      expect(check(payments: [dolar], total: 40, dolares: true, tc: 4.301), contains('entre 3.000 y 4.300'));
+      expect(check(payments: [dolar], total: 40, dolares: true, tc: 3), isNull);
+      expect(check(payments: [dolar], total: 40, dolares: true, tc: 4.3), isNull);
+    });
+
+    test('los pagos deben sumar el total', () {
+      expect(check(payments: const [SalePaymentEntity(paymentMethodId: 2, monto: 60)]), contains('deben sumar'));
+      expect(check(payments: [efectivo]), isNull);
+    });
+
+    test('los puntos se canjean en soles: en una venta en dólares se convierten', () {
+      // 40 dólares con tipo de cambio 3.5: 35 soles en puntos son 10 dólares.
+      const client = ClientEntity(id: 1, name: 'A', creditoAFavor: 100);
+      const puntos = SalePaymentEntity(paymentMethodId: 4, monto: 35, kind: PaymentKind.puntos);
+      const efectivoUsd = SalePaymentEntity(paymentMethodId: 2, monto: 30);
+
+      expect(
+        check(payments: const [efectivoUsd, puntos], total: 40, dolares: true, tc: 3.5, client: client, minimo: 10),
+        isNull,
+      );
+    });
+
+    test('los puntos no pasan de los del cliente ni bajan del mínimo', () {
+      const client = ClientEntity(id: 1, name: 'A', creditoAFavor: 30);
+      const resto = SalePaymentEntity(paymentMethodId: 2, monto: 70);
+
+      expect(
+        check(
+          payments: const [resto, SalePaymentEntity(paymentMethodId: 4, monto: 40, kind: PaymentKind.puntos)],
+          client: client,
+        ),
+        contains('solo tiene S/. 30.00 en puntos'),
+      );
+      expect(
+        check(
+          payments: const [
+            SalePaymentEntity(paymentMethodId: 2, monto: 95),
+            SalePaymentEntity(paymentMethodId: 4, monto: 5, kind: PaymentKind.puntos),
+          ],
+          client: client,
+          minimo: 10,
+        ),
+        contains('mínimo para canjear puntos es 10'),
+      );
+      expect(
+        check(
+          payments: const [resto, SalePaymentEntity(paymentMethodId: 4, monto: 30, kind: PaymentKind.puntos)],
+          client: client,
+          minimo: 10,
+        ),
+        isNull,
+      );
+    });
+
+    SalePaymentEntity credito(double monto, List<double> cuotas, {PaymentKind kind = PaymentKind.credito}) =>
+        SalePaymentEntity(
+          paymentMethodId: 1,
+          monto: monto,
+          kind: kind,
+          plazo: SalePlazo.month,
+          installments: [
+            for (var i = 0; i < cuotas.length; i++)
+              SaleInstallmentEntity(monto: cuotas[i], fechaVencimiento: DateTime(2026, 11 + i, 30)),
+          ],
+        );
+
+    test('el crédito necesita cuotas que sumen su monto', () {
+      const client = ClientEntity(id: 1, name: 'A', credito: 500, creditoDisponible: 500);
+
+      expect(check(payments: [credito(100, const [])], client: client), 'Agrega las cuotas del crédito');
+      expect(
+        check(payments: [credito(100, const [60, 30])], client: client),
+        'La suma de las cuotas debe ser igual al monto del crédito',
+      );
+      expect(check(payments: [credito(100, const [60, 0])], client: client), 'Escribe el monto de cada cuota');
+      expect(check(payments: [credito(100, const [50, 50])], client: client), isNull);
+    });
+
+    test('el crédito no pasa de lo disponible del cliente (en soles; en dólares, convertido)', () {
+      const client = ClientEntity(id: 1, name: 'A', credito: 1000, creditoDisponible: 80);
+
+      expect(
+        check(payments: [credito(100, const [100])], client: client),
+        contains('No tiene suficiente crédito'),
+      );
+      expect(check(payments: [credito(80, const [80])], total: 80, client: client), isNull);
+      // 80 soles con tipo de cambio 4 son 20 dólares: 25 dólares no alcanza, 20 sí.
+      expect(
+        check(payments: [credito(25, const [25])], total: 25, dolares: true, tc: 4, client: client),
+        contains('No tiene suficiente crédito'),
+      );
+      expect(check(payments: [credito(20, const [20])], total: 20, dolares: true, tc: 4, client: client), isNull);
+    });
+
+    test('el plazo también lleva cuotas y cuenta como crédito; solo uno por venta', () {
+      const client = ClientEntity(id: 1, name: 'A', credito: 500, creditoDisponible: 500);
+
+      expect(
+        check(
+          payments: [
+            credito(50, const [50]),
+            credito(50, const [50], kind: PaymentKind.plazo),
+          ],
+          client: client,
+        ),
+        contains('una forma de pago a crédito'),
+      );
+    });
+
+    test('POST /ventas en dólares: totales, líneas y tipo de cambio', () {
+      final form = SaleFormEntity(
+        tipoDocumento: SaleDocumentType.ticket,
+        client: _acme,
+        warehouseId: 1,
+        dolares: true,
+        tipoCambio: 3.5,
+        payments: const [SalePaymentEntity(paymentMethodId: 2, monto: 40)],
+        lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 20)],
+      );
+
+      final body = saleToJson(form, companyId: 3, userId: 9);
+
+      expect(body['totales_soles'], 0);
+      expect(body['totales_dolares'], 40);
+      expect(body['tipo_de_cambio'], 3.5);
+      expect((body['product_sales'] as List).single['dolares'], true);
+      expect(form.totalEnSoles, 140);
+    });
+
+    test('POST /ventas a crédito: cuotas con su fecha y el plazo', () {
+      final form = SaleFormEntity(
+        tipoDocumento: SaleDocumentType.ticket,
+        client: _acme,
+        warehouseId: 1,
+        payments: [
+          SalePaymentEntity(
+            paymentMethodId: 1,
+            monto: 100,
+            kind: PaymentKind.credito,
+            plazo: SalePlazo.month,
+            installments: [
+              SaleInstallmentEntity(monto: 50, fechaVencimiento: DateTime(2026, 11, 30)),
+              SaleInstallmentEntity(monto: 50, fechaVencimiento: DateTime(2026, 12, 30)),
+            ],
+          ),
+        ],
+        lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 50)],
+      );
+
+      final pago = (saleToJson(form, companyId: 3, userId: 9)['payment_methods'] as List).single as Map;
+
+      expect(pago['plazo'], 'month');
+      expect(pago['installments'], [
+        {'monto': 50, 'fecha_vencimiento': '2026-11-30'},
+        {'monto': 50, 'fecha_vencimiento': '2026-12-30'},
+      ]);
+    });
+
+    test('un pago sin cuotas no manda installments ni plazo', () {
+      final pago = (saleToJson(_form(), companyId: 3, userId: 9)['payment_methods'] as List).single as Map;
+
+      expect(pago.containsKey('installments'), isFalse);
+      expect(pago.containsKey('plazo'), isFalse);
+    });
+
+    test('al culminar una cotización la venta manda from_cotizacion', () {
+      final form = SaleFormEntity(
+        tipoDocumento: SaleDocumentType.ticket,
+        client: _acme,
+        warehouseId: 1,
+        fromQuoteId: 12,
+        payments: const [SalePaymentEntity(paymentMethodId: 2, monto: 100)],
+        lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 50)],
+      );
+
+      expect(saleToJson(form, companyId: 3, userId: 9)['from_cotizacion'], 12);
+      expect(saleToJson(_form(), companyId: 3, userId: 9).containsKey('from_cotizacion'), isFalse);
+    });
+
+    test('una cotización en dólares guarda sus totales en dólares', () {
+      final form = SaleFormEntity(
+        tipoDocumento: SaleDocumentType.cotizacion,
+        client: _acme,
+        warehouseId: 1,
+        priceListId: 12,
+        dolares: true,
+        lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 20)],
+      );
+
+      final body = quoteToJson(form, companyId: 3, userId: 9);
+
+      expect(body['totales_soles'], 0);
+      expect(body['totales_dolares'], 40);
+      expect((body['product_sales'] as List).single['dolares'], true);
+    });
+
+    test('el cliente trae su crédito disponible y sus puntos', () {
+      final c = clientFromJson({
+        'id': 1,
+        'razon_social': 'ACME',
+        'credito': '1000',
+        'credito_disponible': 250.5,
+        'credito_a_favor': 30,
+      });
+
+      expect(c.credito, 1000);
+      expect(c.creditoDisponible, 250.5);
+      expect(c.creditoAFavor, 30);
+      expect(c.tieneCredito, isTrue);
+      expect(clientFromJson({'id': 2, 'name': 'X'}).tieneCredito, isFalse);
+    });
+
+    test('POST /cotizaciones o PUT al editar una cotización existente', () async {
+      final requests = <http.BaseRequest>[];
+      final dataSource = SaleRemoteDataSourceImpl(
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response('{"id": 2, "nro_documento": 2, "total_soles": 100}', 200);
+        }),
+      );
+      SaleFormEntity quote({int? fromQuoteId}) => SaleFormEntity(
+            tipoDocumento: SaleDocumentType.cotizacion,
+            client: _acme,
+            warehouseId: 1,
+            priceListId: 11,
+            fromQuoteId: fromQuoteId,
+            lines: [SaleLineEntity(product: _product(), cantidad: 2, precio: 50)],
+          );
+
+      await dataSource.createSale(token: 't', companyId: 1, userId: 9, form: quote());
+      await dataSource.createSale(token: 't', companyId: 1, userId: 9, form: quote(fromQuoteId: 2));
+
+      expect(requests.first.method, 'POST');
+      expect(requests.first.url.path, endsWith('/cotizaciones'));
+      expect(requests.last.method, 'PUT');
+      expect(requests.last.url.path, endsWith('/cotizaciones/2'));
+    });
+  });
+
+  group('Culminar una cotización como venta', () {
+    Map<String, dynamic> quoteJson({bool reservar = true, String vencimiento = '2026-11-05', bool dolares = false}) => {
+          'id': 2,
+          'nro_documento': 2,
+          'total_soles': '160',
+          'total_dolares': 0,
+          'estado': true,
+          'reservar_stock': reservar,
+          'vencimiento_stock': vencimiento,
+          'warehouse_id': 1,
+          'list_price_id': dolares ? 12 : 11,
+          'observaciones': 'Entregar en tienda',
+          'client': {
+            'id': 7,
+            'razon_social': 'ACME SAC',
+            'dni_ruc': '20123456789',
+            'tipo': 'e',
+            'list_price_id': 10,
+            'credito': 300,
+            'credito_disponible': 200,
+          },
+          'warehouse': {'name': 'LIMA'},
+          'products': [
+            {
+              'id': 100,
+              'codigo': 'SUB-12',
+              'name': 'SUBWOOFER 12"',
+              'brand': {'name': 'PIONEER'},
+              'pivot': {'cantidad': 3, 'precio': '35', 'dolares': dolares, 'subtotal': 105},
+            },
+            {
+              'id': 101,
+              'codigo': 'CAB-1',
+              'name': 'CABLE RCA',
+              'pivot': {'cantidad': 1, 'precio': '10', 'dolares': dolares, 'subtotal': 10},
+            },
+            // El mismo producto en dos líneas: la venta lleva una línea por producto.
+            {
+              'id': 100,
+              'codigo': 'SUB-12',
+              'name': 'SUBWOOFER 12"',
+              'pivot': {'cantidad': 2, 'precio': '35', 'dolares': dolares, 'subtotal': 70},
+            },
+          ],
+        };
+
+    DocumentEntity quote({bool reservar = true, String vencimiento = '2026-11-05', bool dolares = false}) =>
+        documentFromJson(quoteJson(reservar: reservar, vencimiento: vencimiento, dolares: dolares), DocumentKind.cotizacion);
+
+    Future<(_FakeSaleRepository, SalesProvider)> ready({DateTime? now}) async {
+      final repo = _FakeSaleRepository()
+        ..products = [
+          _product(prices: const {10: 50, 11: 40, 12: 20}), // 5 en el almacén 1
+          _product(id: 101, name: 'CABLE RCA', codigo: 'CAB-1', stock: const {1: 9}, prices: const {11: 12}),
+        ];
+      final stock = _FakeStockRepository();
+      final p = SalesProvider(
+        getWarehousesUseCase: GetWarehousesUseCase(repository: stock),
+        getPriceListsUseCase: GetPriceListsUseCase(repository: stock),
+        getPaymentMethodsUseCase: GetPaymentMethodsUseCase(repository: repo),
+        getSaleProductFiltersUseCase: GetSaleProductFiltersUseCase(repository: repo),
+        getExchangeRateUseCase: GetExchangeRateUseCase(repository: repo),
+        getWalkInClientUseCase: GetWalkInClientUseCase(repository: repo),
+        searchClientsUseCase: SearchClientsUseCase(repository: repo),
+        searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: repo),
+        createSaleUseCase: CreateSaleUseCase(repository: repo),
+        now: () => now ?? DateTime(2026, 10, 31, 10),
+      )..syncSession(_session());
+      await p.ensureLoaded();
+      return (repo, p);
+    }
+
+    test('la cotización trae su cliente, almacén, lista, líneas y precios', () {
+      final d = quote().quoteDraft!;
+
+      expect(d.id, 2);
+      expect(d.client.name, 'ACME SAC');
+      expect(d.client.creditoDisponible, 200);
+      expect(d.warehouseId, 1);
+      expect(d.priceListId, 11);
+      expect(d.lines, hasLength(3));
+      expect(d.lines.first.precio, 35);
+      expect(d.lines.first.cantidad, 3);
+      expect(d.esDolares, isFalse);
+      expect(quote(dolares: true).quoteDraft!.esDolares, isTrue);
+    });
+
+    test('una venta no trae borrador de cotización', () {
+      expect(_sale().quoteDraft, isNull);
+    });
+
+    test('cargarla en Ventas deja el cliente, el almacén, la lista y las líneas con sus precios', () async {
+      final (_, p) = await ready();
+
+      final problem = await p.loadFromQuote(quote());
+
+      expect(problem, isNull);
+      expect(p.fromQuote?.numero, 'C001-0002');
+      expect(p.client?.name, 'ACME SAC');
+      expect(p.warehouseId, 1);
+      expect(p.priceListId, 11);
+      expect(p.tipoDocumento, SaleDocumentType.ticket);
+      expect(p.observaciones, 'Entregar en tienda');
+      // Dos líneas del subwoofer se juntan: 3 + 2.
+      expect(p.lines.map((l) => (l.product.id, l.cantidad, l.precio)), [(100, 5, 35.0), (101, 1, 10.0)]);
+      expect(p.total, 185);
+      expect(p.quoteLoading, isFalse);
+    });
+
+    test('con la reserva vigente, lo reservado cuenta como disponible', () async {
+      // Hay 5 subwoofers en el almacén y 5 reservados: se pueden vender 10.
+      final (_, p) = await ready();
+
+      await p.loadFromQuote(quote(vencimiento: '2026-11-05'));
+
+      expect(p.lines.first.product.maximoEn(1), 10);
+      expect(p.setCantidad(0, 10), isNull);
+      expect(p.lines.first.cantidad, 10);
+      expect(p.setCantidad(0, 11), isNotNull); // pasa del tope
+    });
+
+    test('con la reserva vencida solo cuenta el stock que hay', () async {
+      final (_, p) = await ready();
+
+      await p.loadFromQuote(quote(vencimiento: '2026-10-29')); // venció antes de ayer
+
+      expect(p.lines.first.product.maximoEn(1), 5);
+    });
+
+    test('una cotización sin reserva no suma nada al stock', () async {
+      final (_, p) = await ready();
+
+      await p.loadFromQuote(quote(reservar: false));
+
+      expect(p.lines.first.product.maximoEn(1), 5);
+    });
+
+    test('al registrar la venta se manda from_cotizacion y el borrador queda limpio', () async {
+      final (repo, p) = await ready();
+      await p.loadFromQuote(quote());
+
+      final ok = await p.submit(checkout: _checkout(185));
+
+      expect(ok, isTrue);
+      expect(repo.sent!.fromQuoteId, 2);
+      expect(repo.sent!.tipoDocumento, SaleDocumentType.ticket);
+      expect(p.fromQuote, isNull);
+      expect(p.lines, isEmpty);
+    });
+
+    test('editarla: elegir cotización y guardar actualiza la misma (mismo id)', () async {
+      final (repo, p) = await ready();
+      await p.loadFromQuote(quote());
+      p.selectTipoDocumento(SaleDocumentType.cotizacion);
+
+      final ok = await p.submit();
+
+      expect(ok, isTrue);
+      expect(repo.sent!.tipoDocumento, SaleDocumentType.cotizacion);
+      expect(repo.sent!.fromQuoteId, 2);
+    });
+
+    test('Cancelar limpia la venta y deja de trabajar con la cotización', () async {
+      final (_, p) = await ready();
+      await p.loadFromQuote(quote());
+
+      p.cancelQuote();
+
+      expect(p.fromQuote, isNull);
+      expect(p.lines, isEmpty);
+      expect(p.client, isNull);
+      expect(p.tipoDocumento, SaleDocumentType.ticket);
+    });
+
+    test('una cotización en dólares abre la venta en dólares', () async {
+      final (_, p) = await ready();
+
+      await p.loadFromQuote(quote(dolares: true));
+
+      expect(p.priceListId, 12);
+      expect(p.esDolares, isTrue);
+      expect(p.moneySymbol, r'$');
+    });
+
+    test('si no se pueden pedir los productos queda el motivo y no se carga nada', () async {
+      final (repo, p) = await ready();
+      repo.searchFails = true;
+
+      final problem = await p.loadFromQuote(quote());
+
+      expect(problem, 'Sin conexión a internet');
+      expect(p.quoteError, 'Sin conexión a internet');
+      expect(p.fromQuote, isNull);
+      expect(p.lines, isEmpty);
+      expect(p.quoteLoading, isFalse);
+    });
+
+    test('una cotización sin datos del cliente o del almacén no se puede cargar', () async {
+      final (_, p) = await ready();
+
+      final problem = await p.loadFromQuote(_quote()); // sin borrador
+
+      expect(problem, 'No se pudo leer la cotización');
+    });
+  });
+
+  group('Formas de pago según el cliente y la empresa', () {
+    const conCredito = ClientEntity(
+      id: 7,
+      name: 'ACME SAC',
+      documento: '20123456789',
+      tipo: 'e',
+      credito: 500,
+      creditoDisponible: 400,
+      creditoAFavor: 30,
+      paymentMethodId: 1, // prefiere CRÉDITO
+    );
+
+    PaymentMethodEntity method(SalesProvider p, String name) => p.paymentMethods.firstWhere((m) => m.name == name);
+
+    test('los puntos solo se ofrecen si la empresa tiene el programa', () async {
+      final sin = await _ready(_FakeSaleRepository());
+      final con = await _ready(_FakeSaleRepository(), puntos: true);
+
+      expect(sin.offeredPaymentMethods.map((m) => m.name), isNot(contains('PUNTOS')));
+      expect(con.offeredPaymentMethods.map((m) => m.name), contains('PUNTOS'));
+    });
+
+    test('el crédito pide que el cliente tenga línea de crédito', () async {
+      final p = await _ready(_FakeSaleRepository());
+
+      p.selectClient(_acme);
+      expect(p.canUsePayment(method(p, 'CRÉDITO')), isFalse);
+
+      p.selectClient(conCredito);
+      expect(p.canUsePayment(method(p, 'CRÉDITO')), isTrue);
+      expect(p.canUsePayment(method(p, 'EFECTIVO')), isTrue);
+    });
+
+    test('los puntos piden que el cliente llegue al mínimo para canjear', () async {
+      final p = await _ready(_FakeSaleRepository(), puntos: true, minimoCanje: 50);
+
+      p.selectClient(conCredito); // 30 puntos
+      expect(p.canUsePayment(method(p, 'PUNTOS')), isFalse);
+
+      p.selectClient(const ClientEntity(id: 8, name: 'B', creditoAFavor: 80));
+      expect(p.canUsePayment(method(p, 'PUNTOS')), isTrue);
+    });
+
+    test('la forma de pago por defecto es la del cliente solo si la puede usar', () async {
+      final p = await _ready(_FakeSaleRepository());
+
+      p.selectClient(const ClientEntity(id: 9, name: 'C', paymentMethodId: 1)); // prefiere CRÉDITO, sin línea
+      expect(p.defaultPaymentMethodId, 2); // EFECTIVO
+
+      p.selectClient(conCredito);
+      expect(p.defaultPaymentMethodId, 1);
+    });
+
+    test('una venta en dólares no se puede hacer sin documento del cliente', () async {
+      final p = await _ready(_FakeSaleRepository(), certificado: true);
+      p.selectTipoDocumento(SaleDocumentType.boleta);
+      p.selectWarehouse(1);
+      p.addProduct(_product(prices: const {11: 40, 12: 20}), precio: 20);
+      p.selectPriceList(11);
+      expect(p.puedeSinDocumento, isTrue);
+
+      p.selectPriceList(12);
+      expect(p.puedeSinDocumento, isFalse);
+    });
+
+    test('registrar en dólares manda el tipo de cambio de la venta', () async {
+      final repo = _FakeSaleRepository();
+      final p = await _ready(repo);
+      p.selectWarehouse(1);
+      p.selectClient(_acme);
+      p.selectPriceList(12);
+      p.addProduct(_product(prices: const {12: 20}), cantidad: 2);
+
+      final ok = await p.submit(
+        checkout: const SaleCheckoutEntity(
+          payments: [SalePaymentEntity(paymentMethodId: 2, monto: 40)],
+          tipoCambio: 3.5,
+        ),
+      );
+
+      expect(ok, isTrue);
+      expect(repo.sent!.dolares, isTrue);
+      expect(repo.sent!.tipoCambio, 3.5);
+      expect(repo.sent!.total, 40);
+    });
+
+    test('registrar en dólares con un tipo de cambio fuera de rango se rechaza antes de enviar', () async {
+      final repo = _FakeSaleRepository();
+      final p = await _ready(repo);
+      p.selectWarehouse(1);
+      p.selectClient(_acme);
+      p.selectPriceList(12);
+      p.addProduct(_product(prices: const {12: 20}), cantidad: 2);
+
+      final ok = await p.submit(
+        checkout: const SaleCheckoutEntity(
+          payments: [SalePaymentEntity(paymentMethodId: 2, monto: 40)],
+          tipoCambio: 5,
+        ),
+      );
+
+      expect(ok, isFalse);
+      expect(p.submitError, contains('entre 3.000 y 4.300'));
+      expect(repo.sent, isNull);
+    });
+  });
+
+  group('Pantalla de ventas: dólares, crédito, puntos y cotización', () {
+    const conCredito = ClientEntity(
+      id: 7,
+      name: 'ACME SAC',
+      documento: '20123456789',
+      tipo: 'e',
+      credito: 500,
+      creditoDisponible: 500,
+      creditoAFavor: 0,
+    );
+
+    Future<(SalesProvider, _FakeSaleRepository)> pump(
+      WidgetTester tester, {
+      bool puntos = false,
+      double minimoCanje = 0,
+    }) async {
+      _phoneScreen(tester);
+      final repo = _FakeSaleRepository();
+      final session = _session(puntos: puntos, minimoCanje: minimoCanje);
+      final sales = _provider(repo)..syncSession(session);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: SalesPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (sales, repo);
+    }
+
+    Finder inSheet(Finder f) => find.descendant(of: find.byType(BottomSheet), matching: f);
+
+    Future<void> openCheckout(WidgetTester tester) async {
+      await tester.tap(find.text('Registrar venta'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('en dólares: símbolo de dólar, tipo de cambio editable y equivalente en soles', (tester) async {
+      final (sales, repo) = await pump(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(const ClientEntity(id: 7, name: 'ACME SAC', documento: '20123456789', tipo: 'e', listPriceId: 12));
+      sales.addProduct(_product(prices: const {12: 20}), cantidad: 2);
+      await tester.pumpAndSettle();
+
+      await openCheckout(tester);
+
+      expect(find.text(r'Ticket de Venta · Total $ 40.00'), findsOneWidget);
+      expect(inSheet(find.widgetWithText(TextField, '3.452')), findsOneWidget); // el oficial
+      expect(find.text('≈ S/. 138.08'), findsOneWidget); // 40 x 3.452
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(repo.sent!.dolares, isTrue);
+      expect(repo.sent!.tipoCambio, 3.452);
+    });
+
+    testWidgets('en dólares un tipo de cambio fuera de rango bloquea Crear', (tester) async {
+      final (sales, _) = await pump(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(const ClientEntity(id: 7, name: 'ACME SAC', documento: '20123456789', tipo: 'e', listPriceId: 12));
+      sales.addProduct(_product(prices: const {12: 20}), cantidad: 2);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+
+      await tester.enterText(inSheet(find.widgetWithText(TextField, '3.452')), '5');
+      await tester.pumpAndSettle();
+
+      expect(find.text('El tipo de cambio debe estar entre 3.000 y 4.300'), findsWidgets);
+      expect(
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Crear')).onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('a crédito: cuotas con su plazo, se pueden agregar y se mandan al crear', (tester) async {
+      final (sales, repo) = await pump(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(conCredito);
+      sales.addProduct(_product(), cantidad: 2, precio: 50);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+
+      // Elige CRÉDITO en la forma de pago.
+      await tester.tap(find.text('EFECTIVO'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CRÉDITO').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cuotas del crédito'), findsOneWidget);
+      expect(find.text('Crédito en soles: S/. 500.00'), findsOneWidget);
+      expect(find.text('Mensual'), findsOneWidget);
+      expect(find.text('Cuota 1'), findsOneWidget);
+      expect(find.text('Cuota 2'), findsNothing);
+
+      await tester.ensureVisible(find.text('Agregar cuota'));
+      await tester.tap(find.text('Agregar cuota'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cuota 2'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '50.00'), findsNWidgets(3)); // el monto y las dos cuotas
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      final pago = repo.sent!.payments.single;
+      expect(pago.kind, PaymentKind.credito);
+      expect(pago.plazo, SalePlazo.month);
+      expect(pago.installments.map((i) => i.monto), [50, 50]);
+      expect(pago.installments.first.fechaVencimiento.isAfter(DateTime.now()), isTrue);
+    });
+
+    testWidgets('si las cuotas no suman el monto del crédito no se puede crear', (tester) async {
+      final (sales, _) = await pump(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(conCredito);
+      sales.addProduct(_product(), cantidad: 2, precio: 50);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+      await tester.tap(find.text('EFECTIVO'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CRÉDITO').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.widgetWithText(TextField, 'Cuota 1'));
+      await tester.enterText(find.widgetWithText(TextField, 'Cuota 1'), '30');
+      await tester.pumpAndSettle();
+
+      expect(find.text('La suma de las cuotas debe ser igual al monto del crédito'), findsWidgets);
+      expect(
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Crear')).onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('un cliente sin línea de crédito ve el crédito como no disponible', (tester) async {
+      final (sales, _) = await pump(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 2, precio: 50);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+
+      await tester.tap(find.text('EFECTIVO'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CRÉDITO (no disponible)'), findsOneWidget);
+    });
+
+    testWidgets('los puntos aparecen solo con el programa, y no disponibles sin puntos suficientes', (tester) async {
+      final (sales, _) = await pump(tester, puntos: true, minimoCanje: 10);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 2, precio: 50);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+
+      await tester.tap(find.text('EFECTIVO'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('PUNTOS (no disponible)'), findsOneWidget);
+    });
+
+    testWidgets('canjear puntos: el cliente cubre parte del total con sus puntos', (tester) async {
+      final (sales, repo) = await pump(tester, puntos: true, minimoCanje: 10);
+      sales.selectWarehouse(1);
+      sales.selectClient(const ClientEntity(id: 7, name: 'ACME SAC', documento: '20123456789', tipo: 'e', creditoAFavor: 30));
+      sales.addProduct(_product(), cantidad: 2, precio: 50);
+      await tester.pumpAndSettle();
+      await openCheckout(tester);
+      expect(find.text(r'El cliente tiene S/. 30.00 en PUNTOS (mínimo para canjear: 10).'), findsOneWidget);
+
+      // El primer pago baja a 70 y el segundo canjea 30 puntos.
+      await tester.enterText(find.widgetWithText(TextField, '100.00'), '70');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Agregar método de pago'));
+      await tester.tap(find.text('Agregar método de pago'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Método de pago 2'));
+      await tester.tap(find.text('EFECTIVO').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PUNTOS').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '30.00'), '30');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(repo.sent!.payments.map((p) => (p.monto, p.kind)), [(70.0, PaymentKind.normal), (30.0, PaymentKind.puntos)]);
+    });
+
+    testWidgets('con una cotización cargada se avisa y Cancelar la deja', (tester) async {
+      final (sales, repo) = await pump(tester);
+      repo.products = [_product(prices: const {11: 40})];
+      final quote = documentFromJson({
+        'id': 2,
+        'nro_documento': 2,
+        'estado': true,
+        'reservar_stock': false,
+        'warehouse_id': 1,
+        'list_price_id': 11,
+        'client': {'id': 7, 'razon_social': 'ACME SAC', 'dni_ruc': '20123456789', 'tipo': 'e'},
+        'products': [
+          {
+            'id': 100,
+            'codigo': 'SUB-12',
+            'name': 'SUBWOOFER 12"',
+            'pivot': {'cantidad': 2, 'precio': '35', 'dolares': false},
+          },
+        ],
+      }, DocumentKind.cotizacion);
+
+      await sales.loadFromQuote(quote);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Está trabajando con la Cotización Nro: C001-0002'), findsOneWidget);
+      expect(find.text('ACME SAC'), findsWidgets);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Está trabajando con la Cotización'), findsNothing);
+      expect(sales.fromQuote, isNull);
+      expect(sales.lines, isEmpty);
     });
   });
 }

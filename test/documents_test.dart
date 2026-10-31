@@ -9,6 +9,8 @@ import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/other_document_entity.dart';
+import 'package:app_novik/domain/entities/quote_draft_entity.dart';
+import 'package:app_novik/domain/entities/sale_entity.dart' show ClientEntity;
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
@@ -1050,6 +1052,7 @@ void main() {
       WidgetTester tester, {
       Set<String> permissions = const {'documentos.ventas.index'},
       _FakeOtherRepository? other,
+      DocumentEntity? serving,
     }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
       tester.view.physicalSize = const Size(360 * 3, 780 * 3);
@@ -1061,6 +1064,11 @@ void main() {
       });
 
       final repo = _FakeDocumentRepository();
+      if (serving != null) {
+        repo.next = Either.right(
+          DocumentPageEntity(items: [serving], currentPage: 1, lastPage: 1, total: 1),
+        );
+      }
       final session = _session(permissions: permissions);
       final documents = _provider(repo, session: session);
       final otherRepo = other ?? _FakeOtherRepository();
@@ -1213,6 +1221,67 @@ void main() {
 
       expect(find.text('V001-0001'), findsOneWidget);
       expect(find.text('Acciones'), findsOneWidget);
+    });
+
+    DocumentEntity pendingQuote({bool activo = true, bool conBorrador = true}) => DocumentEntity(
+          id: 2,
+          kind: DocumentKind.cotizacion,
+          numero: 'C001-0002',
+          comprobante: 'Cotización',
+          activo: activo,
+          cliente: 'ACME SAC',
+          quoteDraft: conBorrador
+              ? const QuoteDraftEntity(
+                  id: 2,
+                  client: ClientEntity(id: 7, name: 'ACME SAC'),
+                  warehouseId: 1,
+                  lines: [
+                    QuoteLineEntity(productId: 100, codigo: 'SUB-12', name: 'SUBWOOFER', cantidad: 2, precio: 35),
+                  ],
+                )
+              : null,
+        );
+
+    const quotePermissions = {'documentos.cotizaciones.index', 'ventas.store'};
+
+    testWidgets('una cotización pendiente se puede culminar como venta o editar', (tester) async {
+      await pump(tester, permissions: quotePermissions, serving: pendingQuote());
+
+      expect(find.byTooltip('Culminar venta o editar cotización'), findsOneWidget);
+    });
+
+    testWidgets('sin permiso para vender no se ofrece culminar la cotización', (tester) async {
+      await pump(
+        tester,
+        permissions: const {'documentos.cotizaciones.index'},
+        serving: pendingQuote(),
+      );
+
+      expect(find.byTooltip('Culminar venta o editar cotización'), findsNothing);
+    });
+
+    testWidgets('una cotización ya procesada o eliminada no se puede culminar', (tester) async {
+      await pump(tester, permissions: quotePermissions, serving: pendingQuote(activo: false));
+
+      expect(find.byTooltip('Culminar venta o editar cotización'), findsNothing);
+    });
+
+    testWidgets('el detalle de una cotización pendiente ofrece culminarla', (tester) async {
+      await pump(tester, permissions: quotePermissions, serving: pendingQuote());
+
+      await tester.tap(find.byTooltip('Ver detalle'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Culminar venta o editar'), findsOneWidget);
+    });
+
+    testWidgets('una venta no ofrece culminar', (tester) async {
+      await pump(
+        tester,
+        permissions: const {'documentos.ventas.index', 'ventas.store'},
+      );
+
+      expect(find.byTooltip('Culminar venta o editar cotización'), findsNothing);
     });
 
     testWidgets('Descargar Excel pide el Excel de lo que se ve', (tester) async {

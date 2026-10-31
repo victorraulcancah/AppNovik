@@ -278,7 +278,7 @@ class _ReportsPageState extends State<ReportsPage> {
     final showCompare = reports.compare && previous != null;
     final importes = !reports.ocultarImportes;
 
-    final cards = <Widget>[
+    final stats = <Widget>[
       if (importes)
         _StatCard(
           title: 'Venta Total',
@@ -310,6 +310,21 @@ class _ReportsPageState extends State<ReportsPage> {
           variation: showCompare ? _variation(report.ticketPromedio, previous.ticketPromedio) : null,
           showVariation: showCompare,
         ),
+    ];
+
+    // De a dos por fila y con la misma altura; el margen va solo, a todo el ancho.
+    final rows = <Widget>[
+      for (var i = 0; i < stats.length; i += 2)
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: stats[i]),
+              const SizedBox(width: 12),
+              Expanded(child: i + 1 < stats.length ? stats[i + 1] : const SizedBox.shrink()),
+            ],
+          ),
+        ),
       if (importes && !reports.ocultarMargen)
         _MarginCard(
           report: report,
@@ -321,15 +336,14 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = (constraints.maxWidth - 12) / 2;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [for (final c in cards) SizedBox(width: width, child: c)],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          rows[i],
+        ],
+      ],
     );
   }
 
@@ -504,29 +518,36 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // El título ocupa todo el ancho de la tarjeta y va en una sola línea; el ícono baja junto al valor.
+          Text(
+            title,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
               Icon(icon, size: 20, color: _limeColor),
             ],
-          ),
-          const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: scheme.primary,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
           ),
           if (showVariation) ...[
             const SizedBox(height: 6),
