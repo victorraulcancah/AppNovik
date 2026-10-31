@@ -9,6 +9,8 @@ import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/other_documents_provider.dart';
 import '../widgets/other_document_modals.dart';
+import '../pdf/other_document_pdf.dart';
+import 'other_document_pdf_page.dart';
 import 'receipt_page.dart';
 
 /// Una de las otras listas de Documentos: traslados de stock, guías de remisión, notas de
@@ -92,6 +94,14 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
     final result = await context.read<OtherDocumentsProvider>().deleteTransfer(d);
     if (!mounted) return;
     _snack(result.isLeft ? result.left.message : 'Transferencia eliminada');
+  }
+
+  void _openPdf(OtherDocumentEntity d) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OtherDocumentPdfPage(document: d, showAmounts: _showAmounts),
+      ),
+    );
   }
 
   void _openReceipt(OtherDocumentEntity d) {
@@ -218,6 +228,8 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
             label: 'Ver comprobante PDF',
             onPressed: () => _openReceipt(d),
           ),
+        if (hasOtherDocumentPdf(d.kind))
+          AppActionButton(type: AppActionType.pdf, label: 'Ver PDF', onPressed: () => _openPdf(d)),
         if (d.sePuedeEliminar && _can('transferir-stock.destroy'))
           AppActionButton(type: AppActionType.delete, onPressed: () => _delete(d)),
       ],

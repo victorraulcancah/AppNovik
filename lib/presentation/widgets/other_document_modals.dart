@@ -5,7 +5,9 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
+import '../pages/other_document_pdf_page.dart';
 import '../pages/receipt_page.dart';
+import '../pdf/other_document_pdf.dart';
 import 'document_filters.dart';
 
 final _dateTime = DateFormat(AppConstants.dateTimeFormat);
@@ -25,8 +27,9 @@ Future<void> showOtherDocumentDetail(
   bool showAmounts = true,
 }) async {
   final canOpenReceipt = d.comprobante != null;
+  final canOpenPdf = hasOtherDocumentPdf(d.kind);
 
-  final verComprobante = await showAppModal(
+  final abrir = await showAppModal(
     context,
     title: d.numero,
     subtitle: d.kind.label,
@@ -36,14 +39,18 @@ Future<void> showOtherDocumentDetail(
       OtherDocumentKind.notaCredito => Icons.receipt_long_outlined,
       OtherDocumentKind.entradaStock => Icons.move_to_inbox_outlined,
     },
-    primaryLabel: canOpenReceipt ? 'Ver comprobante' : null,
+    primaryLabel: canOpenPdf ? 'Ver PDF' : (canOpenReceipt ? 'Ver comprobante' : null),
     secondaryLabel: 'Cerrar',
     child: _DetailBody(document: d, showAmounts: showAmounts),
   );
 
-  if (verComprobante == true && context.mounted) {
+  if (abrir == true && context.mounted) {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => ReceiptPage(document: d.comprobante!)),
+      MaterialPageRoute<void>(
+        builder: (_) => canOpenPdf
+            ? OtherDocumentPdfPage(document: d, showAmounts: showAmounts)
+            : ReceiptPage(document: d.comprobante!),
+      ),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/other_document_usecases.dart';
 import 'package:app_novik/presentation/pages/other_documents_view.dart';
+import 'package:app_novik/presentation/pdf/other_document_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/other_documents_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
@@ -31,6 +32,8 @@ Map<String, dynamic> _transfer({int id = 1, int nro = 7, bool estado = true, boo
       'id': id,
       'nro_documento': nro,
       'estado': estado,
+      'from': 1,
+      'to': 2,
       'created_at': '2026-10-31T15:30:00.000000Z',
       'user': {'id': 9, 'name': 'ANA'},
       'from_warehouse': {'id': 1, 'name': 'LIMA'},
@@ -42,6 +45,10 @@ Map<String, dynamic> _transfer({int id = 1, int nro = 7, bool estado = true, boo
           'name': 'SUBWOOFER 12"',
           'brand': {'name': 'PIONEER'},
           'pivot': {'cantidad': 3, 'aceptado': aceptado, 'confirmado': false},
+          'warehouses': [
+            {'id': 2, 'pivot': {'costo_promedio': '99'}},
+            {'id': 1, 'pivot': {'costo_promedio': '45.5'}},
+          ],
         },
       ],
     };
@@ -253,6 +260,13 @@ void main() {
       expect(d.sePuedeEliminar, isTrue);
     });
 
+    test('el valor de un producto trasladado es su costo promedio en el almacén de salida', () {
+      final d = otherDocumentFromJson(_transfer(), OtherDocumentKind.traslado);
+
+      expect(d.lines.single.costo, 45.5); // el del almacén 1 (salida), no el del 2
+      expect(d.lines.single.total, 136.5);
+    });
+
     test('un traslado con productos recibidos ya no se elimina ni está pendiente', () {
       final recibido = otherDocumentFromJson(_transfer(aceptado: true), OtherDocumentKind.traslado);
       final eliminado = otherDocumentFromJson(_transfer(estado: false), OtherDocumentKind.traslado);
@@ -432,6 +446,33 @@ void main() {
       await dataSource.deleteTransfer('tok', 9);
       expect(requests.last.method, 'DELETE');
       expect(requests.last.url.path, endsWith('/stock-transfer/9'));
+    });
+  });
+
+  group('PDF', () {
+    test('solo traslados y entradas de stock tienen PDF', () {
+      expect(hasOtherDocumentPdf(OtherDocumentKind.traslado), isTrue);
+      expect(hasOtherDocumentPdf(OtherDocumentKind.entradaStock), isTrue);
+      expect(hasOtherDocumentPdf(OtherDocumentKind.guia), isFalse);
+      expect(hasOtherDocumentPdf(OtherDocumentKind.notaCredito), isFalse);
+    });
+
+    test('se genera el PDF del traslado y de la entrada, con y sin importes', () async {
+      final transfer = otherDocumentFromJson(_transfer(), OtherDocumentKind.traslado);
+      final entry = otherDocumentFromJson(_stockEntry(), OtherDocumentKind.entradaStock);
+
+      final pdfs = [
+        await buildOtherDocumentPdf(document: transfer),
+        await buildOtherDocumentPdf(document: entry),
+        await buildOtherDocumentPdf(document: entry, showAmounts: false),
+      ];
+
+      for (final bytes in pdfs) {
+        expect(String.fromCharCodes(bytes.sublist(0, 5)), '%PDF-');
+        expect(bytes.length, greaterThan(1500));
+      }
+      // Sin importes el documento es más corto.
+      expect(pdfs[2].length, lessThan(pdfs[1].length));
     });
   });
 
@@ -620,6 +661,27 @@ void main() {
       expect(find.text('LIMA → AREQUIPA'), findsOneWidget);
       expect(find.text('Falta recibir'), findsOneWidget);
       expect(find.text('2 traslados'), findsOneWidget);
+    });
+
+    testWidgets('traslados y entradas de stock tienen su botón de PDF; guías y notas no', (tester) async {
+      await pump(tester, OtherDocumentKind.traslado);
+      expect(find.byTooltip('Ver PDF'), findsOneWidget);
+    });
+
+    testWidgets('el detalle de un traslado ofrece abrir su PDF', (tester) async {
+      await pump(tester, OtherDocumentKind.traslado);
+
+      await tester.tap(find.byTooltip('Ver detalle'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ver PDF'), findsOneWidget);
+    });
+
+    testWidgets('las guías no tienen botón de PDF propio, solo el de su comprobante', (tester) async {
+      await pump(tester, OtherDocumentKind.guia, build: (kind, page) => one(_guide(), kind));
+
+      expect(find.byTooltip('Ver PDF'), findsNothing);
+      expect(find.byTooltip('Ver comprobante PDF'), findsOneWidget);
     });
 
     testWidgets('traslados: ver detalle muestra los datos y cada producto con su recepción', (tester) async {

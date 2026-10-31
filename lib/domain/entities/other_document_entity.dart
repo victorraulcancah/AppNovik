@@ -22,7 +22,7 @@ class OtherDocumentLine {
   final String name;
   final String? marca;
 
-  /// Solo entradas de stock.
+  /// Entradas de stock: el costo de ingreso. Traslados: el costo promedio en el almacén de salida.
   final double costo;
 
   /// Solo traslados: si ya se recibió en el almacén de destino.

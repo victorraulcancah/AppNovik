@@ -60,7 +60,20 @@ DocumentEntity? _comprobante(Map? boleta, Map? sale) {
   return venta == null ? null : documentFromJson(venta, DocumentKind.venta);
 }
 
-List<OtherDocumentLine> _lines(dynamic products, {required bool traslado}) {
+/// Costo promedio de un producto en el almacén [warehouseId] (lo que la web llama "Valor U." en
+/// el documento del traslado).
+double _costoPromedio(Map product, int? warehouseId) {
+  final warehouses = product['warehouses'];
+  if (warehouses is! List || warehouseId == null) return 0;
+  for (final w in warehouses.whereType<Map>()) {
+    if (_int(w['id']) == warehouseId && w['pivot'] is Map) {
+      return _double((w['pivot'] as Map)['costo_promedio']);
+    }
+  }
+  return 0;
+}
+
+List<OtherDocumentLine> _lines(dynamic products, {required bool traslado, int? fromId}) {
   if (products is! List) return const [];
   return [
     for (final p in products.whereType<Map>())
@@ -73,7 +86,9 @@ List<OtherDocumentLine> _lines(dynamic products, {required bool traslado}) {
         codigo: _text(p['codigo']),
         name: _text(p['name']) ?? '-',
         marca: _name(p['brand']),
-        costo: p['pivot'] is Map ? _double((p['pivot'] as Map)['costo']) : 0,
+        costo: traslado
+            ? _costoPromedio(p, fromId)
+            : (p['pivot'] is Map ? _double((p['pivot'] as Map)['costo']) : 0),
         aceptado: p['pivot'] is Map && _bool((p['pivot'] as Map)['aceptado']),
       ),
   ];
@@ -97,7 +112,7 @@ OtherDocumentEntity otherDocumentFromJson(Map<String, dynamic> json, OtherDocume
         usuario: _name(json['user']),
         desde: _name(json['from_warehouse']) ?? _name(json['fromWarehouse']),
         hacia: _name(json['to_warehouse']) ?? _name(json['toWarehouse']),
-        lines: _lines(json['products'], traslado: true),
+        lines: _lines(json['products'], traslado: true, fromId: _int(json['from'])),
       );
     case OtherDocumentKind.entradaStock:
       return OtherDocumentEntity(

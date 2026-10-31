@@ -76,12 +76,12 @@ final _date = DateFormat(AppConstants.dateFormat);
 
 /// Gris de las franjas (el 10 % de negro sobre blanco, como `bg-black/10` de la web). Va como
 /// color sólido: la transparencia no se aplica en el PDF y saldría negro.
-const _band = PdfColor(0.9, 0.9, 0.9);
+const pdfBand = PdfColor(0.9, 0.9, 0.9);
 
 Future<pw.ThemeData>? _theme;
 
 /// La fuente del PDF (Roboto, incluida en la app), cargada una sola vez.
-Future<pw.ThemeData> _loadTheme() => _theme ??= () async {
+Future<pw.ThemeData> loadPdfTheme() => _theme ??= () async {
       final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
       final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
       return pw.ThemeData.withFont(base: regular, bold: bold);
@@ -97,7 +97,7 @@ Future<Uint8List> buildReceiptPdf({
   final doc = pw.Document(
     title: document.numero,
     author: company.razonSocial,
-    theme: await _loadTheme(),
+    theme: await loadPdfTheme(),
   );
   final image = logo == null ? null : _tryImage(logo);
   final data = _ReceiptData(document, company);
@@ -171,7 +171,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
   pw.Widget cell(String text, {bool header = false, pw.Alignment align = pw.Alignment.centerLeft}) =>
       pw.Container(
         alignment: align,
-        color: header ? _band : null,
+        color: header ? pdfBand : null,
         padding: pw.EdgeInsets.symmetric(horizontal: 5, vertical: header ? 3 : 4),
         child: pw.Text(
           _safe(text),
@@ -262,7 +262,7 @@ List<pw.Widget> _a4(_ReceiptData r, pw.MemoryImage? logo) {
     pw.Container(
       width: double.infinity,
       alignment: pw.Alignment.center,
-      color: _band,
+      color: pdfBand,
       padding: const pw.EdgeInsets.symmetric(vertical: 4),
       child: pw.Text('INFORMACIÓN GENERAL', style: bold.copyWith(fontSize: 9)),
     ),
