@@ -25,6 +25,9 @@ class CompanyEntity {
   final String? email;
   final String? web;
   final double? igv;
+
+  /// Impuesto a la renta (fracción, 0.015 = 1.5 %): se descuenta del margen neto en Reportes.
+  final double? renta;
   final PlanEntity? plan;
 
   /// Tiene certificado digital: puede emitir boletas y facturas a SUNAT.
@@ -40,6 +43,7 @@ class CompanyEntity {
     this.email,
     this.web,
     this.igv,
+    this.renta,
     this.plan,
     this.emiteComprobantes = false,
   });

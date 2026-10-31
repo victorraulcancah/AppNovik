@@ -4,15 +4,23 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/report_entity.dart';
-import '../../theme/app_theme.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/reports_provider.dart';
+import '../utils/download_file.dart';
+import '../widgets/report_filters.dart';
+import 'receipt_page.dart';
 
-/// Módulo Reportes: el resumen ejecutivo del usuario para el rango elegido —
-/// sus ventas contra el año pasado y su meta, la evolución del año, sus mejores
-/// clientes, productos y departamentos, y sus cotizaciones pendientes. Los demás
-/// reportes de la web (por producto, sucursal, marca, categoría, tracking...) aún no están.
+const _limeColor = Color(0xFF84CC16);
+const _amberColor = Color(0xFFEAB308);
+const _blueColor = Color(0xFF60A5FA);
+
+String _soles(double v) => formatMoney(v, symbol: 'S/.');
+
+/// Módulo Reportes: el reporte **Ventas General** de la web. Las cifras del rango (venta total,
+/// unidades, número de ventas, ticket promedio y margen) con su comparación contra el año
+/// anterior, la gráfica de ventas y los productos vendidos con sus documentos; filtros
+/// avanzados y descarga del Excel. Según el rol no se ven los importes ni el margen.
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
 
@@ -23,6 +31,9 @@ class ReportsPage extends StatefulWidget {
 class _ReportsPageState extends State<ReportsPage> {
   static final _day = DateFormat(AppConstants.dateFormat);
 
+  /// El margen se muestra oculto (`S/. ****`) hasta que se toca el ojo, como en la web.
+  bool _marginVisible = false;
+
   @override
   void initState() {
     super.initState();
@@ -31,8 +42,16 @@ class _ReportsPageState extends State<ReportsPage> {
     });
   }
 
-  bool get _canView =>
-      context.read<AuthProvider>().session?.can('reportes.index') ?? false;
+  bool get _canView {
+    final session = context.read<AuthProvider>().session;
+    return (session?.can('reportes.index') ?? false) && (session?.can('reportes.ventas.index') ?? false);
+  }
+
+  void _snack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   Future<void> _pickCustom() async {
     final reports = context.read<ReportsProvider>();
@@ -47,52 +66,132 @@ class _ReportsPageState extends State<ReportsPage> {
     if (picked != null) reports.selectCustom(picked);
   }
 
+  Future<void> _export() async {
+    final result = await context.read<ReportsProvider>().exportCurrent();
+    if (!mounted) return;
+    if (result.isLeft) return _snack(result.left.message);
+    await downloadFile(context, result.right);
+  }
+
+  /// Las ventas del rango que incluyen [product]: tocar una abre su comprobante.
+  Future<void> _showDocuments(SalesReportProductEntity product, SalesReportEntity report) {
+    final docs = [for (final d in report.documents) if (d.productIds.contains(product.id)) d];
+    return showAppModal(
+      context,
+      title: 'Documentos',
+      subtitle: product.name,
+      icon: Icons.description_outlined,
+      primaryLabel: null,
+      secondaryLabel: 'Cerrar',
+      child: docs.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('No hay documentos')),
+            )
+          : Column(
+              children: [
+                for (final d in docs)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${d.tipo} Nro: ${d.numero}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openSale(d),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Future<void> _openSale(SalesReportDocumentEntity doc) async {
+    final navigator = Navigator.of(context);
+    final result = await context.read<ReportsProvider>().loadSale(doc.id);
+    if (!mounted) return;
+    if (result.isLeft) return _snack(result.left.message);
+    await navigator.push(MaterialPageRoute<void>(builder: (_) => ReceiptPage(document: result.right)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final reports = context.watch<ReportsProvider>();
-    final canView = context.read<AuthProvider>().session?.can('reportes.index') ?? false;
+    final canView = _canView;
 
     return Column(
       children: [
         const AppPageHeader(
           icon: Icons.bar_chart_outlined,
           title: 'Reportes',
-          subtitle: 'Resumen de tus ventas.',
+          subtitle: 'Ventas General',
           trailing: AppAccountMenu(),
         ),
-        if (canView) _rangeChips(reports),
-        if (canView && reports.loading && reports.summary != null)
+        if (canView) _toolbar(reports),
+        if (canView && reports.loading && reports.report != null)
           const LinearProgressIndicator(minHeight: 2),
         Expanded(child: _body(reports, canView)),
       ],
     );
   }
 
-  Widget _rangeChips(ReportsProvider reports) {
-    return SizedBox(
-      height: 56,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-        itemCount: ReportRange.values.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final range = ReportRange.values[i];
-          final custom = range == ReportRange.personalizado;
-          final selected = reports.range == range;
-          return ChoiceChip(
-            label: Text(
-              custom && selected
-                  ? '${_day.format(reports.dates.start)} – ${_day.format(reports.dates.end)}'
-                  : range.label,
-            ),
-            avatar: custom ? const Icon(Icons.date_range, size: 18) : null,
-            selected: selected,
-            showCheckmark: false,
-            onSelected: (_) => custom ? _pickCustom() : reports.selectRange(range),
-          );
-        },
-      ),
+  Widget _toolbar(ReportsProvider reports) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        SizedBox(
+          height: 56,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            itemCount: ReportRange.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final range = ReportRange.values[i];
+              final custom = range == ReportRange.personalizado;
+              final selected = reports.range == range;
+              return ChoiceChip(
+                label: Text(
+                  custom && selected
+                      ? '${_day.format(reports.dates.start)} – ${_day.format(reports.dates.end)}'
+                      : range.label,
+                ),
+                avatar: custom ? const Icon(Icons.date_range, size: 18) : null,
+                selected: selected,
+                showCheckmark: false,
+                onSelected: (_) => custom ? _pickCustom() : reports.selectRange(range),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: reports.compare,
+                  onChanged: (v) => reports.setCompare(v ?? false),
+                  title: const Text('Comparar año anterior'),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Filtros avanzados',
+                onPressed: () => showReportFilters(context),
+                icon: Badge(
+                  isLabelVisible: reports.advancedCount > 0,
+                  label: Text('${reports.advancedCount}'),
+                  child: Icon(Icons.filter_list, color: scheme.primary),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Descargar Excel',
+                onPressed: reports.exporting ? null : _export,
+                icon: Icon(Icons.download_outlined, color: scheme.primary),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -101,11 +200,11 @@ class _ReportsPageState extends State<ReportsPage> {
       return const AppEmptyState(
         icon: Icons.lock_outline,
         title: 'Sin acceso',
-        message: 'No tienes permiso para ver reportes.',
+        message: 'No tienes permiso para ver este reporte.',
       );
     }
-    final summary = reports.summary;
-    if (summary == null) {
+    final report = reports.report;
+    if (report == null) {
       if (reports.error != null) {
         return AppEmptyState(
           icon: Icons.cloud_off_outlined,
@@ -117,327 +216,446 @@ class _ReportsPageState extends State<ReportsPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final products = report.products;
+    // Cifras, gráfica y encabezado de productos, luego cada producto y el cargando.
+    const lead = 3;
+    final count = lead + (products.isEmpty ? 1 : products.length) + (reports.loadingMore ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: reports.refresh,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (reports.error != null) ...[
-                  ErrorBanner(message: reports.error!),
-                  const SizedBox(height: 12),
-                ],
-                _sales(summary),
-                const SizedBox(height: 16),
-                _evolution(summary.evolucion),
-                const SizedBox(height: 16),
-                _ranking('Mejores clientes', Icons.groups_outlined, summary.topClientes),
-                const SizedBox(height: 16),
-                _ranking('Productos más vendidos', Icons.inventory_2_outlined, summary.topProductos),
-                const SizedBox(height: 16),
-                _ranking('Venta por departamento', Icons.map_outlined, summary.departamentos),
-                const SizedBox(height: 16),
-                _quotes(summary),
-              ],
-            ),
-          ),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n.metrics.extentAfter < 400) reports.loadMore();
+          return false;
+        },
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          itemCount: count,
+          itemBuilder: (context, i) {
+            Widget child;
+            if (i == 0) {
+              child = _cards(reports, report);
+            } else if (i == 1) {
+              child = _chart(reports, report);
+            } else if (i == 2) {
+              child = _productsHeader(reports, report);
+            } else if (products.isEmpty) {
+              child = const AppEmptyState(
+                icon: Icons.inventory_2_outlined,
+                title: 'No hay ventas',
+                message: 'Prueba con otro rango de fechas o quita los filtros.',
+              );
+            } else if (i - lead < products.length) {
+              child = _productCard(reports, report, products[i - lead], i - lead + 1);
+            } else {
+              child = const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: i >= lead ? 8 : 16),
+                  child: child,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _sales(ExecutiveSummaryEntity s) {
+  /// Variación porcentual contra el año anterior; `null` sin base de comparación.
+  double? _variation(double current, double? before) =>
+      before == null || before <= 0 ? null : (current - before) / before * 100;
+
+  Widget _cards(ReportsProvider reports, SalesReportEntity report) {
+    final previous = reports.compare ? reports.previous : null;
+    final showCompare = reports.compare && previous != null;
+    final importes = !reports.ocultarImportes;
+
+    final cards = <Widget>[
+      if (importes)
+        _StatCard(
+          title: 'Venta Total',
+          value: _soles(report.totalVentas),
+          icon: Icons.shopping_cart_outlined,
+          variation: showCompare ? _variation(report.totalVentas, previous.totalVentas) : null,
+          showVariation: showCompare,
+        ),
+      _StatCard(
+        title: 'Unidades Vendidas',
+        value: formatQuantity(report.unidades),
+        icon: Icons.inventory_2_outlined,
+        variation: showCompare ? _variation(report.unidades, previous.unidades) : null,
+        showVariation: showCompare,
+      ),
+      _StatCard(
+        title: 'N° de Ventas',
+        value: '${report.countVentas}',
+        icon: Icons.receipt_long_outlined,
+        variation:
+            showCompare ? _variation(report.countVentas.toDouble(), previous.countVentas.toDouble()) : null,
+        showVariation: showCompare,
+      ),
+      if (importes)
+        _StatCard(
+          title: 'Ticket Promedio',
+          value: _soles(report.ticketPromedio),
+          icon: Icons.confirmation_number_outlined,
+          variation: showCompare ? _variation(report.ticketPromedio, previous.ticketPromedio) : null,
+          showVariation: showCompare,
+        ),
+      if (importes && !reports.ocultarMargen)
+        _MarginCard(
+          report: report,
+          previous: showCompare ? previous : null,
+          igv: reports.igv,
+          renta: reports.renta,
+          visible: _marginVisible,
+          onToggle: () => setState(() => _marginVisible = !_marginVisible),
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [for (final c in cards) SizedBox(width: width, child: c)],
+        );
+      },
+    );
+  }
+
+  Widget _chart(ReportsProvider reports, SalesReportEntity report) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final v = s.ventas;
+    final days = report.days;
+    final previous = reports.compare ? reports.previous : null;
 
-    final rangoAnterior = '${_day.format(s.desdeAnterior)} - ${_day.format(s.hastaAnterior)}';
+    final List<AreaSeries> series;
+    if (reports.ocultarImportes) {
+      // Sin permiso de importes, la curva es de unidades vendidas.
+      series = [AreaSeries(name: 'Unidades', color: _limeColor, values: [for (final d in days) d.unidades])];
+    } else {
+      series = [
+        AreaSeries(name: 'Soles', color: _limeColor, values: [for (final d in days) d.ventasSoles]),
+        if (days.any((d) => d.ventasDolares > 0))
+          AreaSeries(name: 'Dólares', color: _amberColor, values: [for (final d in days) d.ventasDolares]),
+        if (previous != null)
+          AreaSeries(
+            name: 'Soles (año pasado)',
+            color: _blueColor,
+            values: [
+              for (var i = 0; i < days.length; i++)
+                i < previous.days.length ? previous.days[i].ventasSoles : 0,
+            ],
+          ),
+      ];
+    }
 
-    return AppSection(
-      title: 'Ventas',
-      icon: Icons.payments_outlined,
-      trailing: Text(
-        s.desde == s.hasta ? _day.format(s.desde) : '${_day.format(s.desde)} – ${_day.format(s.hasta)}',
-        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            formatMoney(v.total),
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontFeatures: const [FontFeature.tabularFigures()],
+            reports.ocultarImportes ? 'Unidades vendidas' : 'Ventas',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          if (days.isEmpty)
+            const SizedBox(height: 120, child: Center(child: Text('Sin datos en el rango')))
+          else
+            AppAreaChart(
+              labels: [for (final d in days) d.name],
+              series: series,
+              format: (v) => reports.ocultarImportes ? formatQuantity(v) : _soles(v),
             ),
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 8,
+            spacing: 16,
             runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              AppVariationBadge(value: v.totalVariacion),
-              Text(
-                'vs ${formatMoney(v.totalAnterior)} el año pasado',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
+              for (final s in series)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: s.color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(s.name, style: theme.textTheme.labelSmall),
+                  ],
+                ),
             ],
           ),
-          Text(
-            rangoAnterior,
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 14),
-          Divider(height: 1, color: scheme.outlineVariant),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: AppMetric(
-                  label: 'N.º de ventas',
-                  value: '${v.numero}',
-                  variation: v.numeroVariacion,
-                ),
-              ),
-              Expanded(
-                child: AppMetric(
-                  label: 'Ticket promedio',
-                  value: formatMoney(v.ticket),
-                  variation: v.ticketVariacion,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _goal(s.meta),
-          if (s.porAlmacen.length > 1) ...[
-            const SizedBox(height: 14),
-            Divider(height: 1, color: scheme.outlineVariant),
-            const SizedBox(height: 8),
-            for (final a in s.porAlmacen)
-              AppDetailRow(label: a.nombre, value: formatMoney(a.monto)),
-          ],
         ],
       ),
     );
   }
 
-  Widget _goal(GoalEntity meta) {
+  Widget _productsHeader(ReportsProvider reports, SalesReportEntity report) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
+    final sortable = reports.ocultarImportes ? [ReportSort.cantidad] : ReportSort.values;
 
-    if (!meta.conMeta) {
-      return Row(
-        children: [
-          Icon(Icons.flag_outlined, size: 18, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              meta.aplica
-                  ? 'Sin meta cargada para este mes'
-                  : 'La meta es mensual: elige un solo mes para verla',
-              style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-        ],
-      );
-    }
-
-    final color = switch (meta.semaforo) {
-      GoalLight.rojo => dark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
-      GoalLight.ambar => dark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
-      GoalLight.verde => dark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A),
-      GoalLight.gris => scheme.onSurfaceVariant,
-    };
-    final avance = meta.avance ?? 0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
       children: [
-        Row(
-          children: [
-            Icon(Icons.flag_outlined, size: 18, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Meta del mes: ${formatMoney(meta.monto)}',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            Text(
-              '${avance.toStringAsFixed(1)} %',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: color,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: (avance / 100).clamp(0.0, 1.0),
-            minHeight: 10,
-            color: color,
-            backgroundColor: scheme.surfaceContainer,
+        Expanded(
+          child: Text(
+            'Productos y servicios · ${report.totalProducts}',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          meta.falta > 0 ? 'Faltan ${formatMoney(meta.falta)}' : '¡Meta cumplida!',
-          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        PopupMenuButton<ReportSort>(
+          tooltip: 'Ordenar',
+          icon: const Icon(Icons.sort),
+          onSelected: reports.selectSort,
+          itemBuilder: (context) => [
+            for (final s in sortable)
+              PopupMenuItem(
+                value: s,
+                child: Row(
+                  children: [
+                    Expanded(child: Text(s.label)),
+                    if (reports.sort == s)
+                      Icon(reports.sortDescending ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
+                  ],
+                ),
+              ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _evolution(EvolutionEntity e) {
+  Widget _productCard(
+    ReportsProvider reports,
+    SalesReportEntity report,
+    SalesReportProductEntity p,
+    int number,
+  ) {
+    final importes = !reports.ocultarImportes;
+    final showMargin = importes && !reports.ocultarMargen;
+    final detail = [if (p.codigo.isNotEmpty) p.codigo, if (p.marca != null) p.marca!].join(' · ');
+
+    return AppListCard(
+      number: number,
+      title: p.name,
+      lines: [
+        if (detail.isNotEmpty) detail,
+        if (importes) 'Subtotal ${_soles(p.subtotal)} · Desc. ${_soles(p.descuento)}',
+        if (showMargin) 'Margen ${_marginVisible ? _soles(p.margen) : 'S/. *******'}',
+      ],
+      trailingTitle: importes ? _soles(p.venta) : '${formatQuantity(p.cantidad)} uds.',
+      trailingCaption: importes ? 'Cant. ${formatQuantity(p.cantidad)}' : null,
+      onTap: () => _showDocuments(p, report),
+      actions: [
+        AppActionButton(
+          type: AppActionType.view,
+          label: 'Ver documentos',
+          onPressed: () => _showDocuments(p, report),
+        ),
+      ],
+    );
+  }
+}
+
+/// Una cifra del reporte: título, valor grande y, al comparar, la variación contra el año pasado.
+class _StatCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final double? variation;
+  final bool showVariation;
+
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    this.variation,
+    this.showVariation = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    const initials = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
-    // Siempre 12 meses, aunque el backend omita alguno.
-    final previous = List<double>.filled(12, 0);
-    final current = List<double>.filled(12, 0);
-    for (final m in e.meses) {
-      if (m.mes >= 1 && m.mes <= 12) {
-        previous[m.mes - 1] = m.anterior;
-        current[m.mes - 1] = m.actual;
-      }
-    }
-
-    Widget legend(Color color, String text) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(width: 4),
-            Text(text, style: theme.textTheme.labelSmall),
-          ],
-        );
-
-    return AppSection(
-      title: 'Evolución de mis ventas',
-      icon: Icons.show_chart,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          legend(scheme.outlineVariant, '${e.anioAnterior}'),
-          const SizedBox(width: 10),
-          legend(AppTheme.strongFill(theme.brightness), '${e.anioActual}'),
-        ],
-      ),
-      child: AppGroupedBarChart(
-        labels: initials,
-        previous: previous,
-        current: current,
-      ),
-    );
-  }
-
-  Widget _ranking(String title, IconData icon, List<RankedItemEntity> items) {
-    return AppSection(
-      title: title,
-      icon: icon,
-      child: AppBarList(
-        emptyText: 'Sin ventas en el rango',
-        items: [
-          for (final i in items)
-            (label: i.codigo != null ? '${i.codigo} · ${i.nombre}' : i.nombre, value: i.monto),
-        ],
-      ),
-    );
-  }
-
-  Widget _quotes(ExecutiveSummaryEntity s) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return AppSection(
-      title: 'Cotizaciones pendientes',
-      icon: Icons.request_quote_outlined,
-      trailing: Text(
-        '${s.cotizacionesCantidad} · ${formatMoney(s.cotizacionesMonto)}',
-        style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
-      ),
-      child: s.cotizaciones.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Center(
+          Row(
+            children: [
+              Expanded(
                 child: Text(
-                  'No tienes cotizaciones pendientes en el rango',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  title,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
-            )
-          : Column(
-              children: [
-                for (var i = 0; i < s.cotizaciones.length; i++) ...[
-                  if (i > 0) Divider(height: 1, color: scheme.outlineVariant),
-                  _quoteRow(s.cotizaciones[i]),
-                ],
-              ],
-            ),
-    );
-  }
-
-  Widget _quoteRow(PendingQuoteEntity q) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final (label, tone) = switch (q.prioridad) {
-      QuotePriority.alta => ('Alta', AppBadgeTone.danger),
-      QuotePriority.media => ('Media', AppBadgeTone.warning),
-      QuotePriority.baja => ('Baja', AppBadgeTone.success),
-    };
-    final number = int.tryParse(q.documento);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  q.cliente,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '${number == null ? q.documento : 'C001-${number.toString().padLeft(4, '0')}'}'
-                  ' · ${q.dias} ${q.dias == 1 ? 'día' : 'días'}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
+              Icon(icon, size: 20, color: _limeColor),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: scheme.primary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          if (showVariation) ...[
+            const SizedBox(height: 6),
+            AppVariationBadge(value: variation),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// El margen bruto o neto del rango (se elige con el menú del título). Por defecto sale oculto.
+class _MarginCard extends StatefulWidget {
+  final SalesReportEntity report;
+  final SalesReportEntity? previous;
+  final double igv;
+  final double renta;
+  final bool visible;
+  final VoidCallback onToggle;
+
+  const _MarginCard({
+    required this.report,
+    required this.previous,
+    required this.igv,
+    required this.renta,
+    required this.visible,
+    required this.onToggle,
+  });
+
+  @override
+  State<_MarginCard> createState() => _MarginCardState();
+}
+
+class _MarginCardState extends State<_MarginCard> {
+  bool _net = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final r = widget.report;
+    final now = MarginFigures.of(r.totalVentas, r.totalCostos, igv: widget.igv, renta: widget.renta);
+    final before = widget.previous == null
+        ? null
+        : MarginFigures.of(
+            widget.previous!.totalVentas,
+            widget.previous!.totalCostos,
+            igv: widget.igv,
+            renta: widget.renta,
+          );
+
+    final amount = _net ? now.neto : now.bruto;
+    final pct = _net ? now.netoPct : now.brutoPct;
+    final pctBefore = before == null ? null : (_net ? before.netoPct : before.brutoPct);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(
-                formatMoney(q.monto),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              Expanded(
+                child: PopupMenuButton<bool>(
+                  tooltip: 'Tipo de margen',
+                  onSelected: (net) => setState(() => _net = net),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: false, child: Text('Margen Bruto')),
+                    PopupMenuItem(value: true, child: Text('Margen Neto')),
+                  ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _net ? 'Margen Neto' : 'Margen Bruto',
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 20),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
-              AppStatusBadge(label: label, tone: tone),
+              InkWell(
+                onTap: widget.onToggle,
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    widget.visible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    size: 20,
+                    color: _limeColor,
+                    semanticLabel: widget.visible ? 'Ocultar margen' : 'Mostrar margen',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              widget.visible ? _soles(amount) : 'S/. *******',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: scheme.primary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                widget.visible ? '${pct.toStringAsFixed(1)} %' : '** %',
+                style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              if (widget.visible && pctBefore != null && pctBefore != 0) ...[
+                const SizedBox(width: 8),
+                AppVariationBadge(value: pct - pctBefore),
+              ],
             ],
           ),
         ],

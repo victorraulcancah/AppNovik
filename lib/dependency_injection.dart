@@ -118,12 +118,13 @@ class DependencyInjection {
 
         ChangeNotifierProxyProvider<AuthProvider, ReportsProvider>(
           create: (context) => ReportsProvider(
-            getExecutiveSummaryUseCase:
-                GetExecutiveSummaryUseCase(repository: _reportRepository),
+            getSalesReportUseCase: GetSalesReportUseCase(repository: _reportRepository),
+            exportSalesReportUseCase: ExportSalesReportUseCase(repository: _reportRepository),
+            getCatalogsUseCase: GetReportCatalogsUseCase(repository: _reportRepository),
+            getSaleUseCase: GetReportSaleUseCase(repository: _reportRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
-          update: (context, auth, previous) =>
-              previous!..syncCompany(auth.session?.company.id),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),
 
         ChangeNotifierProxyProvider<AuthProvider, SalesProvider>(

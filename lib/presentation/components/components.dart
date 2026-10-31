@@ -1,5 +1,6 @@
 export 'adaptive_scaffold.dart';
 export 'app_account_menu.dart';
+export 'app_area_chart.dart';
 export 'app_action_button.dart';
 export 'app_card_list.dart';
 export 'app_charts.dart';

@@ -1,106 +1,96 @@
 import '../../domain/entities/report_entity.dart';
 
-double? _double(dynamic v) =>
-    v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+double _double(dynamic v) => v is num ? v.toDouble() : (v is String ? double.tryParse(v) ?? 0 : 0);
 
-int? _int(dynamic v) =>
-    v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
+int? _int(dynamic v) => v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
 
-DateTime _date(dynamic v) =>
-    (v is String ? DateTime.tryParse(v) : null) ?? DateTime.now();
+String? _text(dynamic v) {
+  if (v is! String) return null;
+  final t = v.trim();
+  return t.isEmpty ? null : t;
+}
 
-Map<String, dynamic> _map(dynamic v) => v is Map<String, dynamic> ? v : const {};
+String _pad(dynamic v, int width) => '${_int(v) ?? 0}'.padLeft(width, '0');
 
-List<Map<String, dynamic>> _list(dynamic v) =>
-    v is List ? v.whereType<Map<String, dynamic>>().toList() : const [];
+SalesReportDayEntity _day(Map<String, dynamic> j) => SalesReportDayEntity(
+      name: _text(j['name']) ?? '',
+      ventasSoles: _double(j['ventas_soles']),
+      ventasDolares: _double(j['ventas_dolares']),
+      ventasDolaresASoles: _double(j['ventas_dolares_a_soles']),
+      unidades: _double(j['unidades']),
+    );
 
-RankedItemEntity _ranked(Map<String, dynamic> j) {
-  final codigo = j['codigo'];
-  return RankedItemEntity(
-    codigo: codigo is String && codigo.isNotEmpty ? codigo : null,
-    nombre: (j['nombre'] as String?)?.trim().isNotEmpty == true
-        ? (j['nombre'] as String).trim()
-        : 'Sin nombre',
-    monto: _double(j['monto']) ?? 0,
+SalesReportProductEntity _product(Map<String, dynamic> j) => SalesReportProductEntity(
+      id: _int(j['id']) ?? 0,
+      codigo: _text(j['codigo']) ?? '',
+      name: _text(j['name']) ?? '-',
+      marca: j['brand'] is Map ? _text((j['brand'] as Map)['name']) : null,
+      imagen: _text(j['img']),
+      cantidad: _double(j['cantidad']),
+      subtotal: _double(j['subtotal']),
+      descuento: _double(j['descuento']),
+      venta: _double(j['venta']),
+      costo: _double(j['costo']),
+    );
+
+/// Una venta del reporte, rotulada como en la web: `Boleta Nro: B001-0001` o `Venta Nro: V001-0005`.
+SalesReportDocumentEntity _document(Map<String, dynamic> j) {
+  final boleta = j['boleta'];
+  final String tipo;
+  final String numero;
+  if (boleta is Map && boleta['tipo'] is String) {
+    final t = (boleta['tipo'] as String).toLowerCase();
+    tipo = t == 'f' ? 'Factura' : 'Boleta';
+    numero = '${t.toUpperCase()}${_pad(boleta['serie'], 3)}-${_pad(boleta['numero'], 4)}';
+  } else {
+    tipo = 'Venta';
+    final raw = '${j['nro_documento_raw'] ?? j['nro_documento'] ?? ''}'.toUpperCase();
+    numero = raw.startsWith('V') ? raw : 'V001-${raw.padLeft(4, '0')}';
+  }
+  final products = j['products'];
+  return SalesReportDocumentEntity(
+    id: _int(j['id']) ?? 0,
+    tipo: tipo,
+    numero: numero,
+    productIds: products is List
+        ? [for (final p in products.whereType<Map>()) if (_int(p['id']) != null) _int(p['id'])!]
+        : const [],
   );
 }
 
-List<RankedItemEntity> _rankedList(dynamic v) => _list(v).map(_ranked).toList();
+/// Respuesta de `GET /ventas/reporte`.
+SalesReportEntity salesReportFromJson(Map<String, dynamic> json) {
+  List<T> list<T>(String key, T Function(Map<String, dynamic>) map) {
+    final raw = json[key];
+    return raw is List ? [for (final e in raw.whereType<Map<String, dynamic>>()) map(e)] : <T>[];
+  }
 
-GoalLight _light(dynamic v) => switch (v) {
-      'rojo' => GoalLight.rojo,
-      'ambar' => GoalLight.ambar,
-      'verde' => GoalLight.verde,
-      _ => GoalLight.gris,
-    };
-
-QuotePriority _priority(dynamic v) => switch (v) {
-      'alta' => QuotePriority.alta,
-      'media' => QuotePriority.media,
-      _ => QuotePriority.baja,
-    };
-
-/// Respuesta de `GET /ventas/resumen-ejecutivo`. Solo se leen los bloques que
-/// muestra la app; el resto (tareas, cumpleaños, clientes en caída...) se ignora.
-ExecutiveSummaryEntity executiveSummaryFromJson(Map<String, dynamic> json) {
-  final v = _map(json['ventas']);
-  final m = _map(json['meta']);
-  final c = _map(json['cotizaciones']);
-  final e = _map(json['evolucion']);
-
-  return ExecutiveSummaryEntity(
-    vendedor: (json['vendedor'] as String?) ?? '',
-    desde: _date(json['desde']),
-    hasta: _date(json['hasta']),
-    desdeAnterior: _date(json['desde_anterior']),
-    hastaAnterior: _date(json['hasta_anterior']),
-    ventas: SalesFiguresEntity(
-      total: _double(v['total']) ?? 0,
-      totalAnterior: _double(v['total_anterior']) ?? 0,
-      totalVariacion: _double(v['variacion_pct']),
-      numero: _int(v['numero']) ?? 0,
-      numeroAnterior: _int(v['numero_anterior']) ?? 0,
-      numeroVariacion: _double(v['numero_variacion_pct']),
-      ticket: _double(v['ticket']) ?? 0,
-      ticketAnterior: _double(v['ticket_anterior']) ?? 0,
-      ticketVariacion: _double(v['ticket_variacion_pct']),
-    ),
-    porAlmacen: _rankedList(json['por_almacen']),
-    meta: GoalEntity(
-      aplica: m['aplica'] == true,
-      monto: _double(m['monto']) ?? 0,
-      venta: _double(m['venta']) ?? 0,
-      falta: _double(m['falta']) ?? 0,
-      avance: _double(m['avance']),
-      semaforo: _light(m['semaforo']),
-    ),
-    cotizacionesCantidad: _int(c['cantidad']) ?? 0,
-    cotizacionesMonto: _double(c['monto']) ?? 0,
-    cotizaciones: [
-      for (final q in _list(json['cotizaciones_lista']))
-        PendingQuoteEntity(
-          id: _int(q['id']) ?? 0,
-          documento: '${q['documento'] ?? ''}',
-          cliente: (q['cliente'] as String?) ?? '-',
-          monto: _double(q['monto']) ?? 0,
-          dias: _int(q['dias']) ?? 0,
-          prioridad: _priority(q['prioridad']),
-        ),
-    ],
-    evolucion: EvolutionEntity(
-      anioActual: _int(e['anio_actual']) ?? DateTime.now().year,
-      anioAnterior: _int(e['anio_anterior']) ?? DateTime.now().year - 1,
-      meses: [
-        for (final mes in _list(e['meses']))
-          MonthSalesEntity(
-            mes: _int(mes['mes']) ?? 0,
-            anterior: _double(mes['anterior']) ?? 0,
-            actual: _double(mes['actual']) ?? 0,
-          ),
-      ],
-    ),
-    topProductos: _rankedList(json['top_productos']),
-    topClientes: _rankedList(json['top_clientes']),
-    departamentos: _rankedList(json['departamentos']),
+  return SalesReportEntity(
+    days: list('ventas', _day),
+    documents: list('sales', _document),
+    products: list('data', _product),
+    totalProducts: _int(json['total']) ?? 0,
+    countVentas: _int(json['countVentas']) ?? 0,
+    unidades: _double(json['unidadesVendidas']),
+    totalVentas: _double(json['totalVentas']),
+    totalCostos: _double(json['totalCostos']),
   );
+}
+
+/// Opciones de un filtro (marcas, categorías, sucursales...): `[{id, name}]`, con el nombre en
+/// `display_label`, `display_name`, `name` o, en usuarios y clientes, nombre y apellido.
+List<ReportOption> reportOptionsFromJson(dynamic json) {
+  final list = json is List ? json : (json is Map && json['data'] is List ? json['data'] as List : const []);
+  final result = <ReportOption>[];
+  for (final e in list) {
+    if (e is! Map) continue;
+    final id = e['id'];
+    if (id == null) continue;
+    final name = _text(e['display_label']) ??
+        _text(e['display_name']) ??
+        _text(e['name']) ??
+        '${e['first_name'] ?? ''} ${e['last_name'] ?? ''}'.trim();
+    result.add((id: '$id', name: name.isEmpty ? '#$id' : name));
+  }
+  return result;
 }
