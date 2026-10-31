@@ -118,6 +118,10 @@ ExchangeRateEntity exchangeRateFromJson(Map<String, dynamic> json) => ExchangeRa
 String _day(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+/// Fecha y hora como las espera el backend (hora de Perú, sin zona).
+String _dayTime(DateTime d) =>
+    '${_day(d)} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
+
 /// Cuerpo de `POST /cotizaciones`: las mismas líneas que una venta, la lista de precios y, si
 /// reserva stock, hasta qué día. El tipo de cambio lo fija el servidor.
 Map<String, dynamic> quoteToJson(
@@ -176,7 +180,8 @@ Map<String, dynamic> saleToJson(
     'warehouse_id': form.warehouseId,
     'punto_venta': false,
     'tipo_de_cambio': 1,
-    'metodo_entrega': 'e',
+    'metodo_entrega': form.delivery.apiValue,
+    if (form.fechaEmision != null) 'created_at': _dayTime(form.fechaEmision!),
     if (observaciones != null && observaciones.isNotEmpty) 'observaciones': observaciones,
     'product_sales': [
       for (final l in form.lines)
@@ -193,7 +198,7 @@ Map<String, dynamic> saleToJson(
         },
     ],
     'payment_methods': [
-      {'payment_method_id': form.paymentMethodId, 'monto': total},
+      for (final p in form.payments) {'payment_method_id': p.paymentMethodId, 'monto': p.monto},
     ],
   };
 }

@@ -66,18 +66,15 @@ class CreateSaleUseCase {
   CreateSaleUseCase({required this.repository});
 
   /// Mensaje del primer problema de [form], o `null` si se puede enviar. Una cotización no
-  /// necesita forma de pago ni revisa stock salvo que lo reserve.
-  static String? validate(SaleFormEntity form) {
+  /// necesita forma de pago ni revisa stock salvo que lo reserve. Con [withPayments] en `false`
+  /// se revisa todo menos los pagos (aún no se eligieron: se piden en el modal "Crear venta").
+  static String? validate(SaleFormEntity form, {bool withPayments = true}) {
     final isQuote = form.tipoDocumento.esCotizacion;
     final client = form.client;
     if (client == null) return 'Elige el cliente';
     if (form.warehouseId == null) return 'Elige el almacén';
     if (form.lines.isEmpty) return 'Agrega al menos un producto';
-    if (isQuote) {
-      if (form.priceListId == null) return 'Elige una lista de precios';
-    } else if (form.paymentMethodId == null) {
-      return 'Elige la forma de pago';
-    }
+    if (isQuote && form.priceListId == null) return 'Elige una lista de precios';
 
     final revisaStock = !isQuote || form.reservarStock;
     for (final line in form.lines) {
@@ -112,6 +109,17 @@ class CreateSaleUseCase {
       }
     }
     if (form.total <= 0) return 'El total de la venta debe ser mayor a 0';
+    return withPayments ? validatePayments(form.payments, form.total) : null;
+  }
+
+  /// Los pagos deben tener forma y monto, y sumar el total de la venta.
+  static String? validatePayments(List<SalePaymentEntity> payments, double total) {
+    if (payments.isEmpty) return 'Elige la forma de pago';
+    for (final p in payments) {
+      if (p.monto <= 0) return 'Escribe el monto de cada forma de pago';
+    }
+    final paid = roundMoney(payments.fold<double>(0, (sum, p) => sum + p.monto));
+    if (paid != roundMoney(total)) return 'Los métodos de pago deben sumar el total de la venta';
     return null;
   }
 

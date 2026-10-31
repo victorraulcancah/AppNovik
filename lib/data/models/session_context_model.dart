@@ -19,6 +19,8 @@ class SessionContextModel extends SessionContextEntity {
     required super.warehouses,
     super.defaultWarehouseId,
     super.defaultListPriceId,
+    super.defaultDelivery,
+    super.defaultPaymentMethodId,
   });
 
   factory SessionContextModel.fromJson(Map<String, dynamic> json) {
@@ -55,6 +57,8 @@ class SessionContextModel extends SessionContextEntity {
           .toList(),
       defaultWarehouseId: _int(user['warehouse_id']),
       defaultListPriceId: _int(user['list_price_id']),
+      defaultDelivery: user['metodo_entrega'] as String?,
+      defaultPaymentMethodId: _int(user['payment_method_id']),
     );
   }
 

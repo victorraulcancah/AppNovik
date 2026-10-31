@@ -17,6 +17,10 @@ class SessionContextEntity {
   final int? defaultWarehouseId;
   final int? defaultListPriceId;
 
+  /// Método de entrega (`e` inmediata, `d` despacho) y forma de pago predeterminados del usuario.
+  final String? defaultDelivery;
+  final int? defaultPaymentMethodId;
+
   const SessionContextEntity({
     required this.user,
     required this.company,
@@ -26,6 +30,8 @@ class SessionContextEntity {
     required this.warehouses,
     this.defaultWarehouseId,
     this.defaultListPriceId,
+    this.defaultDelivery,
+    this.defaultPaymentMethodId,
   });
 
   bool hasModule(String slug) => modules.any((m) => m.slug == slug);

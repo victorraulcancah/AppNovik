@@ -80,7 +80,9 @@ class SalesProvider extends ChangeNotifier {
   ClientEntity? client;
   int? warehouseId;
   int? priceListId;
-  int? paymentMethodId;
+  /// Entrega y forma de pago predeterminadas del usuario (la web las usa al abrir "Crear venta").
+  String? _defaultDelivery;
+  int? _defaultPaymentMethodId;
   String observaciones = '';
   List<SaleLineEntity> lines = [];
 
@@ -123,14 +125,20 @@ class SalesProvider extends ChangeNotifier {
 
   SaleFormEntity get form => _buildForm();
 
-  SaleFormEntity _buildForm({bool reservarStock = false, DateTime? vencimientoStock}) =>
+  SaleFormEntity _buildForm({
+    SaleCheckoutEntity? checkout,
+    bool reservarStock = false,
+    DateTime? vencimientoStock,
+  }) =>
       SaleFormEntity(
         tipoDocumento: tipoDocumento,
         client: client,
         warehouseId: warehouseId,
-        paymentMethodId: paymentMethodId,
+        payments: checkout?.payments ?? const [],
+        delivery: checkout?.delivery ?? SaleDelivery.inmediata,
+        fechaEmision: checkout?.fechaEmision,
         lines: lines,
-        observaciones: observaciones,
+        observaciones: checkout?.observaciones ?? observaciones,
         priceListId: priceListId,
         reservarStock: reservarStock,
         vencimientoStock: vencimientoStock,
@@ -141,6 +149,8 @@ class SalesProvider extends ChangeNotifier {
   void syncSession(SessionContextEntity? session) {
     _defaultWarehouseId = session?.defaultWarehouseId;
     _defaultPriceListId = session?.defaultListPriceId;
+    _defaultDelivery = session?.defaultDelivery;
+    _defaultPaymentMethodId = session?.defaultPaymentMethodId;
     _emiteComprobantes = session?.company.emiteComprobantes ?? false;
     final companyId = session?.company.id;
     final userId = session?.user.id;
@@ -168,7 +178,6 @@ class SalesProvider extends ChangeNotifier {
     client = null;
     warehouseId = null;
     priceListId = null;
-    paymentMethodId = null;
     observaciones = '';
     lines = [];
     sinDocumento = false;
@@ -219,13 +228,12 @@ class SalesProvider extends ChangeNotifier {
         .where((p) => !p.esDolares)
         .toList();
     paymentMethods = (results[2].right as List<PaymentMethodEntity>)
-        .where((m) => m.alContado)
+        .where((m) => m.soportado)
         .toList();
 
     // Como la web: el predeterminado del usuario, o el último de la lista.
     warehouseId ??= _pick(warehouses.map((w) => w.id).toList(), _defaultWarehouseId);
     priceListId ??= _pick(priceLists.map((p) => p.id).toList(), _defaultPriceListId);
-    paymentMethodId ??= _defaultPaymentMethod();
     _initialized = true;
     loading = false;
     notifyListeners();
@@ -289,16 +297,20 @@ class SalesProvider extends ChangeNotifier {
     return ids.contains(preferred) ? preferred : ids.last;
   }
 
-  /// La del cliente si se puede usar al contado; si no, EFECTIVO o la primera.
-  int? _defaultPaymentMethod() {
+  /// La forma de pago con la que abre "Crear venta": la del cliente, la del usuario, EFECTIVO o la
+  /// primera (solo entre las que la app maneja).
+  int? get defaultPaymentMethodId {
     if (paymentMethods.isEmpty) return null;
-    final preferred = client?.paymentMethodId;
-    if (paymentMethods.any((m) => m.id == preferred)) return preferred;
+    for (final preferred in [client?.paymentMethodId, _defaultPaymentMethodId]) {
+      if (paymentMethods.any((m) => m.id == preferred)) return preferred;
+    }
     for (final m in paymentMethods) {
       if (m.name.toUpperCase() == 'EFECTIVO') return m.id;
     }
     return paymentMethods.first.id;
   }
+
+  SaleDelivery get defaultDelivery => SaleDelivery.fromApi(_defaultDelivery);
 
   // --- Búsquedas (las usa la interfaz con su propio debounce) ---
 
@@ -351,8 +363,6 @@ class SalesProvider extends ChangeNotifier {
       priceListId = listId;
       _repriceLines();
     }
-    final preferred = value?.paymentMethodId;
-    if (paymentMethods.any((m) => m.id == preferred)) paymentMethodId = preferred;
     notifyListeners();
   }
 
@@ -366,11 +376,6 @@ class SalesProvider extends ChangeNotifier {
     priceListId = id;
     _listaElegidaAMano = true;
     _repriceLines();
-    notifyListeners();
-  }
-
-  void selectPaymentMethod(int? id) {
-    paymentMethodId = id;
     notifyListeners();
   }
 
@@ -516,20 +521,24 @@ class SalesProvider extends ChangeNotifier {
     _resetDraft();
     warehouseId = keepWarehouse;
     priceListId = _pick(priceLists.map((p) => p.id).toList(), _defaultPriceListId);
-    paymentMethodId = _defaultPaymentMethod();
     notifyListeners();
   }
 
   /// Revisa el borrador antes de pedir confirmación. Deja el motivo en [submitError].
   bool prepare() {
-    submitError = CreateSaleUseCase.validate(form);
+    submitError = CreateSaleUseCase.validate(form, withPayments: false);
     notifyListeners();
     return submitError == null;
   }
 
   /// Registra la venta o la cotización. Si sale bien, deja el borrador limpio para la siguiente.
+  /// [checkout] (fecha, entrega y pagos del modal "Crear venta") es obligatorio en una venta;
   /// [reservarStock] y [vencimientoStock] solo valen para cotizaciones.
-  Future<bool> submit({bool reservarStock = false, DateTime? vencimientoStock}) async {
+  Future<bool> submit({
+    SaleCheckoutEntity? checkout,
+    bool reservarStock = false,
+    DateTime? vencimientoStock,
+  }) async {
     final companyId = _companyId;
     final userId = _userId;
     if (companyId == null || userId == null || submitting) return false;
@@ -541,7 +550,11 @@ class SalesProvider extends ChangeNotifier {
     final result = await _createSale(
       companyId: companyId,
       userId: userId,
-      form: _buildForm(reservarStock: reservarStock, vencimientoStock: vencimientoStock),
+      form: _buildForm(
+        checkout: checkout,
+        reservarStock: reservarStock,
+        vencimientoStock: vencimientoStock,
+      ),
     );
 
     submitting = false;

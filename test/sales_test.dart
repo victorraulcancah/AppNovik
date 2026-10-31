@@ -272,22 +272,36 @@ Future<SalesProvider> _ready(_FakeSaleRepository repo, {bool certificado = false
   return p;
 }
 
+/// Lo que llena el modal "Crear venta": un solo pago en EFECTIVO por [total].
+SaleCheckoutEntity _checkout(double total, {String observaciones = ''}) => SaleCheckoutEntity(
+      payments: [SalePaymentEntity(paymentMethodId: 2, monto: total)],
+      observaciones: observaciones,
+    );
+
 const _acme = ClientEntity(id: 7, name: 'ACME SAC', documento: '20123456789', tipo: 'e');
 
 SaleFormEntity _form({
   ClientEntity? client = _acme,
   SaleDocumentType tipo = SaleDocumentType.ticket,
   int? warehouseId = 1,
-  int? paymentMethodId = 2,
+  List<SalePaymentEntity>? payments,
   List<SaleLineEntity>? lines,
-}) =>
-    SaleFormEntity(
-      tipoDocumento: tipo,
-      client: client,
-      warehouseId: warehouseId,
-      paymentMethodId: paymentMethodId,
-      lines: lines ?? [SaleLineEntity(product: _product(), cantidad: 2, precio: 50)],
-    );
+  SaleDelivery delivery = SaleDelivery.inmediata,
+  DateTime? fechaEmision,
+}) {
+  final items = lines ?? [SaleLineEntity(product: _product(), cantidad: 2, precio: 50)];
+  final total = items.fold<double>(0, (sum, l) => sum + l.subtotal);
+  return SaleFormEntity(
+    tipoDocumento: tipo,
+    client: client,
+    warehouseId: warehouseId,
+    // Por defecto, un solo pago (EFECTIVO) por todo el total.
+    payments: payments ?? [SalePaymentEntity(paymentMethodId: 2, monto: total)],
+    delivery: delivery,
+    fechaEmision: fechaEmision,
+    lines: items,
+  );
+}
 
 /// Pantalla de 360x780 dp. Las pruebas dibujan con la fuente Ahem (cada letra
 /// del ancho de un cuadrado, casi el doble que una fuente real); el factor de
@@ -460,6 +474,31 @@ void main() {
       expect(line['subtotal_con_dto'], 100);
     });
 
+    test('la entrega, la fecha elegida y cada pago viajan en el cuerpo', () {
+      final body = saleToJson(
+        _form(
+          delivery: SaleDelivery.despacho,
+          fechaEmision: DateTime(2026, 10, 29, 9, 5, 7),
+          payments: const [
+            SalePaymentEntity(paymentMethodId: 2, monto: 40),
+            SalePaymentEntity(paymentMethodId: 3, monto: 60),
+          ],
+        ),
+        companyId: 3,
+        userId: 9,
+      );
+      expect(body['metodo_entrega'], 'd');
+      expect(body['created_at'], '2026-10-29 09:05:07');
+      expect(body['payment_methods'], [
+        {'payment_method_id': 2, 'monto': 40},
+        {'payment_method_id': 3, 'monto': 60},
+      ]);
+    });
+
+    test('sin fecha elegida no se manda created_at (queda hoy)', () {
+      expect(saleToJson(_form(), companyId: 3, userId: 9).containsKey('created_at'), isFalse);
+    });
+
     test('los importes se redondean a céntimos', () {
       final line = SaleLineEntity(product: _product(), cantidad: 3, precio: 0.1 + 0.2);
       expect(line.subtotal, 0.9);
@@ -476,7 +515,47 @@ void main() {
       expect(CreateSaleUseCase.validate(_form(client: null)), 'Elige el cliente');
       expect(CreateSaleUseCase.validate(_form(warehouseId: null)), 'Elige el almacén');
       expect(CreateSaleUseCase.validate(_form(lines: [])), 'Agrega al menos un producto');
-      expect(CreateSaleUseCase.validate(_form(paymentMethodId: null)), 'Elige la forma de pago');
+      expect(CreateSaleUseCase.validate(_form(payments: [])), 'Elige la forma de pago');
+    });
+
+    test('los pagos deben tener monto y sumar el total de la venta', () {
+      const efectivo = 2, yape = 3;
+      expect(
+        CreateSaleUseCase.validate(
+          _form(payments: const [SalePaymentEntity(paymentMethodId: efectivo, monto: 60)]),
+        ),
+        'Los métodos de pago deben sumar el total de la venta',
+      );
+      expect(
+        CreateSaleUseCase.validate(
+          _form(payments: const [
+            SalePaymentEntity(paymentMethodId: efectivo, monto: 100),
+            SalePaymentEntity(paymentMethodId: yape, monto: 20),
+          ]),
+        ),
+        'Los métodos de pago deben sumar el total de la venta',
+      );
+      expect(
+        CreateSaleUseCase.validate(
+          _form(payments: const [SalePaymentEntity(paymentMethodId: efectivo, monto: 0)]),
+        ),
+        'Escribe el monto de cada forma de pago',
+      );
+      // Dos formas de pago que suman el total sí valen.
+      expect(
+        CreateSaleUseCase.validate(
+          _form(payments: const [
+            SalePaymentEntity(paymentMethodId: efectivo, monto: 40.5),
+            SalePaymentEntity(paymentMethodId: yape, monto: 59.5),
+          ]),
+        ),
+        isNull,
+      );
+    });
+
+    test('antes del modal "Crear venta" se revisa todo menos los pagos', () {
+      expect(CreateSaleUseCase.validate(_form(payments: []), withPayments: false), isNull);
+      expect(CreateSaleUseCase.validate(_form(client: null), withPayments: false), 'Elige el cliente');
     });
 
     test('no deja vender más que el stock del almacén', () {
@@ -519,23 +598,35 @@ void main() {
       );
     });
 
-    test('las formas de pago a plazo, con puntos o contraentrega no son al contado', () {
-      expect(const PaymentMethodEntity(id: 1, name: 'CRÉDITO').alContado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'PLAZO 30 DÍAS').alContado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'PUNTOS').alContado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'CONTRAENTREGA').alContado, isFalse);
-      expect(const PaymentMethodEntity(id: 1, name: 'YAPE').alContado, isTrue);
+    test('el crédito, el plazo y los puntos aún no se manejan; la contraentrega sí', () {
+      expect(const PaymentMethodEntity(id: 1, name: 'CRÉDITO').soportado, isFalse);
+      expect(const PaymentMethodEntity(id: 1, name: 'PLAZO 30 DÍAS').soportado, isFalse);
+      expect(const PaymentMethodEntity(id: 1, name: 'PUNTOS').soportado, isFalse);
+      expect(const PaymentMethodEntity(id: 1, name: 'CONTRAENTREGA').soportado, isTrue);
+      expect(const PaymentMethodEntity(id: 1, name: 'YAPE').soportado, isTrue);
+    });
+
+    test('el ticket se emite hasta 30 días atrás; la boleta y la factura, hoy y 2 días antes', () {
+      final now = DateTime(2026, 10, 31, 15, 40);
+      final ticket = saleIssueDateRange(SaleDocumentType.ticket, now);
+      expect(ticket.first, DateTime(2026, 10, 1));
+      expect(ticket.last, DateTime(2026, 10, 31));
+      for (final tipo in [SaleDocumentType.boleta, SaleDocumentType.factura]) {
+        final range = saleIssueDateRange(tipo, now);
+        expect(range.first, DateTime(2026, 10, 29));
+        expect(range.last, DateTime(2026, 10, 31));
+      }
     });
   });
 
   group('SalesProvider', () {
-    test('carga solo listas en soles y formas de pago al contado, con los predeterminados', () async {
+    test('carga solo listas en soles y las formas de pago que la app maneja, con los predeterminados', () async {
       final p = await _ready(_FakeSaleRepository());
       expect(p.priceLists.map((l) => l.id), [10, 11]);
-      expect(p.paymentMethods.map((m) => m.name), ['EFECTIVO', 'YAPE']);
+      expect(p.paymentMethods.map((m) => m.name), ['EFECTIVO', 'YAPE', 'CONTRAENTREGA']);
       expect(p.warehouseId, 2); // el del usuario
       expect(p.priceListId, 11); // el del usuario
-      expect(p.paymentMethodId, 2); // EFECTIVO
+      expect(p.defaultPaymentMethodId, 2); // EFECTIVO
     });
 
     test('boleta y factura solo si la empresa tiene certificado', () async {
@@ -614,15 +705,15 @@ void main() {
       p.selectWarehouse(1);
       p.selectClient(_acme);
       p.addProduct(_product());
-      p.setObservaciones('Entregar mañana');
 
-      expect(p.prepare(), isTrue);
-      expect(await p.submit(), isTrue);
+      expect(p.prepare(), isTrue); // sin pagos todavía: se piden en el modal "Crear venta"
+      expect(await p.submit(checkout: _checkout(40, observaciones: 'Entregar mañana')), isTrue);
 
       expect(repo.sentCompany, 1);
       expect(repo.sentUser, 9);
       expect(repo.sent!.total, 40);
       expect(repo.sent!.observaciones, 'Entregar mañana');
+      expect(repo.sent!.payments.single.monto, 40);
       expect(p.lastSale!.numero, 'V001-0001');
       expect(p.lines, isEmpty);
       expect(p.client, isNull);
@@ -637,7 +728,7 @@ void main() {
       p.selectClient(_acme);
       p.addProduct(_product());
 
-      expect(await p.submit(), isFalse);
+      expect(await p.submit(checkout: _checkout(40)), isFalse);
       expect(p.submitError, 'No hay stock suficiente para el producto: X');
       expect(p.lines, hasLength(1));
       expect(p.submitting, isFalse);
@@ -650,7 +741,7 @@ void main() {
       p.selectClient(_acme);
       p.addProduct(_product());
 
-      expect(await p.submit(), isFalse);
+      expect(await p.submit(checkout: _checkout(40)), isFalse);
       expect(p.submitError, contains('Tiempo de espera agotado'));
       expect(p.submitError, contains('Documentos'));
       expect(p.lines, hasLength(1));
@@ -834,6 +925,7 @@ void main() {
       // El formulario queda limpio para el siguiente producto.
       expect(find.text('SUB-12 · PIONEER · Stock 5'), findsNothing);
 
+      await tester.ensureVisible(find.byTooltip('Más'));
       await tester.tap(find.byTooltip('Más'));
       await tester.pumpAndSettle();
       expect(sales.lines.single.cantidad, 3);
@@ -859,23 +951,138 @@ void main() {
       expect(sales.lines, isEmpty);
     });
 
-    testWidgets('registrar pide confirmación y muestra la venta registrada', (tester) async {
+    /// Arma una venta de S/ 80 lista para registrar y abre el modal "Crear venta".
+    Future<_FakeSaleRepository> openCheckout(WidgetTester tester) async {
       final (sales, repo) = await pump(tester);
       sales.selectWarehouse(1);
       sales.selectClient(_acme);
-      sales.addProduct(_product());
+      sales.addProduct(_product(), cantidad: 2, precio: 40);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Registrar venta'));
       await tester.pumpAndSettle();
-      expect(find.text('Registrar'), findsOneWidget);
-      expect(repo.sent, isNull);
+      return repo;
+    }
 
-      await tester.tap(find.text('Registrar'));
+    Finder inModal(Finder finder) => find.descendant(of: find.byType(BottomSheet), matching: finder);
+
+    testWidgets('la venta ya no lleva la forma de pago en la pantalla: se pide en el modal', (tester) async {
+      await pump(tester);
+
+      expect(find.text('Forma de pago'), findsNothing);
+      expect(find.text('Pago'), findsNothing);
+    });
+
+    testWidgets('registrar abre el modal Crear venta con fecha, entrega, pago por el total y observaciones',
+        (tester) async {
+      final repo = await openCheckout(tester);
+
+      expect(find.text('Crear venta'), findsOneWidget);
+      expect(find.text('Ticket de Venta · Total S/ 80.00'), findsOneWidget);
+      expect(find.text('Fecha de emisión'), findsOneWidget);
+      expect(find.text('Método de entrega'), findsOneWidget);
+      expect(find.text('Entrega Inmediata'), findsOneWidget);
+      expect(find.text('Método de pago 1'), findsOneWidget);
+      expect(find.text('Agregar método de pago'), findsOneWidget);
+      expect(find.text('Observaciones (opcional)'), findsWidgets);
+      // El primer pago ya trae el total y el resumen cuadra.
+      expect(find.widgetWithText(TextField, '80.00'), findsOneWidget);
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+      expect(repo.sent, isNull);
+    });
+
+    testWidgets('Crear registra la venta con la entrega, el pago y las observaciones', (tester) async {
+      final repo = await openCheckout(tester);
+
+      // Entrega: Despacho.
+      await tester.tap(find.text('Entrega Inmediata'));
       await tester.pumpAndSettle();
-      expect(repo.sent, isNotNull);
+      await tester.tap(find.text('Despacho').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Observaciones (opcional)').last, 'Entregar mañana');
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      final form = repo.sent!;
+      expect(form.delivery, SaleDelivery.despacho);
+      expect(form.fechaEmision, isNull);
+      expect(form.observaciones, 'Entregar mañana');
+      expect(form.payments.single.paymentMethodId, 2); // EFECTIVO
+      expect(form.payments.single.monto, 80);
       expect(find.text('Venta registrada'), findsOneWidget);
       expect(find.text('V001-0001'), findsOneWidget);
+    });
+
+    testWidgets('varios pagos: Crear espera a que sumen el total', (tester) async {
+      final repo = await openCheckout(tester);
+
+      await tester.ensureVisible(find.text('Agregar método de pago'));
+      await tester.tap(find.text('Agregar método de pago'));
+      await tester.pumpAndSettle();
+      expect(find.text('Método de pago 2'), findsOneWidget);
+      // El primer pago cubre todo, el segundo queda en 0: no se puede crear.
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+      FilledButton createButton() => tester.widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Crear'),
+          );
+      expect(createButton().onPressed, isNull);
+
+      // 50 + 20 no llega a 80.
+      await tester.enterText(find.widgetWithText(TextField, '80.00'), '50');
+      await tester.enterText(find.widgetWithText(TextField, '0.00'), '20');
+      await tester.pumpAndSettle();
+      expect(find.text('Faltan S/ 10.00 para completar el total'), findsOneWidget);
+      expect(createButton().onPressed, isNull);
+
+      // 50 + 30 sí.
+      await tester.enterText(find.widgetWithText(TextField, '20'), '30');
+      await tester.pumpAndSettle();
+      expect(find.text('Los pagos suman el total'), findsOneWidget);
+      expect(createButton().onPressed, isNotNull);
+
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+      expect(repo.sent!.payments.map((p) => p.monto), [50, 30]);
+    });
+
+    testWidgets('quitar un método de pago devuelve el total al primero', (tester) async {
+      await openCheckout(tester);
+
+      await tester.ensureVisible(find.text('Agregar método de pago'));
+      await tester.tap(find.text('Agregar método de pago'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '80.00'), '50');
+      await tester.pumpAndSettle();
+
+      // (la línea del carrito, detrás del modal, también tiene su "Quitar")
+      await tester.ensureVisible(inModal(find.byTooltip('Quitar')));
+      await tester.tap(inModal(find.byTooltip('Quitar')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Método de pago 2'), findsNothing);
+      expect(find.widgetWithText(TextField, '80.00'), findsOneWidget);
+    });
+
+    testWidgets('si el servidor rechaza la venta el modal sigue abierto con el motivo', (tester) async {
+      final (sales, repo) = await pump(tester);
+      repo.result = Either.left(const ValidationFailure('Caja cerrada'));
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 2, precio: 40);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Registrar venta'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Crear'));
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Crear venta'), findsOneWidget);
+      expect(inModal(find.text('Caja cerrada')), findsOneWidget);
+      expect(find.text('Venta registrada'), findsNothing);
+      expect(sales.lines, isNotEmpty);
     });
 
     testWidgets('sin permiso para vender no se ve el formulario', (tester) async {
@@ -1081,11 +1288,11 @@ void main() {
     test('sin certificado se elige entre nota de venta y cotización; con certificado, todo', () async {
       expect(
         (await _ready(_FakeSaleRepository())).documentTypes.map((t) => t.label),
-        ['Nota de venta', 'Cotización'],
+        ['Ticket de Venta', 'Cotización'],
       );
       expect(
         (await _ready(_FakeSaleRepository(), certificado: true)).documentTypes.map((t) => t.label),
-        ['Nota de venta', 'Boleta', 'Factura', 'Cotización'],
+        ['Ticket de Venta', 'Boleta', 'Factura', 'Cotización'],
       );
     });
 
@@ -1162,7 +1369,6 @@ void main() {
       p.selectClient(_acme);
       p.addProduct(_product(sinStock: true), cantidad: 3);
       p.selectTipoDocumento(SaleDocumentType.cotizacion);
-      p.selectPaymentMethod(null);
       p.lines = [SaleLineEntity(product: _product(), cantidad: 3, precio: 40)]; // hay 0 en el almacén 2
 
       expect(p.prepare(), isTrue);
@@ -1202,7 +1408,6 @@ void main() {
         tipoDocumento: SaleDocumentType.cotizacion,
         client: _acme,
         warehouseId: 1,
-        paymentMethodId: null,
         priceListId: 11,
         reservarStock: true,
         vencimientoStock: DateTime(2026, 10, 30),
@@ -1227,7 +1432,6 @@ void main() {
           tipoDocumento: SaleDocumentType.cotizacion,
           client: _acme,
           warehouseId: 1,
-          paymentMethodId: null,
           priceListId: 11,
           vencimientoStock: DateTime(2026, 10, 30), // sin reservar: no viaja
           lines: form.lines,
@@ -1454,7 +1658,7 @@ void main() {
       await pumpFull(tester);
 
       expect(find.text('Tipo de documento'), findsOneWidget);
-      expect(find.text('Nota de venta'), findsOneWidget);
+      expect(find.text('Ticket de Venta'), findsOneWidget);
       expect(find.text('TC: S/ 3.452'), findsOneWidget);
       expect(find.byTooltip('Actualizar tipo de cambio'), findsOneWidget);
     });

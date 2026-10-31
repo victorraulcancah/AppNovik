@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
 import '../widgets/client_modals.dart';
 import '../widgets/exchange_rate_badge.dart';
+import '../widgets/sale_checkout.dart';
 import '../widgets/sale_modals.dart';
 import '../widgets/sale_product_entry.dart';
 
@@ -108,8 +109,7 @@ class _SalesPageState extends State<SalesPage> {
       if (!seguir || !mounted) return;
     }
 
-    var reservarStock = false;
-    DateTime? vencimientoStock;
+    var ok = false;
     if (tipo.esCotizacion) {
       // La cotización pregunta si reserva el stock y hasta cuándo.
       final options = await showQuoteOptions(
@@ -119,26 +119,14 @@ class _SalesPageState extends State<SalesPage> {
         total: formatMoney(sales.total),
       );
       if (options == null || !mounted) return;
-      reservarStock = options.reservarStock;
-      vencimientoStock = options.vencimientoStock;
-    } else {
-      final confirmed = await showAppConfirm(
-        context,
-        title: 'Registrar venta',
-        subtitle: '${tipo.label} · ${formatMoney(sales.total)}',
-        icon: Icons.point_of_sale,
-        message: tipo.esFiscal
-            ? 'Se emitirá una ${tipo.label.toLowerCase()} a ${client.name} y se enviará a SUNAT. '
-                'Los productos saldrán del stock del almacén.'
-            : 'Se registrará una nota de venta para ${client.name}. '
-                'Los productos saldrán del stock del almacén.',
-        confirmLabel: 'Registrar',
-        tone: AppModalTone.normal,
+      ok = await sales.submit(
+        reservarStock: options.reservarStock,
+        vencimientoStock: options.vencimientoStock,
       );
-      if (!confirmed || !mounted) return;
+    } else {
+      // La venta se arma y se crea en el modal "Crear venta" (fecha, entrega y pagos).
+      ok = await showSaleCheckout(context, sales: sales);
     }
-
-    final ok = await sales.submit(reservarStock: reservarStock, vencimientoStock: vencimientoStock);
     if (!mounted) return;
     if (ok) {
       _observaciones.clear();
@@ -212,8 +200,12 @@ class _SalesPageState extends State<SalesPage> {
                     _cliente(sales),
                     const SizedBox(height: 16),
                     _productos(sales),
-                    const SizedBox(height: 16),
-                    _pago(sales),
+                    // En una venta, la fecha, la entrega, los pagos y las observaciones van en el
+                    // modal "Crear venta"; la cotización solo lleva observaciones.
+                    if (sales.tipoDocumento.esCotizacion) ...[
+                      const SizedBox(height: 16),
+                      _pago(sales),
+                    ],
                   ],
                 ),
               ),
@@ -420,34 +412,16 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
+  /// Observaciones de la cotización (la venta las pide en el modal "Crear venta").
   Widget _pago(SalesProvider sales) {
-    final isQuote = sales.tipoDocumento.esCotizacion;
-
     return AppSection(
-      title: isQuote ? 'Observaciones' : 'Pago',
-      icon: isQuote ? Icons.notes_outlined : Icons.payments_outlined,
-      child: Column(
-        children: [
-          if (!isQuote) ...[
-            AppDropdownField<int>(
-              key: ValueKey('pago-${sales.paymentMethodId}'),
-              label: 'Forma de pago',
-              value: sales.paymentMethodId,
-              items: [
-                for (final m in sales.paymentMethods)
-                  DropdownMenuItem(value: m.id, child: Text(m.name)),
-              ],
-              onChanged: sales.selectPaymentMethod,
-            ),
-            const SizedBox(height: 12),
-          ],
-          AppTextField(
-            controller: _observaciones,
-            label: 'Observaciones (opcional)',
-            maxLines: 2,
-            keyboardType: TextInputType.multiline,
-          ),
-        ],
+      title: 'Observaciones',
+      icon: Icons.notes_outlined,
+      child: AppTextField(
+        controller: _observaciones,
+        label: 'Observaciones (opcional)',
+        maxLines: 2,
+        keyboardType: TextInputType.multiline,
       ),
     );
   }
