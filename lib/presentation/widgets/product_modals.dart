@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_constants.dart';
+import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../components/components.dart';
@@ -474,4 +475,57 @@ class _OptionsTabState extends State<_OptionsTab> {
       ],
     );
   }
+}
+
+/// Filas del Excel que el servidor no pudo importar, con el motivo de cada una. El resto del
+/// archivo sí se subió (igual que en la web).
+Future<void> showImportFailures(
+  BuildContext context, {
+  required ImportKind kind,
+  required List<ImportFailureEntity> failures,
+}) {
+  final theme = Theme.of(context);
+  final scheme = theme.colorScheme;
+
+  return showAppModal(
+    context,
+    title: 'Filas con errores',
+    subtitle: 'Se subieron los ${kind.label.toLowerCase()} excepto estas filas',
+    icon: Icons.error_outline,
+    tone: AppModalTone.warning,
+    primaryLabel: null,
+    secondaryLabel: 'Cerrar',
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+      child: ListView.separated(
+        shrinkWrap: true,
+        itemCount: failures.length,
+        separatorBuilder: (_, _) => const Divider(height: 20),
+        itemBuilder: (context, i) {
+          final failure = failures[i];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Error en fila ${failure.row}',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              for (final error in failure.errors)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('• ', style: TextStyle(color: scheme.error)),
+                      Expanded(child: Text(error)),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }

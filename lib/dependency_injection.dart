@@ -77,6 +77,8 @@ class DependencyInjection {
             getCatalogsUseCase:
                 GetProductCatalogsUseCase(repository: _productRepository),
             saveProductUseCase: SaveProductUseCase(repository: _productRepository),
+            exportProductsUseCase: ExportProductsUseCase(repository: _productRepository),
+            importCatalogUseCase: ImportCatalogUseCase(repository: _productRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) =>

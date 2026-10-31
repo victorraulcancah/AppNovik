@@ -1,5 +1,9 @@
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import 'dart:typed_data';
+
+import '../entities/document_entity.dart' show DownloadedFile;
+import '../entities/import_entity.dart';
 import '../entities/product_entity.dart';
 import '../entities/product_form_entity.dart';
 
@@ -16,6 +20,17 @@ abstract class ProductRepository {
 
   /// Marcas, categorías, medidas, proveedores, canales y giros de la empresa.
   Future<Either<Failure, ProductCatalogsEntity>> getCatalogs();
+
+  /// Excel con todos los productos de la empresa (`POST /productos/export`).
+  Future<Either<Failure, DownloadedFile>> exportProducts();
+
+  /// Sube un Excel de productos, marcas o categorías (importación masiva).
+  Future<Either<Failure, ImportResultEntity>> importFile({
+    required int companyId,
+    required ImportKind kind,
+    required String fileName,
+    required Uint8List bytes,
+  });
 
   /// Crea el producto, o lo edita si se pasa [id].
   Future<Either<Failure, ProductEntity>> saveProduct({

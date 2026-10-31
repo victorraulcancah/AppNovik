@@ -1,17 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/products_provider.dart';
+import '../utils/import_file.dart';
+import '../utils/share_file.dart';
 import '../widgets/product_modals.dart';
 
-/// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle,
-/// y crear/editar según los permisos del usuario. Plantilla, subir, exportar e
-/// importar marcas/categorías aún no están disponibles.
+/// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle, crear y editar, y
+/// las acciones de la web según los permisos del usuario: descargar la plantilla, subir
+/// productos, exportar, e importar marcas y categorías.
 class ProductsPage extends StatefulWidget {
-  const ProductsPage({super.key});
+  /// Selector del Excel a subir; se cambia en las pruebas.
+  final Future<PickedImportFile?> Function() pickFile;
+
+  const ProductsPage({super.key, this.pickFile = pickImportFile});
 
   @override
   State<ProductsPage> createState() => _ProductsPageState();
@@ -61,11 +67,10 @@ class _ProductsPageState extends State<ProductsPage> {
     if (result != null) provider.setTipo(result['tipo']);
   }
 
-  /// Mientras la app es de solo lectura, estas acciones avisan que aún no existen.
-  void _proximamente(String accion) {
+  void _snack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('$accion: disponible pronto')));
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Permisos del usuario (los mismos que valida la web: `productos.store`,
@@ -101,23 +106,66 @@ class _ProductsPageState extends State<ProductsPage> {
     if (editar == true && mounted) _editar(p);
   }
 
-  // Las mismas acciones que la web en `/productos`: crear, plantilla, subir,
-  // exportar, y las importaciones de marcas y categorías.
+  // Las mismas acciones que la web en `/productos`: crear, plantilla, subir, exportar, y las
+  // importaciones de marcas y categorías.
 
-  void _importar(String titulo, String plantilla, IconData icono) {
-    showAppImportModal(
+  /// Abre el menú de compartir con la plantilla de Excel (guardarla, enviarla, abrirla).
+  Future<void> _plantilla(ImportKind kind) async {
+    try {
+      await shareDownloadedFile(await loadImportTemplate(kind));
+    } catch (_) {
+      if (mounted) _snack('No se pudo abrir la plantilla');
+    }
+  }
+
+  /// Excel con todos los productos, como el botón Exportar de la web.
+  Future<void> _exportar() async {
+    final result = await context.read<ProductsProvider>().exportAll();
+    if (!mounted) return;
+    if (result.isLeft) return _snack(result.left.message);
+    try {
+      await shareDownloadedFile(result.right);
+    } catch (_) {
+      if (mounted) _snack('No se pudo abrir el menú para compartir el archivo');
+    }
+  }
+
+  /// Sube un Excel de productos, marcas o categorías. El servidor importa las filas buenas y
+  /// devuelve las que fallaron, que se muestran al terminar.
+  Future<void> _importar(ImportKind kind, IconData icono) async {
+    final products = context.read<ProductsProvider>();
+    PickedImportFile? picked;
+    ImportResultEntity? result;
+
+    await showAppImportModal(
       context,
-      title: titulo,
+      title: kind == ImportKind.productos ? 'Subir productos' : 'Importar ${kind.label.toLowerCase()}',
       subtitle: 'Importación masiva',
       icon: icono,
-      templateName: plantilla,
-      onDownloadTemplate: () => _proximamente('Descargar plantilla'),
+      templateName: 'plantilla de ${kind.label.toLowerCase()}',
+      onDownloadTemplate: () => _plantilla(kind),
       onPickFile: () async {
-        _proximamente('Elegir archivo');
+        final file = await widget.pickFile();
+        if (file == null) return null;
+        picked = file;
+        return file.name;
+      },
+      onUpload: (_) async {
+        final file = picked;
+        if (file == null) return 'Elige el archivo Excel';
+        final response = await products.importFile(kind, fileName: file.name, bytes: file.bytes);
+        if (response.isLeft) return response.left.message;
+        result = response.right;
         return null;
       },
-      onUpload: (_) => _proximamente('Subir archivo'),
     );
+
+    final done = result;
+    if (done == null || !mounted) return;
+    _snack('${kind.label} subidos');
+    if (done.hasFailures) {
+      await showImportFailures(context, kind: kind, failures: done.failures);
+    }
   }
 
   List<AppSpeedDialAction> _actions() => [
@@ -128,47 +176,48 @@ class _ProductsPageState extends State<ProductsPage> {
             color: const Color(0xFF16A34A),
             onPressed: _crear,
           ),
-        AppSpeedDialAction(
-          label: 'Descargar plantilla',
-          icon: Icons.download_outlined,
-          color: const Color(0xFF0E90C7),
-          onPressed: () => _proximamente('Descargar plantilla'),
-        ),
-        AppSpeedDialAction(
-          label: 'Subir productos',
-          icon: Icons.upload_outlined,
-          color: const Color(0xFFE8891D),
-          onPressed: () =>
-              _importar('Subir productos', 'plantilla de productos', Icons.upload_outlined),
-        ),
-        AppSpeedDialAction(
-          label: 'Exportar',
-          icon: Icons.description_outlined,
-          color: const Color(0xFF0D9488),
-          onPressed: () => _proximamente('Exportar'),
-        ),
-        AppSpeedDialAction(
-          label: 'Importar marcas',
-          icon: Icons.sell_outlined,
-          color: const Color(0xFF7C3AED),
-          onPressed: () =>
-              _importar('Importar marcas', 'plantilla de marcas', Icons.sell_outlined),
-        ),
-        AppSpeedDialAction(
-          label: 'Importar categorías',
-          icon: Icons.account_tree_outlined,
-          color: const Color(0xFFDB2777),
-          onPressed: () => _importar(
-            'Importar categorías',
-            'plantilla de categorías',
-            Icons.account_tree_outlined,
+        if (_can('productos.acciones-adicionales')) ...[
+          AppSpeedDialAction(
+            label: 'Descargar plantilla',
+            icon: Icons.download_outlined,
+            color: const Color(0xFF0E90C7),
+            onPressed: () => _plantilla(ImportKind.productos),
           ),
-        ),
+          if (_can('productos.store') || _can('productos.import'))
+            AppSpeedDialAction(
+              label: 'Subir productos',
+              icon: Icons.upload_outlined,
+              color: const Color(0xFFE8891D),
+              onPressed: () => _importar(ImportKind.productos, Icons.upload_outlined),
+            ),
+          if (_can('productos.export'))
+            AppSpeedDialAction(
+              label: 'Exportar',
+              icon: Icons.description_outlined,
+              color: const Color(0xFF0D9488),
+              onPressed: _exportar,
+            ),
+        ],
+        if (_can('brand.store'))
+          AppSpeedDialAction(
+            label: 'Importar marcas',
+            icon: Icons.sell_outlined,
+            color: const Color(0xFF7C3AED),
+            onPressed: () => _importar(ImportKind.marcas, Icons.sell_outlined),
+          ),
+        if (_can('category.store'))
+          AppSpeedDialAction(
+            label: 'Importar categorías',
+            icon: Icons.account_tree_outlined,
+            color: const Color(0xFFDB2777),
+            onPressed: () => _importar(ImportKind.categorias, Icons.account_tree_outlined),
+          ),
       ];
 
   @override
   Widget build(BuildContext context) {
     final products = context.watch<ProductsProvider>();
+    final actions = _actions();
 
     return Stack(
       children: [
@@ -202,12 +251,13 @@ class _ProductsPageState extends State<ProductsPage> {
             Expanded(child: _body(products)),
           ],
         ),
-        // Botón "Acciones": abajo a la derecha, sobre la lista.
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: AppSpeedDial(actions: _actions()),
-        ),
+        // Botón "Acciones": abajo a la derecha, sobre la lista (sin acciones, no se muestra).
+        if (actions.isNotEmpty)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: AppSpeedDial(actions: actions),
+          ),
       ],
     );
   }

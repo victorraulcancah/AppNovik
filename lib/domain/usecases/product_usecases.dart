@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../entities/document_entity.dart' show DownloadedFile;
+import '../entities/import_entity.dart';
 import '../entities/product_entity.dart';
 import '../entities/product_form_entity.dart';
 import '../repositories/product_repository.dart';
@@ -54,5 +58,37 @@ class SaveProductUseCase {
       return Either.left(const ValidationFailure('El SKU es requerido'));
     }
     return repository.saveProduct(companyId: companyId, form: form, id: id);
+  }
+}
+
+/// Excel con todos los productos de la empresa.
+class ExportProductsUseCase {
+  final ProductRepository repository;
+  ExportProductsUseCase({required this.repository});
+
+  Future<Either<Failure, DownloadedFile>> call() => repository.exportProducts();
+}
+
+/// Sube un Excel de productos, marcas o categorías. El servidor solo acepta `.xlsx`.
+class ImportCatalogUseCase {
+  final ProductRepository repository;
+  ImportCatalogUseCase({required this.repository});
+
+  Future<Either<Failure, ImportResultEntity>> call({
+    required int companyId,
+    required ImportKind kind,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    if (!fileName.toLowerCase().endsWith('.xlsx')) {
+      return Either.left(const ValidationFailure('El archivo debe ser un Excel (.xlsx)'));
+    }
+    if (bytes.isEmpty) return Either.left(const ValidationFailure('El archivo está vacío'));
+    return repository.importFile(
+      companyId: companyId,
+      kind: kind,
+      fileName: fileName,
+      bytes: bytes,
+    );
   }
 }

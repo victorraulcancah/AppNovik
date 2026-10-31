@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'app_disposer.dart';
 import 'app_modal.dart';
 
 /// Modal para subir un archivo de importación (productos, marcas, categorías):
@@ -7,7 +8,8 @@ import 'app_modal.dart';
 /// habilita cuando hay un archivo elegido.
 ///
 /// [onPickFile] devuelve el nombre del archivo elegido (o `null` si se cancela);
-/// [onUpload] recibe ese nombre y sube el archivo.
+/// [onUpload] recibe ese nombre y sube el archivo: devuelve `null` si salió bien, o el motivo
+/// del rechazo, que se muestra dentro del modal (que sigue abierto para reintentar).
 Future<bool?> showAppImportModal(
   BuildContext context, {
   required String title,
@@ -16,11 +18,12 @@ Future<bool?> showAppImportModal(
   required String templateName,
   VoidCallback? onDownloadTemplate,
   required Future<String?> Function() onPickFile,
-  required FutureOr<void> Function(String fileName) onUpload,
+  required FutureOr<String?> Function(String fileName) onUpload,
   String uploadLabel = 'Subir',
 }) {
   final fileName = ValueNotifier<String?>(null);
   final enabled = ValueNotifier<bool>(false);
+  final error = ValueNotifier<String?>(null);
 
   return showAppModal(
     context,
@@ -29,13 +32,26 @@ Future<bool?> showAppImportModal(
     icon: icon,
     primaryLabel: uploadLabel,
     primaryEnabled: enabled,
-    onPrimary: () => onUpload(fileName.value!),
-    child: _ImportBody(
-      templateName: templateName,
-      fileName: fileName,
-      enabled: enabled,
-      onDownloadTemplate: onDownloadTemplate,
-      onPickFile: onPickFile,
+    error: error,
+    onPrimary: () async {
+      error.value = null;
+      final problem = await onUpload(fileName.value!);
+      if (problem != null) {
+        error.value = problem;
+        // Mantiene el modal abierto para elegir otro archivo o reintentar.
+        throw StateError(problem);
+      }
+    },
+    child: AppDisposer(
+      onDispose: [fileName.dispose, enabled.dispose, error.dispose],
+      child: _ImportBody(
+        templateName: templateName,
+        fileName: fileName,
+        enabled: enabled,
+        error: error,
+        onDownloadTemplate: onDownloadTemplate,
+        onPickFile: onPickFile,
+      ),
     ),
   );
 }
@@ -44,6 +60,7 @@ class _ImportBody extends StatelessWidget {
   final String templateName;
   final ValueNotifier<String?> fileName;
   final ValueNotifier<bool> enabled;
+  final ValueNotifier<String?> error;
   final VoidCallback? onDownloadTemplate;
   final Future<String?> Function() onPickFile;
 
@@ -51,6 +68,7 @@ class _ImportBody extends StatelessWidget {
     required this.templateName,
     required this.fileName,
     required this.enabled,
+    required this.error,
     required this.onDownloadTemplate,
     required this.onPickFile,
   });
@@ -83,8 +101,11 @@ class _ImportBody extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             onTap: () async {
               final picked = await onPickFile();
+              // Si cancela el selector se conserva el archivo que ya había.
+              if (picked == null) return;
               fileName.value = picked;
-              enabled.value = picked != null;
+              enabled.value = true;
+              error.value = null;
             },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),

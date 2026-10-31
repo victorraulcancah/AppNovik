@@ -33,6 +33,17 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 Cada módulo se entrega primero en **solo lectura** y después se agregan las acciones de crear/editar.
 
+### Estado de Productos
+
+Todas las acciones de la web en `/productos` están hechas. Cada una sale solo con su permiso (los mismos de la web):
+
+- **Crear** (`productos.store`) y **Editar** (`productos.update`).
+- **Descargar plantilla** (`productos.acciones-adicionales`): las plantillas de Excel de la web (`Plantilla Productos/Marcas/Categorías.xlsx`) vienen dentro de la app (`assets/docs/`) y se comparten con el menú del sistema.
+- **Subir productos** (`productos.store` o `productos.import`): se elige un `.xlsx` con el selector de archivos del sistema (`file_picker`) y se sube a `POST /productos/import` (formulario con `file` y `company_id`). El servidor importa las filas buenas y devuelve las que fallaron; la app las lista una por una ("Error en fila N") y recarga la lista.
+- **Exportar** (`productos.export`): `POST /productos/export`, el Excel "Lista de Productos" se comparte con el menú del sistema.
+- **Importar marcas** (`brand.store`) y **Importar categorías** (`category.store`): igual que subir productos, a `/marcas/import` y `/categorias/import`; después se vuelven a pedir los catálogos del formulario.
+- Si el servidor rechaza el archivo (no es `.xlsx`, vacío...), el modal sigue abierto con el motivo. Sin ningún permiso de acciones, el botón Acciones no aparece.
+
 ### Estado de Stock
 
 - **Botón Acciones** (abajo a la derecha, igual que en Productos y Documentos): **Exportar** (`POST /almacenes/export` con el almacén, la lista de precios y la búsqueda; Excel que se comparte con el menú del sistema) y **Totales**.

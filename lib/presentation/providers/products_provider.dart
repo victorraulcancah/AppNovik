@@ -1,5 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
+import '../../core/utils/either.dart';
+import '../../domain/entities/document_entity.dart' show DownloadedFile;
+import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../../domain/usecases/product_usecases.dart';
@@ -11,6 +15,8 @@ class ProductsProvider extends ChangeNotifier {
   final GetProductsUseCase _getProducts;
   final GetProductCatalogsUseCase _getCatalogs;
   final SaveProductUseCase _saveProduct;
+  final ExportProductsUseCase _exportProducts;
+  final ImportCatalogUseCase _importCatalog;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -19,10 +25,14 @@ class ProductsProvider extends ChangeNotifier {
     required GetProductsUseCase getProductsUseCase,
     required GetProductCatalogsUseCase getCatalogsUseCase,
     required SaveProductUseCase saveProductUseCase,
+    required ExportProductsUseCase exportProductsUseCase,
+    required ImportCatalogUseCase importCatalogUseCase,
     VoidCallback? onSessionExpired,
   })  : _getProducts = getProductsUseCase,
         _getCatalogs = getCatalogsUseCase,
         _saveProduct = saveProductUseCase,
+        _exportProducts = exportProductsUseCase,
+        _importCatalog = importCatalogUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
@@ -36,6 +46,8 @@ class ProductsProvider extends ChangeNotifier {
   bool hasMore = false;
   int total = 0;
   String? error;
+  bool exporting = false;
+  bool importing = false;
   List<String> search = const [];
 
   /// `'p'` productos, `'s'` servicios, `null` ambos.
@@ -95,6 +107,49 @@ class ProductsProvider extends ChangeNotifier {
         return null;
       },
     );
+  }
+
+  /// Excel con todos los productos de la empresa.
+  Future<Either<Failure, DownloadedFile>> exportAll() async {
+    if (exporting) return Either.left(const ValidationFailure('Ya se está exportando'));
+    exporting = true;
+    notifyListeners();
+    final result = await _exportProducts();
+    exporting = false;
+    if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
+    notifyListeners();
+    return result;
+  }
+
+  /// Sube un Excel de productos, marcas o categorías. Al terminar, la lista de productos se
+  /// recarga y los catálogos del formulario (marcas, categorías) se vuelven a pedir.
+  Future<Either<Failure, ImportResultEntity>> importFile(
+    ImportKind kind, {
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final companyId = _companyId;
+    if (companyId == null) return Either.left(const ValidationFailure('No hay una empresa activa'));
+    if (importing) return Either.left(const ValidationFailure('Ya se está subiendo un archivo'));
+
+    importing = true;
+    notifyListeners();
+    final result = await _importCatalog(
+      companyId: companyId,
+      kind: kind,
+      fileName: fileName,
+      bytes: bytes,
+    );
+    importing = false;
+    if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
+    if (result.isRight) {
+      _catalogs = null;
+      notifyListeners();
+      await refresh();
+    } else {
+      notifyListeners();
+    }
+    return result;
   }
 
   /// Carga la primera página si todavía no se cargó nada.
