@@ -33,20 +33,24 @@ Basado en el código de `7power` (backend) y `7power-front` (web). Pendiente de 
 
 Cada módulo se entrega primero en **solo lectura** y después se agregan las acciones de crear/editar.
 
+### Descargas de archivos
+
+Toda descarga o exportación (Excel de Stock, Productos y Documentos, plantillas, CDR de SUNAT y el PDF del comprobante) **se guarda en el dispositivo** con el "Guardar como" del sistema (`FilePicker.saveFile`: carpeta Descargas, Drive...). Al guardar sale un aviso con "Compartir" por si se prefiere mandarlo por WhatsApp o correo. El PDF tiene además su botón de compartir.
+
 ### Estado de Productos
 
 Todas las acciones de la web en `/productos` están hechas. Cada una sale solo con su permiso (los mismos de la web):
 
 - **Crear** (`productos.store`) y **Editar** (`productos.update`).
-- **Descargar plantilla** (`productos.acciones-adicionales`): las plantillas de Excel de la web (`Plantilla Productos/Marcas/Categorías.xlsx`) vienen dentro de la app (`assets/docs/`) y se comparten con el menú del sistema.
+- **Descargar plantilla** (`productos.acciones-adicionales`): las plantillas de Excel de la web (`Plantilla Productos/Marcas/Categorías.xlsx`) vienen dentro de la app (`assets/docs/`) y se guardan en el dispositivo.
 - **Subir productos** (`productos.store` o `productos.import`): se elige un `.xlsx` con el selector de archivos del sistema (`file_picker`) y se sube a `POST /productos/import` (formulario con `file` y `company_id`). El servidor importa las filas buenas y devuelve las que fallaron; la app las lista una por una ("Error en fila N") y recarga la lista.
-- **Exportar** (`productos.export`): `POST /productos/export`, el Excel "Lista de Productos" se comparte con el menú del sistema.
+- **Exportar** (`productos.export`): `POST /productos/export`, el Excel "Lista de Productos" se guarda en el dispositivo.
 - **Importar marcas** (`brand.store`) y **Importar categorías** (`category.store`): igual que subir productos, a `/marcas/import` y `/categorias/import`; después se vuelven a pedir los catálogos del formulario.
 - Si el servidor rechaza el archivo (no es `.xlsx`, vacío...), el modal sigue abierto con el motivo. Sin ningún permiso de acciones, el botón Acciones no aparece.
 
 ### Estado de Stock
 
-- **Botón Acciones** (abajo a la derecha, igual que en Productos y Documentos): **Exportar** (`POST /almacenes/export` con el almacén, la lista de precios y la búsqueda; Excel que se comparte con el menú del sistema) y **Totales**.
+- **Botón Acciones** (abajo a la derecha, igual que en Productos y Documentos): **Exportar** (`POST /almacenes/export` con el almacén, la lista de precios y la búsqueda; Excel que se guarda en el dispositivo) y **Totales**.
 - **Totales** (modal): *Costo Total* y *Total Venta* del almacén. Solo con el permiso `almacenes.show.totales` y rol Admin Global, Ceo Empresa o Contador, como la web. Sin ese acceso, el botón flotante es solo **Exportar**.
 - Los cards informativos son un componente reutilizable: `showAppSummary` / `AppMetricCard` (`components/app_summary.dart`), usado también por los totales de Documentos.
 
@@ -61,7 +65,7 @@ Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra 
 - **Filtros avanzados** (los mismos parámetros que la web: `fecha_desde`, `fecha_hasta`, `sucursales[]`, `vendedores[]`, `clientes[]`, `tipo_documento`, `estado_documento`; en cotizaciones `estado_cotizacion` y `reserva`). Cada lista conserva los suyos; por defecto, los documentos de hoy. Etiquetas con ✕ y "Restablecer". El vendedor sin permiso `reportes.ventas.ver-otros-vendedores` solo se ve a sí mismo.
 - **Botón Acciones** (abajo a la derecha, como en Productos): **Descargar Excel** y **Totales**. No hay etiquetas de filtros ni totales sueltos en la lista; los filtros se cambian y restablecen desde el embudo.
 - **Totales** (modal): periodo, cantidad de documentos y total en soles y en dólares de todo lo filtrado (las eliminadas no cuentan).
-- **Exportar Excel** (`POST /ventas/export` y `/cotizaciones/export`) con lo que se ve; se comparte con el menú del sistema.
+- **Exportar Excel** (`POST /ventas/export` y `/cotizaciones/export`) con lo que se ve; se guarda en el dispositivo.
 - **Acciones por documento**: ver detalle; **comprobante en PDF** (A4 o ticket de 80 mm, descargar/compartir/imprimir, con las reglas de cabecera de la web: datos del almacén, del vendedor o de la empresa); **CDR** de SUNAT; **eliminar** venta sin comprobante (`PUT /ventas/{id}` `estado:false`) o cotización (`DELETE`); **nota de crédito** sobre boleta/factura. Permisos como la web (`documentos.ventas.destroy`, `documentos.cotizaciones.destroy`).
 - **Pendiente**: guía de remisión, convertir una cotización en venta, y las otras pestañas (traslados de stock, guías de remisión, notas de crédito, entradas de stock).
 

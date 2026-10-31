@@ -6,7 +6,7 @@ import '../../domain/entities/stock_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/stock_provider.dart';
-import '../utils/share_file.dart';
+import '../utils/download_file.dart';
 import '../widgets/stock_modals.dart';
 
 /// Roles que ven los totales de costo y venta del almacén (igual que la web).
@@ -76,11 +76,7 @@ class _StockPageState extends State<StockPage> {
     final result = await context.read<StockProvider>().exportCurrent();
     if (!mounted) return;
     if (result.isLeft) return _snack(result.left.message);
-    try {
-      await shareDownloadedFile(result.right);
-    } catch (_) {
-      if (mounted) _snack('No se pudo abrir el menú para compartir el archivo');
-    }
+    await downloadFile(context, result.right);
   }
 
   /// Costo total y total de venta del almacén, en un modal.

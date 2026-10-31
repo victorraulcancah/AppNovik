@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/products_provider.dart';
 import '../utils/import_file.dart';
-import '../utils/share_file.dart';
+import '../utils/download_file.dart';
 import '../widgets/product_modals.dart';
 
 /// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle, crear y editar, y
@@ -109,13 +110,16 @@ class _ProductsPageState extends State<ProductsPage> {
   // Las mismas acciones que la web en `/productos`: crear, plantilla, subir, exportar, y las
   // importaciones de marcas y categorías.
 
-  /// Abre el menú de compartir con la plantilla de Excel (guardarla, enviarla, abrirla).
+  /// Descarga la plantilla de Excel al dispositivo.
   Future<void> _plantilla(ImportKind kind) async {
+    final DownloadedFile template;
     try {
-      await shareDownloadedFile(await loadImportTemplate(kind));
+      template = await loadImportTemplate(kind);
     } catch (_) {
       if (mounted) _snack('No se pudo abrir la plantilla');
+      return;
     }
+    if (mounted) await downloadFile(context, template);
   }
 
   /// Excel con todos los productos, como el botón Exportar de la web.
@@ -123,11 +127,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final result = await context.read<ProductsProvider>().exportAll();
     if (!mounted) return;
     if (result.isLeft) return _snack(result.left.message);
-    try {
-      await shareDownloadedFile(result.right);
-    } catch (_) {
-      if (mounted) _snack('No se pudo abrir el menú para compartir el archivo');
-    }
+    await downloadFile(context, result.right);
   }
 
   /// Sube un Excel de productos, marcas o categorías. El servidor importa las filas buenas y

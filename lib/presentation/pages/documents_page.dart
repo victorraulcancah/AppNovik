@@ -8,7 +8,7 @@ import '../../domain/entities/document_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
-import '../utils/share_file.dart';
+import '../utils/download_file.dart';
 import '../widgets/document_filters.dart';
 import '../widgets/document_modals.dart';
 import 'receipt_page.dart';
@@ -78,11 +78,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     final result = await context.read<DocumentsProvider>().exportCurrent();
     if (!mounted) return;
     if (result.isLeft) return _snack(result.left.message);
-    try {
-      await shareDownloadedFile(result.right);
-    } catch (_) {
-      if (mounted) _snack('No se pudo abrir el menú para compartir el archivo');
-    }
+    await downloadFile(context, result.right);
   }
 
   void _openReceipt(DocumentEntity d) {

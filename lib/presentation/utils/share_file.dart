@@ -1,7 +1,7 @@
 import 'package:share_plus/share_plus.dart';
 import '../../domain/entities/document_entity.dart';
 
-String _mimeType(String name) {
+String mimeTypeOf(String name) {
   final lower = name.toLowerCase();
   if (lower.endsWith('.xlsx')) {
     return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -16,7 +16,7 @@ String _mimeType(String name) {
 Future<void> shareDownloadedFile(DownloadedFile file) {
   return SharePlus.instance.share(
     ShareParams(
-      files: [XFile.fromData(file.bytes, name: file.name, mimeType: _mimeType(file.name))],
+      files: [XFile.fromData(file.bytes, name: file.name, mimeType: mimeTypeOf(file.name))],
       fileNameOverrides: [file.name],
     ),
   );

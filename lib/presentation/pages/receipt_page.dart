@@ -7,7 +7,7 @@ import '../components/components.dart';
 import '../pdf/receipt_pdf.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
-import '../utils/share_file.dart';
+import '../utils/download_file.dart';
 import '../widgets/document_modals.dart';
 
 /// Comprobante de una venta o cotización en PDF: se ve en pantalla (A4 o ticket) y se
@@ -58,7 +58,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
     if (!mounted) return;
     setState(() => _downloadingCdr = false);
     if (result.isLeft) return _snack(result.left.message);
-    await shareDownloadedFile(result.right);
+    await downloadFile(context, result.right);
   }
 
   Future<void> _creditNote() async {
@@ -145,6 +145,19 @@ class _ReceiptPageState extends State<ReceiptPage> {
               canDebug: false,
               allowSharing: true,
               allowPrinting: true,
+              // Descargar guarda el PDF en el dispositivo; el botón de compartir lo manda por
+              // WhatsApp, correo, etc.
+              actions: [
+                PdfPreviewAction(
+                  icon: const Icon(Icons.download_outlined),
+                  onPressed: (context, build, pageFormat) async {
+                    final bytes = await build(pageFormat);
+                    if (context.mounted) {
+                      await downloadFile(context, DownloadedFile(name: '${d.numero}.pdf', bytes: bytes));
+                    }
+                  },
+                ),
+              ],
               loadingWidget: const CircularProgressIndicator(),
               onError: (context, error) => Padding(
                 padding: const EdgeInsets.all(24),
