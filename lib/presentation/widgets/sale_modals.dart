@@ -5,20 +5,22 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/document_entity.dart';
 import '../components/components.dart';
+import '../pages/receipt_page.dart';
 import 'document_modals.dart';
 
 /// Confirmación de una venta o cotización recién registrada: número, cliente, total y pagos.
-/// Desde aquí se puede abrir el detalle completo del documento.
+/// Desde aquí se abre el comprobante en PDF (para descargarlo, compartirlo o imprimirlo) o el
+/// detalle completo del documento.
 Future<void> showSaleRegistered(
   BuildContext context,
   DocumentEntity sale,
 ) async {
-  final verDetalle = await showAppModal(
+  final verPdf = await showAppModal(
     context,
     title: sale.esCotizacion ? 'Cotización registrada' : 'Venta registrada',
     subtitle: sale.numero,
     icon: Icons.check_circle_outline,
-    primaryLabel: 'Ver detalle',
+    primaryLabel: 'Descargar PDF',
     secondaryLabel: sale.esCotizacion ? 'Nueva cotización' : 'Nueva venta',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,11 +44,22 @@ Future<void> showSaleRegistered(
             label: p.metodo,
             value: formatMoney(p.monto, symbol: sale.simboloMoneda),
           ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => showDocumentDetail(context, sale),
+            icon: const Icon(Icons.list_alt_outlined, size: 18),
+            label: const Text('Ver detalle'),
+          ),
+        ),
       ],
     ),
   );
-  if (verDetalle == true && context.mounted) {
-    await showDocumentDetail(context, sale);
+  if (verPdf == true && context.mounted) {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => ReceiptPage(document: sale)),
+    );
   }
 }
 

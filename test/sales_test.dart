@@ -1011,6 +1011,9 @@ void main() {
       expect(form.payments.single.paymentMethodId, 2); // EFECTIVO
       expect(form.payments.single.monto, 80);
       expect(find.text('Venta registrada'), findsOneWidget);
+      // Al terminar se ofrece el PDF del comprobante (y el detalle).
+      expect(find.text('Descargar PDF'), findsOneWidget);
+      expect(find.text('Ver detalle'), findsOneWidget);
       expect(find.text('V001-0001'), findsOneWidget);
     });
 
@@ -1827,6 +1830,7 @@ void main() {
       expect(sent.reservarStock, isTrue);
       expect(sent.vencimientoStock, isNotNull);
       expect(find.text('Cotización registrada'), findsOneWidget);
+      expect(find.text('Descargar PDF'), findsOneWidget);
       expect(find.text('C001-0002'), findsOneWidget);
     });
 
