@@ -23,9 +23,23 @@ extension ProductFormJson on ProductFormEntity {
       'giro_negocio_id': giroNegocioId,
       if (descripcion != null && descripcion!.isNotEmpty) 'descripcion': descripcion,
       // La edición exige este campo (la web lo manda siempre).
-      if (editing) 'eliminar_imagen': false,
+      if (editing) 'eliminar_imagen': eliminarImagen,
     };
   }
+
+  /// Los campos como formulario multipart, igual que la web (que manda todo como texto y la foto
+  /// aparte). La edición va por POST con `_method=put`, porque PHP no lee multipart en un PUT.
+  Map<String, String> toFields({required int companyId, required bool editing}) => {
+        for (final e in toJson(companyId: companyId, editing: editing).entries) e.key: '${e.value}',
+        if (editing) '_method': 'put',
+      };
+}
+
+/// Elemento recién creado en un catálogo: marcas, categorías y medidas traen `name`; canales y
+/// giros, `nombre`.
+CatalogItemEntity? catalogItemFromJson(dynamic json) {
+  final items = catalogFromJson([json]);
+  return items.isEmpty ? null : items.first;
 }
 
 /// Catálogos: la mayoría trae `name`; canales y giros traen `nombre`.

@@ -18,7 +18,14 @@ class ProductsPage extends StatefulWidget {
   /// Selector del Excel a subir; se cambia en las pruebas.
   final Future<PickedImportFile?> Function() pickFile;
 
-  const ProductsPage({super.key, this.pickFile = pickImportFile});
+  /// Selector de la foto del producto; se cambia en las pruebas.
+  final Future<PickedPhoto?> Function() pickPhoto;
+
+  const ProductsPage({
+    super.key,
+    this.pickFile = pickImportFile,
+    this.pickPhoto = pickProductPhoto,
+  });
 
   @override
   State<ProductsPage> createState() => _ProductsPageState();
@@ -84,6 +91,8 @@ class _ProductsPageState extends State<ProductsPage> {
     showProductForm(
       context,
       loadCatalogs: products.loadCatalogs,
+      createCatalogItem: products.createCatalogItem,
+      pickPhoto: widget.pickPhoto,
       onSubmit: (form) => products.saveProduct(form),
     );
   }
@@ -94,6 +103,8 @@ class _ProductsPageState extends State<ProductsPage> {
       context,
       product: p,
       loadCatalogs: products.loadCatalogs,
+      createCatalogItem: products.createCatalogItem,
+      pickPhoto: widget.pickPhoto,
       onSubmit: (form) => products.saveProduct(form, id: p.id),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// Elemento de un catálogo (marca, categoría, medida, proveedor, canal, giro).
 class CatalogItemEntity {
   final int id;
@@ -25,6 +27,30 @@ class ProductCatalogsEntity {
   });
 }
 
+/// Qué catálogo se amplía desde el formulario (el "+" junto a cada lista, como en la web).
+enum CatalogKind {
+  medida('Unidad de medida', 'la unidad de medida', '/medidas'),
+  marca('Marca', 'la marca', '/marcas'),
+  categoria('Categoría', 'la categoría', '/categorias'),
+  canal('Canal', 'el canal', '/canales'),
+  giro('Giro de negocio', 'el giro de negocio', '/giros-negocio');
+
+  final String label;
+
+  /// Con su artículo, para frases como "Crear la marca".
+  final String articulado;
+  final String endpoint;
+  const CatalogKind(this.label, this.articulado, this.endpoint);
+}
+
+/// Foto elegida para el producto (JPG, PNG o WEBP de menos de 2 MB).
+class ProductPhotoEntity {
+  final String name;
+  final Uint8List bytes;
+
+  const ProductPhotoEntity({required this.name, required this.bytes});
+}
+
 /// Datos del formulario de producto, con los mismos campos que pide la web.
 class ProductFormEntity {
   /// `'p'` producto, `'s'` servicio.
@@ -45,6 +71,10 @@ class ProductFormEntity {
   final int giroNegocioId;
   final String? descripcion;
 
+  /// Foto nueva (reemplaza la actual) y si se pide quitar la actual.
+  final ProductPhotoEntity? foto;
+  final bool eliminarImagen;
+
   const ProductFormEntity({
     required this.tipo,
     required this.codigo,
@@ -62,5 +92,7 @@ class ProductFormEntity {
     required this.canalId,
     required this.giroNegocioId,
     this.descripcion,
+    this.foto,
+    this.eliminarImagen = false,
   });
 }

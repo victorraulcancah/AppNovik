@@ -19,6 +19,7 @@ class ProductModel extends ProductEntity {
     super.ventaSinStock,
     super.duplicar,
     super.creado,
+    super.imagen,
     super.marcaId,
     super.categoriaId,
     super.unidadId,
@@ -49,6 +50,7 @@ class ProductModel extends ProductEntity {
       creado: json['created_at'] is String
           ? DateTime.tryParse(json['created_at'] as String)?.toLocal()
           : null,
+      imagen: _imagen(json['img']),
       marcaId: _int(json['brand_id']),
       categoriaId: _int(json['category_id']),
       unidadId: _int(json['measure_id']),
@@ -56,6 +58,12 @@ class ProductModel extends ProductEntity {
       canalId: _int(json['canal_id']),
       giroNegocioId: _int(json['giro_negocio_id']),
     );
+  }
+
+  /// La web trata `/storage/` solo como "sin imagen".
+  static String? _imagen(dynamic v) {
+    if (v is! String) return null;
+    return v.replaceFirst('/storage/', '').isEmpty ? null : v;
   }
 
   static String? _name(dynamic relation) =>

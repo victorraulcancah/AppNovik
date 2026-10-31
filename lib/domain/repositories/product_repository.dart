@@ -21,6 +21,12 @@ abstract class ProductRepository {
   /// Marcas, categorías, medidas, proveedores, canales y giros de la empresa.
   Future<Either<Failure, ProductCatalogsEntity>> getCatalogs();
 
+  /// Crea una marca, categoría, unidad de medida, canal o giro (el "+" del formulario).
+  Future<Either<Failure, CatalogItemEntity>> createCatalogItem({
+    required CatalogKind kind,
+    required String name,
+  });
+
   /// Excel con todos los productos de la empresa (`POST /productos/export`).
   Future<Either<Failure, DownloadedFile>> exportProducts();
 

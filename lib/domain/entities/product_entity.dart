@@ -24,6 +24,9 @@ class ProductEntity {
   final bool duplicar;
   final DateTime? creado;
 
+  /// Ruta de la foto en el servidor (`/storage/images/products/...`); `null` si no tiene.
+  final String? imagen;
+
   /// Ids de las relaciones, para precargar el formulario de edición.
   final int? marcaId;
   final int? categoriaId;
@@ -50,6 +53,7 @@ class ProductEntity {
     this.ventaSinStock = false,
     this.duplicar = false,
     this.creado,
+    this.imagen,
     this.marcaId,
     this.categoriaId,
     this.unidadId,

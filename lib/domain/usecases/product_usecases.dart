@@ -92,3 +92,20 @@ class ImportCatalogUseCase {
     );
   }
 }
+
+/// Crea una marca, categoría, unidad de medida, canal o giro desde el formulario de producto.
+class CreateCatalogItemUseCase {
+  final ProductRepository repository;
+  CreateCatalogItemUseCase({required this.repository});
+
+  Future<Either<Failure, CatalogItemEntity>> call({
+    required CatalogKind kind,
+    required String name,
+  }) async {
+    final clean = name.trim();
+    if (clean.isEmpty) {
+      return Either.left(ValidationFailure('Escribe el nombre de ${kind.articulado}'));
+    }
+    return repository.createCatalogItem(kind: kind, name: clean);
+  }
+}

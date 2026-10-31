@@ -33,3 +33,24 @@ Future<DownloadedFile> loadImportTemplate(ImportKind kind) async {
     bytes: data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
   );
 }
+
+/// Peso máximo de la foto de un producto (el mismo límite que la web).
+const productPhotoMaxBytes = 2 * 1024 * 1024;
+
+/// Una foto elegida para el producto, o el motivo por el que no sirve.
+typedef PickedPhoto = ({String name, Uint8List bytes});
+
+/// Abre el selector del sistema para elegir la foto de un producto (JPG, PNG o WEBP). Devuelve
+/// `null` si se cancela; lanza una excepción con el mensaje si pesa 2 MB o más.
+Future<PickedPhoto?> pickProductPhoto() async {
+  final file = await FilePicker.pickFile(
+    type: FileType.custom,
+    allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+  );
+  if (file == null) return null;
+  final bytes = await file.readAsBytes();
+  if (bytes.length >= productPhotoMaxBytes) {
+    throw Exception('La foto debe pesar menos de 2MB');
+  }
+  return (name: file.name, bytes: bytes);
+}

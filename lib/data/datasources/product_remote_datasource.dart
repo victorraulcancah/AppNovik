@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
+import '../../core/errors/exceptions.dart';
 import '../../core/network/api_request.dart';
 import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
@@ -25,6 +26,12 @@ abstract class ProductRemoteDataSource {
     required int companyId,
     required ProductFormEntity form,
     int? id,
+  });
+
+  Future<CatalogItemEntity> createCatalogItem({
+    required String token,
+    required CatalogKind kind,
+    required String name,
   });
 
   Future<Uint8List> exportProducts(String token);
@@ -137,15 +144,38 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
     final uri = Uri.parse(
       '${ApiConstants.baseUrl}${ApiConstants.productosEndpoint}${editing ? '/$id' : ''}',
     );
-    final payload = json.encode(form.toJson(companyId: companyId, editing: editing));
-    final headers = ApiConstants.authHeaders(token);
 
-    final body = await sendApiRequest(
-      () => editing
-          ? client.put(uri, headers: headers, body: payload)
-          : client.post(uri, headers: headers, body: payload),
-    );
+    // Como la web: un formulario multipart con los campos como texto y, si hay, la foto.
+    final body = await sendApiRequest(() async {
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(ApiConstants.authHeaders(token))
+        ..fields.addAll(form.toFields(companyId: companyId, editing: editing));
+      final foto = form.foto;
+      if (foto != null) {
+        request.files.add(http.MultipartFile.fromBytes('foto', foto.bytes, filename: foto.name));
+      }
+      return http.Response.fromStream(await client.send(request));
+    });
     return ProductModel.fromJson(body as Map<String, dynamic>);
+  }
+
+  @override
+  Future<CatalogItemEntity> createCatalogItem({
+    required String token,
+    required CatalogKind kind,
+    required String name,
+  }) async {
+    final body = await sendApiRequest(
+      () => client.post(
+        Uri.parse('${ApiConstants.baseUrl}${kind.endpoint}'),
+        headers: ApiConstants.authHeaders(token),
+        // Canales y giros aceptan `name` como alias de `nombre`, igual que en la web.
+        body: json.encode({'name': name}),
+      ),
+    );
+    final item = catalogItemFromJson(body);
+    if (item == null) throw const ServerException('Respuesta inesperada del servidor');
+    return item;
   }
 
   @override

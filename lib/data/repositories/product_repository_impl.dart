@@ -46,6 +46,15 @@ class ProductRepositoryImpl with TokenGuard implements ProductRepository {
       withToken(remoteDataSource.getCatalogs);
 
   @override
+  Future<Either<Failure, CatalogItemEntity>> createCatalogItem({
+    required CatalogKind kind,
+    required String name,
+  }) =>
+      withToken(
+        (token) => remoteDataSource.createCatalogItem(token: token, kind: kind, name: name),
+      );
+
+  @override
   Future<Either<Failure, DownloadedFile>> exportProducts() => withToken(
         (token) async => DownloadedFile(
           name: 'Lista de Productos.xlsx',

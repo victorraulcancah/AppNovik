@@ -105,6 +105,7 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
         canales: items(['ELECTRÓNICA', 'INDUSTRIAL']),
         giros: items(['CAR AUDIO']),
       ),
+      createCatalogItem: (kind, name) async => CatalogItemEntity(id: 100, name: name),
       onSubmit: (form) async {
         await Future<void>.delayed(const Duration(milliseconds: 600));
         return form.codigo == 'DUP' ? 'El código ya existe' : null;

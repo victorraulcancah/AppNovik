@@ -17,6 +17,7 @@ class ProductsProvider extends ChangeNotifier {
   final SaveProductUseCase _saveProduct;
   final ExportProductsUseCase _exportProducts;
   final ImportCatalogUseCase _importCatalog;
+  final CreateCatalogItemUseCase _createCatalogItem;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -27,12 +28,14 @@ class ProductsProvider extends ChangeNotifier {
     required SaveProductUseCase saveProductUseCase,
     required ExportProductsUseCase exportProductsUseCase,
     required ImportCatalogUseCase importCatalogUseCase,
+    required CreateCatalogItemUseCase createCatalogItemUseCase,
     VoidCallback? onSessionExpired,
   })  : _getProducts = getProductsUseCase,
         _getCatalogs = getCatalogsUseCase,
         _saveProduct = saveProductUseCase,
         _exportProducts = exportProductsUseCase,
         _importCatalog = importCatalogUseCase,
+        _createCatalogItem = createCatalogItemUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
@@ -87,6 +90,33 @@ class ProductsProvider extends ChangeNotifier {
         throw Exception(failure.message);
       },
       (catalogs) => _catalogs = catalogs,
+    );
+  }
+
+  /// Crea una marca, categoría, unidad de medida, canal o giro (el "+" del formulario) y lo deja
+  /// al principio del catálogo guardado. Lanza una excepción con el mensaje si falla.
+  Future<CatalogItemEntity> createCatalogItem(CatalogKind kind, String name) async {
+    final result = await _createCatalogItem(kind: kind, name: name);
+    return result.fold(
+      (failure) {
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+        throw Exception(failure.message);
+      },
+      (item) {
+        final c = _catalogs;
+        if (c != null) {
+          List<CatalogItemEntity> add(List<CatalogItemEntity> list) => [item, ...list];
+          _catalogs = ProductCatalogsEntity(
+            marcas: kind == CatalogKind.marca ? add(c.marcas) : c.marcas,
+            categorias: kind == CatalogKind.categoria ? add(c.categorias) : c.categorias,
+            medidas: kind == CatalogKind.medida ? add(c.medidas) : c.medidas,
+            proveedores: c.proveedores,
+            canales: kind == CatalogKind.canal ? add(c.canales) : c.canales,
+            giros: kind == CatalogKind.giro ? add(c.giros) : c.giros,
+          );
+        }
+        return item;
+      },
     );
   }
 
