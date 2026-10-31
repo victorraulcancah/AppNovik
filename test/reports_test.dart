@@ -1,5 +1,3 @@
-import 'dart:io';
-import 'package:flutter/services.dart' show FontLoader;
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -757,59 +755,6 @@ void main() {
       expect(find.text('SUBWOOFER 12"'), findsOneWidget);
       expect(find.text('SUB-12 · PIONEER'), findsOneWidget);
       expect(find.text('S/. 290.00'), findsOneWidget);
-    });
-
-    testWidgets('TMP golden', (tester) async {
-      Future<void> load(String family, String path) async {
-        final bytes = File(path).readAsBytesSync();
-        final loader = FontLoader(family)..addFont(Future.value(ByteData.view(bytes.buffer)));
-        await loader.load();
-      }
-      await load('Roboto', 'assets/fonts/Roboto-Regular.ttf');
-      await load('MaterialIcons', r'C:/Users/vctr/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf');
-      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
-      final repo = _FakeRepo()
-        ..build = (f, page) => SalesReportEntity(
-              days: [
-                for (var i = 1; i <= 31; i++)
-                  SalesReportDayEntity(
-                    name: '${i.toString().padLeft(2, '0')}-Octubre',
-                    ventasSoles: 800 + (i * 137 % 900) + (i % 5) * 300.0,
-                    ventasDolares: i % 7 == 0 ? 400 : 0,
-                  ),
-              ],
-              products: const [
-                SalesReportProductEntity(id: 10, name: '10" MEDIO RANGO EXTENDIDO 750 RMS 1500 WATTS', codigo: '10MB7.8', marca: '7POWER', cantidad: 6, subtotal: 3000, descuento: 100, venta: 2900, costo: 300),
-                SalesReportProductEntity(id: 11, name: 'CABLE RCA', codigo: 'CAB-1', cantidad: 2, subtotal: 40.5, venta: 40.5, costo: 10),
-              ],
-              totalProducts: 2,
-              countVentas: 48,
-              unidades: 312,
-              totalVentas: 28450.5,
-              totalCostos: 14000,
-            );
-      final s = _session();
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider(storage: _FakeThemeStorage())),
-            ChangeNotifierProvider<AuthProvider>.value(value: _auth(s)),
-            ChangeNotifierProvider<ReportsProvider>.value(value: _provider(repo, session: s)),
-          ],
-          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: ReportsPage())),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.visibility_off_outlined));
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('tmp_rep1.png'));
-      await tester.dragFrom(const Offset(180, 500), const Offset(0, -500));
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('tmp_rep2.png'));
     });
 
     testWidgets('los atajos de fecha son los de la web, con Este mes elegido', (tester) async {

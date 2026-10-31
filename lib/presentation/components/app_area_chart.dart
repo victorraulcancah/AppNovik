@@ -44,7 +44,7 @@ class _AppAreaChartState extends State<AppAreaChart> {
     final a = v.abs();
     if (a >= 1000000) return '${(v / 1000000).toStringAsFixed(a >= 10000000 ? 0 : 1)}M';
     if (a >= 1000) return '${(v / 1000).toStringAsFixed(a >= 10000 ? 0 : 1)}k';
-    return v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1);
+    return v.toStringAsFixed(a >= 100 || v == v.roundToDouble() ? 0 : 1);
   }
 
   double get _max {
@@ -144,7 +144,10 @@ class _AppAreaChartState extends State<AppAreaChart> {
                     max: _max,
                     selected: selected,
                     gridColor: scheme.outlineVariant,
-                    textColor: scheme.onSurfaceVariant,
+                    textStyle: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 10,
+                    ),
                     markerColor: scheme.onSurface,
                   ),
                 ),
@@ -164,7 +167,7 @@ class _AreaPainter extends CustomPainter {
   final double max;
   final int? selected;
   final Color gridColor;
-  final Color textColor;
+  final TextStyle textStyle;
   final Color markerColor;
 
   _AreaPainter({
@@ -173,13 +176,13 @@ class _AreaPainter extends CustomPainter {
     required this.max,
     required this.selected,
     required this.gridColor,
-    required this.textColor,
+    required this.textStyle,
     required this.markerColor,
   });
 
   void _text(Canvas canvas, String text, Offset at, {TextAlign align = TextAlign.left}) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: TextStyle(color: textColor, fontSize: 10)),
+      text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
       textAlign: align,
     )..layout();

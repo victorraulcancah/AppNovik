@@ -74,9 +74,17 @@ Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra 
 
 ### Estado de Reportes
 
-- **Versión 1 (hecha, sin probar contra el servidor)**: *Resumen ejecutivo* (`GET /ventas/resumen-ejecutivo`, permiso `reportes.index`). Rango: hoy, este mes (predeterminado), mes pasado, este año o fechas a elección. Muestra ventas contra el mismo rango del año pasado, n.º de ventas, ticket promedio, meta del mes con su semáforo, evolución por mes (año actual contra el anterior), mejores clientes, productos más vendidos, venta por departamento y cotizaciones pendientes.
-- Es el resumen **del propio usuario** (las ventas que se le atribuyen); el backend responde 403 al Jefe de Almacén.
-- **Pendiente**: el resto de las pestañas de la web (Producto, Ventas General, Vendedor, Sucursales, Marcas, Categorías, Clientes, Tracking, Clientes con caída, Productos sin ventas...), exportar a Excel, y las tarjetas del resumen que dependen de Gestión y seguimiento (tareas de hoy, clientes que necesitan atención, cumpleaños).
+Reportes es el reporte **Ventas General** de la web (pestaña con permiso `reportes.ventas.index`, dentro de `reportes.index`):
+
+- **Fechas**: los mismos atajos de la web (Última semana, Esta semana, Último mes, **Este mes** por defecto, Último año, Este año) o fechas a elección.
+- **Cifras** (`GET /ventas/reporte`): Venta Total, Unidades Vendidas, N° de Ventas, Ticket Promedio y Margen (bruto o neto; sale oculto con `S/. ****` hasta tocar el ojo, igual que en la web; el neto descuenta el IGV y la renta de la empresa).
+- **Comparar año anterior**: pide el mismo rango un año antes y muestra la variación de cada cifra y la línea del año pasado en la gráfica.
+- **Gráfica** de ventas por día (o por mes en rangos largos): soles y dólares; al tocarla se ve el valor de cada punto.
+- **Productos y servicios** vendidos en el rango (se cargan de a 15 al bajar), ordenables por venta total, cantidad, subtotal o descuento. **Ver documentos** lista las ventas que incluyen ese producto y abre su comprobante (`GET /ventas/{id}`).
+- **Filtros avanzados**: fechas, sucursales, clientes, vendedores, marcas, categoría y departamentos (mismos parámetros que la web). **Descargar Excel** (`POST /ventas/export/reporte`) con los filtros puestos.
+- **Por rol**, como en la web: el Jefe de Almacén no ve importes ni margen (solo unidades); el Vendedor ve importes pero no el margen, y sin el permiso `reportes.ventas.ver-otros-vendedores` solo se ve a sí mismo en el filtro de vendedores; solo el CEO ve el margen en todo caso.
+- **Alcance**: Reportes en la app es **solo esta pestaña (Ventas General)**; el usuario pidió que no se agreguen las demás pestañas de la web.
+- Antes la app mostraba un "Resumen ejecutivo" que no es un reporte de la web (es del Dashboard); se quitó.
 
 ### Estado de Ventas
 

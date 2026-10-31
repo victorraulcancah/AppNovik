@@ -353,8 +353,9 @@ class ReportsProvider extends ChangeNotifier {
     if (companyId == null ||
         userId == null ||
         catalogsLoaded ||
-        catalogsLoading)
+        catalogsLoading) {
       return;
+    }
 
     catalogsLoading = true;
     catalogsError = null;
@@ -383,14 +384,16 @@ class ReportsProvider extends ChangeNotifier {
 
   /// Excel del reporte con lo que se ve.
   Future<Either<Failure, DownloadedFile>> exportCurrent() async {
-    if (exporting)
+    if (exporting) {
       return Either.left(const ValidationFailure('Ya se está exportando'));
+    }
     exporting = true;
     notifyListeners();
     final result = await _export(filters);
     exporting = false;
-    if (result.isLeft && result.left is AuthenticationFailure)
+    if (result.isLeft && result.left is AuthenticationFailure) {
       _onSessionExpired?.call();
+    }
     notifyListeners();
     return result;
   }
@@ -398,8 +401,9 @@ class ReportsProvider extends ChangeNotifier {
   /// Una venta completa, para abrir su comprobante.
   Future<Either<Failure, DocumentEntity>> loadSale(int id) async {
     final result = await _getSale(id);
-    if (result.isLeft && result.left is AuthenticationFailure)
+    if (result.isLeft && result.left is AuthenticationFailure) {
       _onSessionExpired?.call();
+    }
     return result;
   }
 }
