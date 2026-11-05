@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/validators.dart';
 import '../../theme/app_theme.dart';
@@ -48,10 +49,10 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     await context.read<AuthProvider>().login(
-          _usuarioController.text,
-          _passwordController.text,
-          remember: _remember,
-        );
+      _usuarioController.text,
+      _passwordController.text,
+      remember: _remember,
+    );
   }
 
   @override
@@ -76,7 +77,10 @@ class _LoginPageState extends State<LoginPage> {
                   _Header(topPadding: MediaQuery.paddingOf(context).top),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                    child: _form(),
+                    child: AppEntrance(
+                      delay: const Duration(milliseconds: 200),
+                      child: _form(),
+                    ),
                   ),
                 ],
               ),
@@ -101,15 +105,21 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const AppLogo(nameColor: Colors.white),
+                    const AppEntrance(
+                      offset: 24,
+                      child: AppLogo(nameColor: Colors.white),
+                    ),
                     const SizedBox(height: 28),
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(24),
+                    AppEntrance(
+                      delay: const Duration(milliseconds: 200),
+                      child: Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: _form(),
                       ),
-                      child: _form(),
                     ),
                   ],
                 ),
@@ -167,7 +177,9 @@ class _LoginPageState extends State<LoginPage> {
             const SizedBox(height: 8),
             InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: loading ? null : () => setState(() => _remember = !_remember),
+              onTap: loading
+                  ? null
+                  : () => setState(() => _remember = !_remember),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -220,7 +232,13 @@ class _Header extends StatelessWidget {
         gradient: _darkGradient,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
       ),
-      child: const Center(child: AppLogo(nameColor: Colors.white)),
+      child: const Center(
+        child: AppEntrance(
+          offset: 24,
+          duration: Duration(milliseconds: 600),
+          child: AppLogo(nameColor: Colors.white),
+        ),
+      ),
     );
   }
 }

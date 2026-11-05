@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/shell_navigation.dart';
@@ -23,10 +24,20 @@ class _AppModulo {
 }
 
 const _catalogo = [
-  _AppModulo('ventas', 'Ventas', Icons.point_of_sale_outlined, Icons.point_of_sale),
+  _AppModulo(
+    'ventas',
+    'Ventas',
+    Icons.point_of_sale_outlined,
+    Icons.point_of_sale,
+  ),
   _AppModulo('reportes', 'Reportes', Icons.bar_chart_outlined, Icons.bar_chart),
   _AppModulo('stock', 'Stock', Icons.inventory_2_outlined, Icons.inventory_2),
-  _AppModulo('documentos', 'Documentos', Icons.description_outlined, Icons.description),
+  _AppModulo(
+    'documentos',
+    'Documentos',
+    Icons.description_outlined,
+    Icons.description,
+  ),
   _AppModulo('productos', 'Productos', Icons.category_outlined, Icons.category),
 ];
 
@@ -48,8 +59,7 @@ class _MainShellPageState extends State<MainShellPage> {
     final session = context.watch<AuthProvider>().session;
     if (session == null) return const SizedBox.shrink();
 
-    final modulos =
-        _catalogo.where((m) => session.hasModule(m.slug)).toList();
+    final modulos = _catalogo.where((m) => session.hasModule(m.slug)).toList();
     // Otra pantalla pidió pasar a un módulo (por ejemplo, Documentos → Ventas al culminar una
     // cotización): se atiende en cuanto termina de dibujarse este cuadro.
     final navigation = context.watch<ShellNavigation>();
@@ -58,7 +68,9 @@ class _MainShellPageState extends State<MainShellPage> {
       final target = modulos.indexWhere((m) => m.slug == requested);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navigation.take();
-        if (mounted && target >= 0 && target != _index) setState(() => _index = target);
+        if (mounted && target >= 0 && target != _index) {
+          setState(() => _index = target);
+        }
       });
     }
 
@@ -69,25 +81,34 @@ class _MainShellPageState extends State<MainShellPage> {
       destinations: [for (final m in modulos) m.destino],
       selectedIndex: index,
       onDestinationSelected: (i) => setState(() => _index = i),
-      body: actual == null
-          ? const _ModuloVacio(
-              icono: Icons.apps_outlined,
-              titulo: 'Novik',
-              mensaje: 'Tu empresa no tiene módulos habilitados para la app.',
-            )
-          : switch (actual.slug) {
-              'ventas' => const SalesPage(),
-              'reportes' => const ReportsPage(),
-              'productos' => const ProductsPage(),
-              'stock' => const StockPage(),
-              'documentos' => const DocumentsPage(),
-              _ => _ModuloVacio(
-                  icono: actual.iconoActivo,
-                  titulo: actual.titulo,
-                  mensaje: 'Este módulo está en construcción.',
-                ),
-            },
+      body: AppFadeSwitcher(
+        child: KeyedSubtree(
+          key: ValueKey(actual?.slug ?? 'vacio'),
+          child: _contenido(actual),
+        ),
+      ),
     );
+  }
+
+  Widget _contenido(_AppModulo? actual) {
+    return actual == null
+        ? const _ModuloVacio(
+            icono: Icons.apps_outlined,
+            titulo: 'Novik',
+            mensaje: 'Tu empresa no tiene módulos habilitados para la app.',
+          )
+        : switch (actual.slug) {
+            'ventas' => const SalesPage(),
+            'reportes' => const ReportsPage(),
+            'productos' => const ProductsPage(),
+            'stock' => const StockPage(),
+            'documentos' => const DocumentsPage(),
+            _ => _ModuloVacio(
+              icono: actual.iconoActivo,
+              titulo: actual.titulo,
+              mensaje: 'Este módulo está en construcción.',
+            ),
+          };
   }
 }
 

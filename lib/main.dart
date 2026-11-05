@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'core/constants/app_constants.dart';
 import 'dependency_injection.dart';
 import 'presentation/components/components.dart';
@@ -56,17 +57,18 @@ class _AppWrapperState extends State<AppWrapper> {
   Widget build(BuildContext context) {
     final status = context.watch<AuthProvider>().status;
 
-    switch (status) {
-      case AuthStatus.authenticated:
-        return const MainShellPage();
-      case AuthStatus.initial:
-        return const AppLoadingScreen();
-      case AuthStatus.contextError:
-        return const SessionErrorPage();
-      case AuthStatus.loading:
-      case AuthStatus.unauthenticated:
-      case AuthStatus.error:
-        return const LoginPage();
-    }
+    // Cada pantalla grande entra con un fundido; el login conserva su estado
+    // mientras cambia entre "cargando", "sin sesión" y "error".
+    final (key, page) = switch (status) {
+      AuthStatus.authenticated => ('shell', const MainShellPage() as Widget),
+      AuthStatus.initial => ('loading', const AppLoadingScreen()),
+      AuthStatus.contextError => ('error', const SessionErrorPage()),
+      AuthStatus.loading ||
+      AuthStatus.unauthenticated ||
+      AuthStatus.error => ('login', const LoginPage()),
+    };
+    return AppFadeSwitcher(
+      child: KeyedSubtree(key: ValueKey(key), child: page),
+    );
   }
 }

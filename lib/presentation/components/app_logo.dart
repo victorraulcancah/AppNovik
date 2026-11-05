@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 
-/// Marca provisional de Novik (inicial + nombre) hasta tener el logo real.
+/// Marca de Novik: la "N" blanca sobre un cuadrado redondeado naranja con degradado
+/// (la misma del ícono de la app) y, opcionalmente, el nombre debajo.
 class AppLogo extends StatelessWidget {
   final double size;
   final bool showName;
@@ -15,6 +16,9 @@ class AppLogo extends StatelessWidget {
     this.showName = true,
     this.nameColor,
   });
+
+  static const _top = Color(0xFFFB7832);
+  static const _bottom = Color(0xFFD64A06);
 
   @override
   Widget build(BuildContext context) {
@@ -30,15 +34,27 @@ class AppLogo extends StatelessWidget {
             height: size,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: scheme.primary,
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_top, _bottom],
+              ),
               borderRadius: BorderRadius.circular(size * 0.3),
+              boxShadow: [
+                BoxShadow(
+                  color: _bottom.withValues(alpha: 0.35),
+                  blurRadius: size * 0.3,
+                  offset: Offset(0, size * 0.1),
+                ),
+              ],
             ),
             child: Text(
               AppConstants.appName.substring(0, 1),
               style: TextStyle(
-                color: scheme.onPrimary,
+                color: Colors.white,
                 fontSize: size * 0.55,
                 fontWeight: FontWeight.w800,
+                height: 1,
               ),
             ),
           ),
