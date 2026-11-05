@@ -121,4 +121,38 @@ void main() {
     );
     expect(find.text('N'), findsOneWidget);
   });
+
+  testWidgets('AppCountUp corre hasta el valor final', (tester) async {
+    await tester.pumpWidget(
+      _wrap(AppCountUp(value: 1000, format: (v) => 'S/ ${v.round()}')),
+    );
+    expect(find.text('S/ 0'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    final mid = int.parse(
+      (tester.widget<Text>(find.byType(Text)).data!).replaceAll('S/ ', ''),
+    );
+    expect(mid, greaterThan(0));
+    expect(mid, lessThan(1000));
+    await tester.pumpAndSettle();
+    expect(find.text('S/ 1000'), findsOneWidget);
+  });
+
+  testWidgets('AppCountUp sin animaciones muestra el valor directo', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        AppCountUp(value: 42, format: (v) => 'n=${v.round()}'),
+        disableAnimations: true,
+      ),
+    );
+    expect(find.text('n=42'), findsOneWidget);
+  });
+
+  testWidgets('AppSkeletonList dibuja tarjetas de carga y se anima', (tester) async {
+    await tester.pumpWidget(_wrap(const AppSkeletonList(count: 3)));
+    expect(find.byType(AppSkeletonBox), findsWidgets);
+    expect(find.bySemanticsLabel('Cargando'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(ShaderMask), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

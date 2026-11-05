@@ -287,7 +287,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       );
     }
     if (documents.loading && documents.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
     if (documents.error != null && documents.items.isEmpty) {
       return AppEmptyState(

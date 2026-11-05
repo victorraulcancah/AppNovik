@@ -282,21 +282,24 @@ class _ReportsPageState extends State<ReportsPage> {
       if (importes)
         _StatCard(
           title: 'Venta Total',
-          value: _soles(report.totalVentas),
+          amount: report.totalVentas,
+          format: _soles,
           icon: Icons.shopping_cart_outlined,
           variation: showCompare ? _variation(report.totalVentas, previous.totalVentas) : null,
           showVariation: showCompare,
         ),
       _StatCard(
         title: 'Unidades Vendidas',
-        value: formatQuantity(report.unidades),
+        amount: report.unidades,
+        format: formatQuantity,
         icon: Icons.inventory_2_outlined,
         variation: showCompare ? _variation(report.unidades, previous.unidades) : null,
         showVariation: showCompare,
       ),
       _StatCard(
         title: 'N° de Ventas',
-        value: '${report.countVentas}',
+        amount: report.countVentas.toDouble(),
+        format: (v) => '${v.round()}',
         icon: Icons.receipt_long_outlined,
         variation:
             showCompare ? _variation(report.countVentas.toDouble(), previous.countVentas.toDouble()) : null,
@@ -305,7 +308,8 @@ class _ReportsPageState extends State<ReportsPage> {
       if (importes)
         _StatCard(
           title: 'Ticket Promedio',
-          value: _soles(report.ticketPromedio),
+          amount: report.ticketPromedio,
+          format: _soles,
           icon: Icons.confirmation_number_outlined,
           variation: showCompare ? _variation(report.ticketPromedio, previous.ticketPromedio) : null,
           showVariation: showCompare,
@@ -490,14 +494,16 @@ class _ReportsPageState extends State<ReportsPage> {
 /// Una cifra del reporte: título, valor grande y, al comparar, la variación contra el año pasado.
 class _StatCard extends StatelessWidget {
   final String title;
-  final String value;
+  final double amount;
+  final String Function(double) format;
   final IconData icon;
   final double? variation;
   final bool showVariation;
 
   const _StatCard({
     required this.title,
-    required this.value,
+    required this.amount,
+    required this.format,
     required this.icon,
     this.variation,
     this.showVariation = false,
@@ -533,10 +539,9 @@ class _StatCard extends StatelessWidget {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    softWrap: false,
+                  child: AppCountUp(
+                    value: amount,
+                    format: format,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: scheme.primary,

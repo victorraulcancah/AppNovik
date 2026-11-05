@@ -213,7 +213,7 @@ class _StockPageState extends State<StockPage> {
 
   Widget _body(StockProvider stock, String symbol) {
     if (stock.loading && stock.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
     if (stock.error != null && stock.items.isEmpty) {
       return AppEmptyState(

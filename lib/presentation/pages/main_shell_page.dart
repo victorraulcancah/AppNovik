@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../components/components.dart';
@@ -80,7 +81,10 @@ class _MainShellPageState extends State<MainShellPage> {
     return AdaptiveScaffold(
       destinations: [for (final m in modulos) m.destino],
       selectedIndex: index,
-      onDestinationSelected: (i) => setState(() => _index = i),
+      onDestinationSelected: (i) {
+        if (i != index) HapticFeedback.selectionClick();
+        setState(() => _index = i);
+      },
       body: AppFadeSwitcher(
         child: KeyedSubtree(
           key: ValueKey(actual?.slug ?? 'vacio'),

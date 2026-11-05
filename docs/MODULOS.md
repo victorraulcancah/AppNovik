@@ -42,6 +42,9 @@ Toda descarga o exportación (Excel de Stock, Productos y Documentos, plantillas
 - **Logo e ícono**: la "N" blanca sobre un cuadrado naranja con degradado (el mismo de `AppLogo`, en el login). Android lleva ícono adaptable (con capa para íconos temáticos de Android 13) y redondo; iOS lleva todo el juego de tamaños sin transparencia. Los PNG se generan con un script de Pillow a partir de `assets/fonts/Roboto-Bold.ttf`; si cambia el logo hay que regenerarlos (Android: `res/mipmap-*`, `res/drawable-*/splash_logo.png`; iOS: `AppIcon.appiconset` y `LaunchImage.imageset`).
 - **Pantalla de arranque** (antes de que cargue Flutter): fondo azul marino de la marca (`splash_background` en Android, `LaunchScreen.storyboard` en iOS) con el logo al centro. `AppLoadingScreen` dibuja el mismo logo en el mismo lugar (96) y lo hace latir, así el paso de una a otra no se nota.
 - **Animaciones** (`components/app_motion.dart`): `AppEntrance` (fundido + leve subida, con retraso para escalonar), `AppPulse` (latido) y `AppFadeSwitcher` (fundido al cambiar de contenido). Se usan en el login (logo y formulario), en el cambio entre módulos del menú, entre login y app, y en las diez primeras tarjetas de `AppCardList` (entran escalonadas una sola vez; una lista nueva, por búsqueda o filtro, vuelve a entrar). Las pantallas usan fundido con avance suave en Android y deslizamiento nativo en iOS (`pageTransitionsTheme`). Con "quitar animaciones" del sistema todo aparece directo.
+- **Carga con esqueletos**: mientras carga la primera página de Productos, Stock, Documentos (las seis listas) las pantallas muestran tarjetas grises con brillo (`AppSkeletonList`) en vez de un círculo suelto.
+- **Cifras que corren**: las tarjetas de Reportes cuentan hasta su valor (`AppCountUp`).
+- **Detalles**: los avisos (snackbars) salen flotando con esquinas redondeadas y el cambio de módulo da un toque de vibración suave.
 
 ### Estado de Productos
 

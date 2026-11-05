@@ -275,7 +275,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
   Widget _body(ProductsProvider products) {
     if (products.loading && products.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
     if (products.error != null && products.items.isEmpty) {
       return AppEmptyState(

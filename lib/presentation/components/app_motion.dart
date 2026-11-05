@@ -37,7 +37,10 @@ class AppEntrance extends StatelessWidget {
       child: child,
       builder: (context, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * offset), child: child),
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * offset),
+          child: child,
+        ),
       ),
     );
   }
@@ -53,7 +56,8 @@ class AppPulse extends StatefulWidget {
   State<AppPulse> createState() => _AppPulseState();
 }
 
-class _AppPulseState extends State<AppPulse> with SingleTickerProviderStateMixin {
+class _AppPulseState extends State<AppPulse>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -73,11 +77,14 @@ class _AppPulseState extends State<AppPulse> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return widget.child;
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      return widget.child;
+    }
     return ScaleTransition(
-      scale: Tween<double>(begin: 0.94, end: 1.04).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-      ),
+      scale: Tween<double>(
+        begin: 0.94,
+        end: 1.04,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
       child: widget.child,
     );
   }
@@ -104,6 +111,41 @@ class AppFadeSwitcher extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// Número que "corre" hasta su valor (y vuelve a correr, desde el valor anterior, si cambia).
+/// [format] arma el texto (por ejemplo con el símbolo de moneda).
+class AppCountUp extends StatelessWidget {
+  final double value;
+  final String Function(double value) format;
+  final TextStyle? style;
+  final Duration duration;
+
+  const AppCountUp({
+    super.key,
+    required this.value,
+    required this.format,
+    this.style,
+    this.duration = const Duration(milliseconds: 700),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      format(value),
+      style: style,
+      maxLines: 1,
+      softWrap: false,
+    );
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return text;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) =>
+          Text(format(v), style: style, maxLines: 1, softWrap: false),
     );
   }
 }

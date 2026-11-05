@@ -145,7 +145,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
 
   Widget _body(OtherDocumentsProvider provider, OtherDocumentsState state) {
     if (state.loading && state.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
     if (state.error != null && state.items.isEmpty) {
       return AppEmptyState(
