@@ -37,6 +37,26 @@ Cada módulo se entrega primero en **solo lectura** y después se agregan las ac
 
 Toda descarga o exportación (Excel de Stock, Productos y Documentos, plantillas, CDR de SUNAT y el PDF del comprobante) **se guarda en el dispositivo** con el "Guardar como" del sistema (`FilePicker.saveFile`: carpeta Descargas, Drive...). Al guardar sale un aviso con "Compartir" por si se prefiere mandarlo por WhatsApp o correo. El PDF tiene además su botón de compartir.
 
+### Estado de Inicio
+
+Módulo **Inicio**: el Dashboard de la web. Siempre aparece (no depende de un módulo contratado) y es la primera pestaña. Según el rol muestra su resumen: Vendedor → **Ejecutivo** (`/ventas/resumen-ejecutivo`), JEFE COMERCIAL → **Jefe** (`/ventas/resumen-equipo`), Ceo Empresa → **CEO** (`/ventas/resumen-ceo`). Con más de un perfil sale un switch "CEO | Jefe | Ejecutivo" que arranca en el cargo más alto. El Jefe de Almacén (que no ve importes) y los roles sin perfil comercial ven la pantalla de siempre: "Resumen de Ventas MES / AÑO" con el total y el de cada almacén (`/ventas/reporte-almacenes`).
+
+- **Rango**: los mismos atajos de Reportes (Este mes por defecto) o fechas a mano; el CEO también filtra por almacén (`sucursal`). La pantalla general siempre es el mes en curso.
+- **Ejecutivo**: saludo según la hora; ventas contra la meta del mes con semáforo (rojo < 50 %, ámbar hasta 100 %, verde desde ahí) y mensaje motivador por tramo (ayuda con todos los tramos); N.º de ventas y ticket con variación contra el año pasado; evolución mensual; ventas por cliente, productos y departamento; oportunidades comerciales (clientes con caída, cotizaciones pendientes, productos sin ventas); Mis tareas (Hoy / Semana / Mes, con filtro por tipo de contacto); clientes con mayor caída; cotizaciones pendientes con prioridad; cumpleaños.
+- **Jefe**: ventas del equipo contra la meta de la empresa, evolución, cumplimiento de metas por vendedor, productos más vendidos y departamentos, oportunidades, gestiones del equipo (hechas / programadas por tipo y periodo), clientes y productos con mayor caída, cotizaciones pendientes del equipo (soles y dólares).
+- **CEO**: ventas del periodo con comparativos y proyección de cierre; evolución; indicadores estratégicos YTD (la utilidad arranca oculta); cumplimiento por vendedor; departamentos; ventas por canal (dona); cuentas por cobrar (por vencer y vencido); cobro por vendedor; ingresos por entidad bancaria (soles/dólares y filtro de métodos); productos y clientes con mayor caída; nuevos clientes.
+- **Menú**: con más de cinco módulos la barra inferior del celular muestra los primeros cuatro y un botón **Más** con la lista del resto; en tablet el riel lateral los muestra todos.
+- **Pendiente**: los enlaces que en la web abren otro reporte o la ficha del cliente, y las ayudas (?) de cada tarjeta. "Cotizaciones pendientes" lleva a Documentos (sin filtrar por pendientes) si el usuario tiene el módulo y el permiso.
+
+### Estado de Clientes
+
+- **Lista**: tarjetas con nombre o razón social, DNI/RUC, código, departamento, ejecutivo, crédito, insignia de categoría (con el color de su código) y estado. Búsqueda (cada palabra debe aparecer en algún campo), paginación, contadores Todos/Personas/Empresas que filtran, y panel de filtros: tipo, estado, categoría (sin/con o varias), ejecutivo (sin/con o varios) y departamento. El teléfono solo se ve con `clientes.show-telefono`. Un Vendedor ve su cartera (lo resuelve el backend).
+- **Detalle**: datos generales, crédito (línea, utilizada, disponible), direcciones, contactos y adicional.
+- **Crear y editar** (`POST/PUT /clientes`): pestañas según permisos (`clientes.store` o `clientes.update.informacion-basica`, `.direcciones`, `.contactos`; condiciones de venta con `clientes.condiciones-de-venta` o rol Ceo Empresa). Consulta de DNI/RUC, teléfono internacional, ubigeo, direcciones adicionales con una predeterminada, contactos, lista de precios, método de pago, línea de crédito, categoría automática (solo lectura), URLs, cumpleaños y notas. Un Vendedor no elige ejecutivo ni estado. Al editar no se guarda sin cambios. Lo que el usuario no puede editar no se manda.
+- **Categorías**: con `clientes.categorizar`, ciclo (mensual, trimestral, cuatrimestral, anual), rangos por ciclo, guardar y calcular ahora. El Vendedor sin ese permiso las ve en modo lectura.
+- **Excel** (`clientes.export`): baja lo que se está viendo.
+- **Pendiente**: cumpleaños, seguimiento del cliente, mapa de la pestaña Ubicación (no hay paquete de mapas; la latitud y longitud existentes no se pierden al editar), el "+" para crear una lista de precios desde el formulario, el filtro "Clientes" y subir clientes con Excel.
+
 ### Identidad y animaciones
 
 - **Logo e ícono**: la "N" blanca sobre un cuadrado naranja con degradado (el mismo de `AppLogo`, en el login). Android lleva ícono adaptable (con capa para íconos temáticos de Android 13) y redondo; iOS lleva todo el juego de tamaños sin transparencia. Los PNG se generan con un script de Pillow a partir de `assets/fonts/Roboto-Bold.ttf`; si cambia el logo hay que regenerarlos (Android: `res/mipmap-*`, `res/drawable-*/splash_logo.png`; iOS: `AppIcon.appiconset` y `LaunchImage.imageset`).

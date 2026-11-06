@@ -70,6 +70,9 @@ String? apiErrorMessage(String body) {
         'codigo' => 'El código ya existe',
         'sku' => 'El SKU ya existe',
         'cod_barra' => 'El código de barras ya existe',
+        // Un documento repetido en la empresa (la web dice "El Cliente ya existe").
+        'dni_ruc' when RegExp(r'taken|en uso|ya (ha sido|está)|already', caseSensitive: false).hasMatch(text) =>
+          'El Cliente ya existe',
         _ => text,
       };
     }

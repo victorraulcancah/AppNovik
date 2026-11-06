@@ -21,6 +21,9 @@ class AppListCard extends StatelessWidget {
   final List<Widget> actions;
   final VoidCallback? onTap;
 
+  /// Fila opcional bajo las líneas de detalle (por ejemplo, insignias de categoría y estado).
+  final Widget? footer;
+
   const AppListCard({
     super.key,
     this.number,
@@ -32,6 +35,7 @@ class AppListCard extends StatelessWidget {
     this.trailingCaptionColor,
     this.actions = const [],
     this.onTap,
+    this.footer,
   });
 
   @override
@@ -80,6 +84,11 @@ class AppListCard extends StatelessWidget {
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
+                            ),
+                          if (footer != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: footer,
                             ),
                         ],
                       ),
