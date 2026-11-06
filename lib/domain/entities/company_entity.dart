@@ -38,6 +38,10 @@ class CompanyEntity {
   /// (Solo se guarda si existe; el certificado en sí nunca se conserva.)
   final bool emiteComprobantes;
 
+  /// Serie y último número usado de las guías de remisión (la próxima es la siguiente).
+  final int? guiaSerie;
+  final int? guiaNumero;
+
   const CompanyEntity({
     required this.id,
     required this.razonSocial,
@@ -52,5 +56,7 @@ class CompanyEntity {
     this.minimoCanjePuntos = 0,
     this.plan,
     this.emiteComprobantes = false,
+    this.guiaSerie,
+    this.guiaNumero,
   });
 }

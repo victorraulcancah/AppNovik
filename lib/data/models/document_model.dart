@@ -135,6 +135,7 @@ QuoteDraftEntity? _quoteDraft(Map<String, dynamic> json) {
     client: clientFromJson(client),
     warehouseId: warehouseId,
     priceListId: _int(json['list_price_id']),
+    vendedorId: _int(json['vendedor_id']),
     observaciones: json['observaciones'] as String?,
     lines: [
       if (products is List)
@@ -148,6 +149,8 @@ QuoteDraftEntity? _quoteDraft(Map<String, dynamic> json) {
               cantidad: _double((p['pivot'] is Map ? p['pivot'] as Map : const {})['cantidad']).round(),
               precio: _double((p['pivot'] is Map ? p['pivot'] as Map : const {})['precio']),
               dolares: _bool((p['pivot'] is Map ? p['pivot'] as Map : const {})['dolares'], defaultValue: false),
+              dto: _double((p['pivot'] is Map ? p['pivot'] as Map : const {})['dto']),
+              dtoFijo: _bool((p['pivot'] is Map ? p['pivot'] as Map : const {})['dto_fijo'], defaultValue: false),
             ),
     ],
   );

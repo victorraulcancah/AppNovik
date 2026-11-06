@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/document_entity.dart';
+import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../pages/receipt_page.dart';
 import 'document_modals.dart';
@@ -69,8 +70,9 @@ Future<void> showSaleRegistered(
   }
 }
 
-/// Lo que se decide al crear una cotización.
-typedef QuoteOptions = ({bool reservarStock, DateTime? vencimientoStock});
+/// Lo que se decide al crear una cotización: si reserva el stock (y hasta cuándo) y el vendedor
+/// encargado (opcional).
+typedef QuoteOptions = ({bool reservarStock, DateTime? vencimientoStock, int? vendedorId});
 
 /// Último día en que se puede reservar el stock: el siguiente al de hoy, y como mucho el
 /// final del mes (igual que la web).
@@ -81,27 +83,38 @@ DateTime quoteDefaultExpiry(DateTime now) {
   return tomorrow.isAfter(endOfMonth) ? endOfMonth : tomorrow;
 }
 
-/// Pregunta si la cotización reserva el stock y hasta qué día, y confirma su creación.
-/// Devuelve `null` si se cancela.
+/// Pregunta si la cotización reserva el stock y hasta qué día, quién es el vendedor encargado, y
+/// confirma su creación (o su edición con [editing]). Devuelve `null` si se cancela.
+///
+/// El vendedor encargado es opcional: [sellers] son los que se pueden elegir (sin [excludeSellerId],
+/// que es el propio usuario) y [initialSellerId] el que ya tenía la cotización que se edita.
 Future<QuoteOptions?> showQuoteOptions(
   BuildContext context, {
   required DateTime now,
   required String client,
   required String total,
+  List<SellerEntity> sellers = const [],
+  int? initialSellerId,
+  int? excludeSellerId,
+  bool editing = false,
 }) async {
   final today = DateTime(now.year, now.month, now.day);
   final endOfMonth = DateTime(now.year, now.month + 1, 0);
   final reserve = ValueNotifier<bool>(false);
   final expiry = ValueNotifier<DateTime>(quoteDefaultExpiry(now));
+  final options = [for (final s in sellers) if (s.id != excludeSellerId) s];
+  // El de la cotización puede ser el propio usuario o alguien que ya no está en la lista: se
+  // conserva solo si se puede elegir.
+  final seller = ValueNotifier<int?>(options.any((s) => s.id == initialSellerId) ? initialSellerId : null);
 
   final confirmed = await showAppModal(
     context,
-    title: 'Crear cotización',
+    title: editing ? 'Editar cotización' : 'Crear cotización',
     subtitle: '$client · $total',
     icon: Icons.request_quote_outlined,
-    primaryLabel: 'Crear',
+    primaryLabel: editing ? 'Editar' : 'Crear',
     child: AppDisposer(
-      onDispose: [reserve.dispose, expiry.dispose],
+      onDispose: [reserve.dispose, expiry.dispose, seller.dispose],
       child: ValueListenableBuilder<bool>(
         valueListenable: reserve,
         builder: (context, reserving, _) => Column(
@@ -137,6 +150,22 @@ Future<QuoteOptions?> showQuoteOptions(
                 ),
               ),
             ],
+            if (options.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ValueListenableBuilder<int?>(
+                valueListenable: seller,
+                builder: (context, selected, _) => AppDropdownField<int?>(
+                  key: ValueKey('vendedor-$selected'),
+                  label: 'Vendedor encargado (opcional)',
+                  value: selected,
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('Sin vendedor encargado')),
+                    for (final s in options) DropdownMenuItem<int?>(value: s.id, child: Text(s.name)),
+                  ],
+                  onChanged: (v) => seller.value = v,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -147,6 +176,7 @@ Future<QuoteOptions?> showQuoteOptions(
       ? (
           reservarStock: reserve.value,
           vencimientoStock: reserve.value ? expiry.value : null,
+          vendedorId: seller.value,
         )
       : null;
 }

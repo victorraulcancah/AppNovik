@@ -118,12 +118,41 @@ ExchangeRateEntity exchangeRateFromJson(Map<String, dynamic> json) => ExchangeRa
       margen: _double(json['margen']) ?? 0,
     );
 
+/// `GET /usuarios/list`: los usuarios de la empresa con el rol pedido (`[{id, name, ...}]`).
+List<SellerEntity> sellersFromJson(dynamic json) {
+  if (json is! List) return const [];
+  final result = <SellerEntity>[];
+  for (final e in json) {
+    if (e is! Map) continue;
+    final id = _int(e['id']);
+    final name = _text(e['name']);
+    if (id != null && name != null) result.add(SellerEntity(id: id, name: name));
+  }
+  return result;
+}
+
 String _day(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 /// Fecha y hora como las espera el backend (hora de Perú, sin zona).
 String _dayTime(DateTime d) =>
     '${_day(d)} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
+
+/// Una línea de `product_sales`, con los campos que arma la web: el descuento (porcentaje o monto
+/// fijo) y, en un ítem libre, `product_id` nulo con `concepto_libre` y `codigo_libre`.
+Map<String, dynamic> _lineJson(SaleLineEntity l, {required bool dolares}) => {
+      'product_id': l.esLibre ? null : l.product.id,
+      if (l.esLibre) 'concepto_libre': l.conceptoLibre,
+      if (l.esLibre) 'codigo_libre': l.codigoLibre,
+      'cantidad': l.cantidad,
+      'precio': l.precio,
+      'dto_fijo': l.dtoFijo,
+      'dolares': dolares,
+      'dto': l.dto,
+      'monto_dto': l.montoDto,
+      'subtotal': l.subtotal,
+      'subtotal_con_dto': l.subtotalConDto,
+    };
 
 /// Cuerpo de `POST /cotizaciones`: las mismas líneas que una venta, la lista de precios y, si
 /// reserva stock, hasta qué día. El tipo de cambio lo fija el servidor.
@@ -145,20 +174,8 @@ Map<String, dynamic> quoteToJson(
     if (form.reservarStock && form.vencimientoStock != null)
       'vencimiento_stock': _day(form.vencimientoStock!),
     if (observaciones != null && observaciones.isNotEmpty) 'observaciones': observaciones,
-    'product_sales': [
-      for (final l in form.lines)
-        {
-          'product_id': l.product.id,
-          'cantidad': l.cantidad,
-          'precio': l.precio,
-          'dto_fijo': false,
-          'dolares': form.dolares,
-          'dto': 0,
-          'monto_dto': 0,
-          'subtotal': l.subtotal,
-          'subtotal_con_dto': l.subtotal,
-        },
-    ],
+    if (form.vendedorId != null) 'vendedor_id': form.vendedorId,
+    'product_sales': [for (final l in form.lines) _lineJson(l, dolares: form.dolares)],
   };
 }
 
@@ -187,20 +204,10 @@ Map<String, dynamic> saleToJson(
     'metodo_entrega': form.delivery.apiValue,
     if (form.fechaEmision != null) 'created_at': _dayTime(form.fechaEmision!),
     if (observaciones != null && observaciones.isNotEmpty) 'observaciones': observaciones,
-    'product_sales': [
-      for (final l in form.lines)
-        {
-          'product_id': l.product.id,
-          'cantidad': l.cantidad,
-          'precio': l.precio,
-          'dto_fijo': false,
-          'dolares': form.dolares,
-          'dto': 0,
-          'monto_dto': 0,
-          'subtotal': l.subtotal,
-          'subtotal_con_dto': l.subtotal,
-        },
-    ],
+    // El vendedor encargado de la cotización que se culmina viaja a la venta (la web lo guarda
+    // en un campo oculto del formulario).
+    if (form.vendedorId != null) 'vendedor_id': form.vendedorId,
+    'product_sales': [for (final l in form.lines) _lineJson(l, dolares: form.dolares)],
     'payment_methods': [
       for (final p in form.payments)
         {

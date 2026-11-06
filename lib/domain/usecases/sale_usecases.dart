@@ -51,6 +51,14 @@ class GetSaleProductFiltersUseCase {
   Future<Either<Failure, SaleProductFiltersEntity>> call() => repository.getProductFilters();
 }
 
+/// Los vendedores que se pueden elegir como "vendedor encargado" de una cotización.
+class GetSellersUseCase {
+  final SaleRepository repository;
+  GetSellersUseCase({required this.repository});
+
+  Future<Either<Failure, List<SellerEntity>>> call(int companyId) => repository.getSellers(companyId);
+}
+
 class GetPaymentMethodsUseCase {
   final SaleRepository repository;
   GetPaymentMethodsUseCase({required this.repository});
@@ -79,6 +87,11 @@ class CreateSaleUseCase {
     final revisaStock = !isQuote || form.reservarStock;
     for (final line in form.lines) {
       final name = line.product.name;
+      if (line.esLibre) {
+        // El backend de cotizaciones exige un producto del catálogo en cada línea.
+        if (isQuote) return 'Una cotización no admite ítems libres. Quita "$name" o emite una venta';
+        if ((line.conceptoLibre ?? '').trim().isEmpty) return 'Escribe la descripción del ítem libre';
+      }
       if (line.cantidad < 1) return '"$name": la cantidad mínima es 1';
       if (line.precio <= 0) {
         return '"$name" no tiene precio. Escríbelo antes de ${isQuote ? 'cotizar' : 'vender'}';

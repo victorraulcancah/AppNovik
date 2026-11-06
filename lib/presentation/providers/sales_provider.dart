@@ -23,6 +23,9 @@ class SalesProvider extends ChangeNotifier {
   final SearchSaleProductsUseCase _searchProducts;
   final CreateSaleUseCase _createSale;
 
+  /// Vendedores para elegir el "vendedor encargado" de una cotización (opcional).
+  final GetSellersUseCase? _getSellers;
+
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
 
@@ -39,6 +42,7 @@ class SalesProvider extends ChangeNotifier {
     required SearchClientsUseCase searchClientsUseCase,
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
+    GetSellersUseCase? getSellersUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
@@ -51,6 +55,7 @@ class SalesProvider extends ChangeNotifier {
         _searchClients = searchClientsUseCase,
         _searchProducts = searchSaleProductsUseCase,
         _createSale = createSaleUseCase,
+        _getSellers = getSellersUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
@@ -58,6 +63,9 @@ class SalesProvider extends ChangeNotifier {
   int? _defaultWarehouseId;
   int? _defaultPriceListId;
   bool _emiteComprobantes = false;
+
+  /// El usuario tiene el permiso `factura.libre`: puede agregar ítems libres a la venta.
+  bool _puedeItemLibre = false;
 
   /// Programa de puntos de la empresa: si está activo y el mínimo que se puede canjear.
   bool _programaDePuntos = false;
@@ -77,6 +85,11 @@ class SalesProvider extends ChangeNotifier {
   /// Categorías y marcas del buscador de productos; se piden la primera vez que se abre.
   SaleProductFiltersEntity productFilters = const SaleProductFiltersEntity();
   bool _productFiltersLoaded = false;
+
+  /// Usuarios que se pueden elegir como "vendedor encargado" de una cotización; se piden la
+  /// primera vez que se abre el modal de la cotización.
+  List<SellerEntity> sellers = [];
+  bool _sellersLoaded = false;
   bool loading = false;
   String? error;
 
@@ -127,6 +140,12 @@ class SalesProvider extends ChangeNotifier {
   /// Mínimo de puntos que se pueden canjear al pagar.
   double get minimoCanjePuntos => _minimoCanjePuntos;
 
+  /// Se pueden agregar ítems libres (líneas sin producto del catálogo): lo permite `factura.libre`.
+  bool get puedeItemLibre => _puedeItemLibre;
+
+  /// Vendedor encargado de la cotización que se está culminando o editando.
+  int? get vendedorDeCotizacion => fromQuote?.quoteDraft?.vendedorId;
+
   /// Boleta y factura solo si la empresa tiene certificado digital. La cotización siempre.
   List<SaleDocumentType> get documentTypes => _emiteComprobantes
       ? SaleDocumentType.values
@@ -151,8 +170,9 @@ class SalesProvider extends ChangeNotifier {
     super.notifyListeners();
   }
 
+  /// Total de la venta, ya con los descuentos de cada línea.
   double get total =>
-      roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotal));
+      roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotalConDto));
 
   SaleFormEntity get form => _buildForm();
 
@@ -160,8 +180,12 @@ class SalesProvider extends ChangeNotifier {
     SaleCheckoutEntity? checkout,
     bool reservarStock = false,
     DateTime? vencimientoStock,
+    int? vendedorId,
   }) =>
       SaleFormEntity(
+        // La cotización lleva el vendedor que se eligió en su modal; la venta, el de la cotización
+        // que se culmina (en la web ese campo va oculto en "Crear venta").
+        vendedorId: tipoDocumento.esCotizacion ? vendedorId : fromQuote?.quoteDraft?.vendedorId,
         dolares: esDolares,
         tipoCambio: checkout?.tipoCambio,
         fromQuoteId: fromQuote?.quoteDraft?.id,
@@ -187,6 +211,7 @@ class SalesProvider extends ChangeNotifier {
     _defaultDelivery = session?.defaultDelivery;
     _defaultPaymentMethodId = session?.defaultPaymentMethodId;
     _emiteComprobantes = session?.company.emiteComprobantes ?? false;
+    _puedeItemLibre = session?.can('factura.libre') ?? false;
     _programaDePuntos = session?.company.programaDePuntos ?? false;
     _minimoCanjePuntos = session?.company.minimoCanjePuntos ?? 0;
     final companyId = session?.company.id;
@@ -201,6 +226,8 @@ class SalesProvider extends ChangeNotifier {
     paymentMethods = [];
     productFilters = const SaleProductFiltersEntity();
     _productFiltersLoaded = false;
+    sellers = [];
+    _sellersLoaded = false;
     exchangeRate = null;
     exchangeRateLoading = false;
     exchangeRateError = null;
@@ -395,6 +422,23 @@ class SalesProvider extends ChangeNotifier {
     }
   }
 
+  /// Los vendedores que se pueden elegir como encargados. Si fallan, la lista queda vacía y la
+  /// cotización se puede crear sin vendedor encargado.
+  Future<void> ensureSellers() async {
+    final companyId = _companyId;
+    final load = _getSellers;
+    if (companyId == null || load == null || _sellersLoaded) return;
+    final result = await load(companyId);
+    if (companyId != _companyId) return;
+    if (result.isRight) {
+      sellers = result.right;
+      _sellersLoaded = true;
+      notifyListeners();
+    } else {
+      _checkSession(result);
+    }
+  }
+
   void _checkSession(Either<Failure, Object?> result) {
     if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
   }
@@ -441,7 +485,8 @@ class SalesProvider extends ChangeNotifier {
   void _repriceLines() {
     final list = priceListId;
     if (list == null) return;
-    lines = [for (final l in lines) l.copyWith(precio: l.product.precioEn(list))];
+    // Un ítem libre no está en ninguna lista: conserva el precio que se le puso.
+    lines = [for (final l in lines) l.esLibre ? l : l.copyWith(precio: l.product.precioEn(list))];
   }
 
   /// Unidades de [productId] que ya están en la venta.
@@ -550,6 +595,82 @@ class SalesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Descuento de la línea: un porcentaje (0–100) o, si la línea lo tiene en monto, un importe que
+  /// no puede pasar del subtotal. Un valor mayor se recorta, como en la web.
+  void setDto(int index, double dto) {
+    if (index < 0 || index >= lines.length) return;
+    lines = [...lines]..[index] = lines[index].copyWith(dto: dto < 0 ? 0 : dto);
+    submitError = null;
+    notifyListeners();
+  }
+
+  /// Cambia el tipo de descuento de la línea: porcentaje ↔ monto fijo (el valor escrito se queda).
+  void toggleDtoFijo(int index) {
+    if (index < 0 || index >= lines.length) return;
+    lines = [...lines]..[index] = lines[index].copyWith(dtoFijo: !lines[index].dtoFijo);
+    submitError = null;
+    notifyListeners();
+  }
+
+  /// Agrega un ítem libre (solo con el permiso `factura.libre`). Si el código que se escribió ya es
+  /// un producto del catálogo, la línea pasa a ser ese producto (con su stock y su costo), como en la
+  /// web; si no, queda como ítem libre. Devuelve el motivo si no se pudo y, si pasó a ser un
+  /// producto del catálogo, el aviso para el usuario.
+  Future<({String? problem, String? info})> addFreeItem({
+    required String descripcion,
+    String? codigo,
+    int cantidad = 1,
+    required double precio,
+  }) async {
+    if (!_puedeItemLibre) return (problem: 'No tienes permiso para agregar ítems libres', info: null);
+    if (tipoDocumento.esCotizacion) {
+      return (problem: 'Una cotización no admite ítems libres', info: null);
+    }
+    if (descripcion.trim().isEmpty) return (problem: 'Escribe la descripción del concepto', info: null);
+    if (cantidad < 1) return (problem: 'La cantidad mínima es 1', info: null);
+
+    final code = codigo?.trim() ?? '';
+    final companyId = _companyId;
+    if (code.isNotEmpty && companyId != null) {
+      // Un código que ya existe en el catálogo no se vende como ítem libre. Si la búsqueda falla,
+      // sigue como ítem libre (la web hace lo mismo).
+      final result = await _searchProducts(companyId: companyId, search: code);
+      _checkSession(result);
+      if (companyId != _companyId) return (problem: null, info: null);
+      if (result.isRight) {
+        final match = result.right.where((p) => p.codigo.trim().toLowerCase() == code.toLowerCase()).firstOrNull;
+        if (match != null) return _addCatalogInstead(match, cantidad, precio);
+      }
+    }
+
+    lines = [
+      ...lines,
+      SaleLineEntity.libre(descripcion: descripcion, codigo: code, cantidad: cantidad, precio: precio),
+    ];
+    submitError = null;
+    notifyListeners();
+    return (problem: null, info: null);
+  }
+
+  ({String? problem, String? info}) _addCatalogInstead(SaleProductEntity match, int cantidad, double precio) {
+    final warehouse = warehouseId;
+    final max = warehouse == null ? null : match.maximoEn(warehouse);
+    // Mismo criterio que al elegir el producto en el buscador: sin stock no se vende (salvo
+    // servicios y "vender sin stock").
+    if (max != null && max <= 0) {
+      return (
+        problem: '${match.codigo} está en el catálogo pero no tiene stock en este almacén, así que no se puede '
+            'vender como ítem libre. Ingresa stock o activa "vender sin stock" en el producto.',
+        info: null,
+      );
+    }
+    // Si ya estaba en la venta se suma la cantidad; si no, se conserva el precio escrito (si lo hay).
+    final yaEstaba = lines.any((l) => l.product.id == match.id);
+    final problem = addProduct(match, cantidad: cantidad, precio: yaEstaba || precio <= 0 ? null : precio);
+    if (problem != null) return (problem: problem, info: null);
+    return (problem: null, info: '${match.codigo} ya está en el catálogo: se agregó como producto normal.');
+  }
+
   void removeLine(int index) {
     if (index < 0 || index >= lines.length) return;
     lines = [...lines]..removeAt(index);
@@ -635,11 +756,24 @@ class SalesProvider extends ChangeNotifier {
       }
 
       // Un mismo producto en dos líneas se junta en una (la venta lleva una línea por producto).
+      // Si traían descuentos distintos, la línea junta queda con la suma de los montos descontados.
       final at = loaded.indexWhere((x) => x.product.id == l.productId);
+      final line = SaleLineEntity(
+        product: product,
+        cantidad: l.cantidad,
+        precio: l.precio,
+        dto: l.dto,
+        dtoFijo: l.dtoFijo,
+      );
       if (at >= 0) {
-        loaded[at] = loaded[at].copyWith(cantidad: loaded[at].cantidad + l.cantidad);
+        final a = loaded[at];
+        final cantidad = a.cantidad + l.cantidad;
+        final mismoPorcentaje = !a.dtoFijo && !line.dtoFijo && a.dto == line.dto;
+        loaded[at] = mismoPorcentaje || (a.montoDto + line.montoDto) <= 0
+            ? a.copyWith(cantidad: cantidad)
+            : a.copyWith(cantidad: cantidad, dtoFijo: true, dto: a.montoDto + line.montoDto);
       } else {
-        loaded.add(SaleLineEntity(product: product, cantidad: l.cantidad, precio: l.precio));
+        loaded.add(line);
       }
     }
 
@@ -683,6 +817,7 @@ class SalesProvider extends ChangeNotifier {
     SaleCheckoutEntity? checkout,
     bool reservarStock = false,
     DateTime? vencimientoStock,
+    int? vendedorId,
   }) async {
     final companyId = _companyId;
     final userId = _userId;
@@ -699,6 +834,7 @@ class SalesProvider extends ChangeNotifier {
         checkout: checkout,
         reservarStock: reservarStock,
         vencimientoStock: vencimientoStock,
+        vendedorId: vendedorId,
       ),
     );
 

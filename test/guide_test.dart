@@ -9,15 +9,21 @@ import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/guide_form_entity.dart';
 import 'package:app_novik/domain/entities/other_document_entity.dart';
+import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/sale_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
+import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/client_repository.dart';
 import 'package:app_novik/domain/repositories/guide_repository.dart';
+import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/client_usecases.dart';
 import 'package:app_novik/domain/usecases/guide_usecases.dart';
 import 'package:app_novik/presentation/providers/clients_provider.dart';
+import 'package:app_novik/presentation/pdf/other_document_pdf.dart';
+import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/guide_provider.dart';
+import 'package:app_novik/presentation/utils/guide_preview.dart';
 import 'package:app_novik/presentation/widgets/guide_form.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -170,6 +176,49 @@ class _FakeClientRepo implements ClientRepository {
     required NewClientFormEntity form,
   }) async =>
       throw UnimplementedError();
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  @override
+  Future<Either<Failure, UserEntity>> login(String usuario, String password) async =>
+      Either.right(const UserEntity(id: 9, name: 'Ana', usuario: 'ana'));
+
+  @override
+  Future<Either<Failure, void>> logout() async => Either.rightVoid();
+
+  @override
+  Future<Either<Failure, SessionContextEntity?>> getSessionContext() async => Either.right(null);
+
+  @override
+  Future<String?> getToken() async => null;
+
+  @override
+  Future<Either<Failure, SavedCredentialsEntity?>> getSavedCredentials() async => Either.right(null);
+
+  @override
+  Future<Either<Failure, void>> saveCredentials(String usuario, String password) async => Either.rightVoid();
+
+  @override
+  Future<Either<Failure, void>> clearSavedCredentials() async => Either.rightVoid();
+}
+
+AuthProvider _auth(CompanyEntity company) {
+  final repo = _FakeAuthRepository();
+  return AuthProvider(
+    loginUseCase: LoginUseCase(repository: repo),
+    logoutUseCase: LogoutUseCase(repository: repo),
+    getSessionContextUseCase: GetSessionContextUseCase(repository: repo),
+    getSavedCredentialsUseCase: GetSavedCredentialsUseCase(repository: repo),
+    saveCredentialsUseCase: SaveCredentialsUseCase(repository: repo),
+    clearSavedCredentialsUseCase: ClearSavedCredentialsUseCase(repository: repo),
+  )..session = SessionContextEntity(
+      user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
+      company: company,
+      modules: const [],
+      permissions: const {},
+      roles: const [],
+      warehouses: const [],
+    );
 }
 
 SessionContextEntity _session() => SessionContextEntity(
@@ -560,6 +609,8 @@ void main() {
       WidgetTester tester, {
       DocumentEntity document = _doc,
       _FakeGuideRepo? guideRepo,
+      List<OtherDocumentEntity>? previews,
+      CompanyEntity company = const CompanyEntity(id: 7, razonSocial: 'ACME', ruc: '20999999999'),
     }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real). La pantalla es
       // alta para que todo el formulario esté dibujado.
@@ -588,6 +639,7 @@ void main() {
           providers: [
             ChangeNotifierProvider<GuideProvider>.value(value: guide),
             ChangeNotifierProvider<ClientsProvider>.value(value: clients),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(company)),
           ],
           child: MaterialApp(
             theme: AppTheme.light,
@@ -599,6 +651,10 @@ void main() {
                       context,
                       document: document,
                       now: () => DateTime(2026, 10, 31, 9),
+                      previewPageBuilder: (preview) {
+                        previews?.add(preview);
+                        return Scaffold(body: Center(child: Text('vista previa ${preview.numero}')));
+                      },
                     );
                   },
                   child: const Text('abrir'),
@@ -813,6 +869,171 @@ void main() {
       expect(find.text('SUNAT rechazó la guía'), findsOneWidget);
       expect(find.text('Guía de remisión'), findsOneWidget);
       expect(created.value, isNull);
+    });
+
+    testWidgets('Previsualizar abre la guía con lo escrito, sin validar ni crear nada', (tester) async {
+      final previews = <OtherDocumentEntity>[];
+      final (repo, _, created) = await pump(
+        tester,
+        previews: previews,
+        company: const CompanyEntity(id: 7, razonSocial: 'ACME', ruc: '20999999999', guiaSerie: 2, guiaNumero: 14),
+      );
+
+      // El formulario está casi vacío: la vista previa igual se abre (la web no valida).
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Previsualizar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('vista previa TG02-0015 (provisional)'), findsOneWidget);
+      expect(find.text('Escribe el peso total'), findsNothing);
+      expect(repo.created, isEmpty, reason: 'previsualizar no crea la guía ni gasta su número');
+      expect(created.value, isNull);
+      final p = previews.single;
+      expect(p.kind, OtherDocumentKind.guia);
+      expect(p.comprobanteNumero, 'B001-00077');
+      expect(p.comprobante, same(_doc));
+      expect(p.guia!.tipoGuia, '02'); // privada por defecto
+      expect(p.guia!.codTraslado, '01');
+      expect(p.guia!.fechaEmision, DateTime(2026, 10, 31));
+      expect(p.guia!.direccionLlegada, 'JR. LOS ALAMOS 456'); // la del cliente
+      expect(p.guia!.documentoTransportista, '20999999999'); // el RUC de la empresa
+      expect(p.guia!.pesoTotal, 0);
+      expect(p.guia!.direccionSalida, isNull);
+    });
+
+    testWidgets('la vista previa lleva los datos del formulario y los nombres del ubigeo', (tester) async {
+      final previews = <OtherDocumentEntity>[];
+      await pump(tester, previews: previews);
+
+      await tester.enterText(field('Peso total (KG) *'), '12,5');
+      await tester.enterText(field('Razón social *'), 'TRANSPORTES SAC');
+      await tester.ensureVisible(field('Placa del vehículo *'));
+      await tester.enterText(field('Placa del vehículo *'), 'ABC-123');
+      await choose(tester, 'Departamento *', 'LIMA'); // la salida (primer ubigeo)
+      await choose(tester, 'Provincia *', 'PROVINCIA 15');
+      await choose(tester, 'Distrito *', 'DISTRITO 1501');
+      await tester.ensureVisible(field('Dirección de salida *'));
+      await tester.enterText(field('Dirección de salida *'), 'AV. LIMA 123');
+
+      await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Previsualizar'));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Previsualizar'));
+      await tester.pumpAndSettle();
+
+      final g = previews.single.guia!;
+      expect(g.pesoTotal, 12.5);
+      expect(g.transportista, 'TRANSPORTES SAC');
+      expect(g.placaChofer, 'ABC-123');
+      expect(g.direccionSalida, 'AV. LIMA 123');
+      expect(g.ubigeoSalida, 'DISTRITO 1501, PROVINCIA 15, LIMA');
+      expect(g.ubigeoLlegada, 'DISTRITO 1501, PROVINCIA 15, LIMA'); // la del cliente
+      expect(previews.single.numero, 'TG01-0001 (provisional)'); // la empresa sin guías: la primera
+    });
+
+    testWidgets('volver de la vista previa deja el formulario como estaba', (tester) async {
+      final previews = <OtherDocumentEntity>[];
+      final (repo, _, created) = await pump(tester, previews: previews);
+      await tester.enterText(field('Peso total (KG) *'), '4');
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Previsualizar'));
+      await tester.pumpAndSettle();
+      expect(find.text('vista previa TG01-0001 (provisional)'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextFormField>(field('Peso total (KG) *')).controller!.text, '4');
+      expect(find.text('Guía de remisión'), findsOneWidget);
+      expect(repo.created, isEmpty);
+      expect(created.value, isNull);
+    });
+  });
+
+  group('Vista previa de la guía (datos y PDF)', () {
+    const company = CompanyEntity(id: 7, razonSocial: 'ACME', ruc: '20999999999');
+    final now = DateTime(2026, 10, 31, 9);
+
+    test('el número provisional es el siguiente de la empresa, con relleno', () {
+      expect(guidePreviewNumber(company), 'TG01-0001 (provisional)');
+      expect(
+        guidePreviewNumber(const CompanyEntity(id: 1, razonSocial: 'X', guiaSerie: 3, guiaNumero: 41)),
+        'TG03-0042 (provisional)',
+      );
+      expect(
+        guidePreviewNumber(const CompanyEntity(id: 1, razonSocial: 'X', guiaSerie: 12, guiaNumero: 9999)),
+        'TG12-10000 (provisional)',
+      );
+    });
+
+    test('una guía pública lleva el registro MTC y una privada, el chofer y la placa', () {
+      final publica = buildGuidePreview(
+        form: const GuideFormEntity(
+          tipo: GuideKind.publica,
+          matricula: 'MTC123',
+          dniChofer: '12345678',
+          placaChofer: 'ABC123',
+        ),
+        sale: _doc,
+        company: company,
+        now: now,
+      );
+      expect(publica.guia!.tipoGuia, '01');
+      expect(publica.guia!.matricula, 'MTC123');
+      expect(publica.guia!.dniChofer, isNull);
+      expect(publica.guia!.placaChofer, isNull);
+
+      final privada = buildGuidePreview(
+        form: const GuideFormEntity(
+          tipo: GuideKind.privada,
+          matricula: 'MTC123',
+          dniChofer: '12345678',
+          placaChofer: 'ABC123',
+        ),
+        sale: _doc,
+        company: company,
+        now: now,
+      );
+      expect(privada.guia!.tipoGuia, '02');
+      expect(privada.guia!.matricula, isNull);
+      expect(privada.guia!.dniChofer, '12345678');
+      expect(privada.guia!.placaChofer, 'ABC123');
+    });
+
+    test('lo que falta queda vacío y las fechas son las de hoy', () {
+      final d = buildGuidePreview(form: const GuideFormEntity(), sale: _localDoc, company: company, now: now);
+      expect(d.guia!.fechaEmision, now);
+      expect(d.guia!.fechaTraslado, now);
+      expect(d.guia!.documentoTransportista, isNull);
+      expect(d.guia!.transportista, isNull);
+      expect(d.guia!.observaciones, isNull);
+      expect(d.guia!.ubigeoSalida, isNull);
+      expect(d.comprobanteNumero, 'V001-0005');
+    });
+
+    test('se genera el PDF de la vista previa aunque falten datos', () async {
+      final vacio = buildGuidePreview(form: const GuideFormEntity(), sale: _doc, company: company, now: now);
+      final lleno = buildGuidePreview(
+        form: GuideFormEntity(
+          tipo: GuideKind.publica,
+          fechaEmision: DateTime(2026, 10, 30),
+          fechaTraslado: DateTime(2026, 11, 2),
+          pesoTotal: 12.5,
+          docTransportista: '20123456789',
+          razonSocialTransportista: 'TRANSPORTES SAC',
+          matricula: 'MTC123',
+          direccionSalida: 'AV. LIMA 123',
+          direccionLlegada: 'JR. LOS ALAMOS 456',
+          observaciones: 'Frágil',
+        ),
+        sale: _doc,
+        company: company,
+        ubigeoSalida: 'MIRAFLORES, LIMA, LIMA',
+        ubigeoLlegada: 'CERCADO, AREQUIPA, AREQUIPA',
+        now: now,
+      );
+
+      for (final d in [vacio, lleno]) {
+        final bytes = await buildOtherDocumentPdf(document: d, company: company);
+        expect(String.fromCharCodes(bytes.sublist(0, 5)), '%PDF-');
+        expect(bytes.length, greaterThan(2000));
+      }
     });
   });
 }

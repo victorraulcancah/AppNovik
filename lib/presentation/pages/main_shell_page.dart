@@ -37,6 +37,9 @@ class _AppModulo {
       AppDestination(label: titulo, icon: icono, selectedIcon: iconoActivo);
 }
 
+/// Módulos ya construidos que no se muestran por ahora (para mostrarlos, quitar su slug de acá).
+const _ocultos = {'clientes'};
+
 const _catalogo = [
   _AppModulo('inicio', 'Inicio', Icons.home_outlined, Icons.home, siempre: true),
   _AppModulo(
@@ -85,7 +88,11 @@ class _MainShellPageState extends State<MainShellPage> {
     if (session == null) return const SizedBox.shrink();
 
     final modulos = _catalogo
-        .where((m) => m.siempre || session.hasModule(m.slug))
+        .where(
+          (m) =>
+              !_ocultos.contains(m.slug) &&
+              (m.siempre || session.hasModule(m.slug)),
+        )
         .toList();
     // Otra pantalla pidió pasar a un módulo (por ejemplo, Documentos → Ventas al culminar una
     // cotización): se atiende en cuanto termina de dibujarse este cuadro.

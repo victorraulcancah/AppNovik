@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'document_entity.dart';
 
 /// Tipo de comprobante de una venta. `apiValue` es el texto que espera el backend.
@@ -276,25 +278,100 @@ const saleExchangeRateMax = 4.3;
   return (first: today.subtract(Duration(days: back)), last: today);
 }
 
-/// Una línea de la venta: producto, cantidad y precio unitario en soles.
+/// Vendedor (usuario de la empresa) que se puede elegir como "vendedor encargado".
+class SellerEntity {
+  final int id;
+  final String name;
+
+  const SellerEntity({required this.id, required this.name});
+}
+
+/// Una línea de la venta: producto, cantidad y precio unitario en soles, con su descuento.
+///
+/// Un **ítem libre** es una línea sin producto del catálogo (solo una descripción y un código
+/// opcional): lleva un producto sin id (`0`) que se puede vender sin stock, y [conceptoLibre] con su
+/// descripción.
 class SaleLineEntity {
   final SaleProductEntity product;
   final int cantidad;
   final double precio;
 
+  /// Descuento de la línea: un porcentaje (0–100) o, con [dtoFijo], un monto.
+  final double dto;
+  final bool dtoFijo;
+
+  /// Descripción y código de un ítem libre (`null` en un producto del catálogo).
+  final String? conceptoLibre;
+  final String? codigoLibre;
+
   const SaleLineEntity({
     required this.product,
     required this.cantidad,
     required this.precio,
+    this.dto = 0,
+    this.dtoFijo = false,
+    this.conceptoLibre,
+    this.codigoLibre,
   });
 
+  /// Línea de un ítem libre: la descripción es lo que se vende y el código es opcional.
+  factory SaleLineEntity.libre({
+    required String descripcion,
+    String? codigo,
+    int cantidad = 1,
+    required double precio,
+  }) {
+    final texto = descripcion.trim();
+    final code = codigo?.trim();
+    return SaleLineEntity(
+      // Un producto nuevo por línea: sirve de identidad para la pantalla.
+      product: SaleProductEntity(
+        id: 0,
+        codigo: code ?? '',
+        name: texto,
+        ventaSinStock: true,
+      ),
+      cantidad: cantidad,
+      precio: precio,
+      conceptoLibre: texto,
+      codigoLibre: code == null || code.isEmpty ? null : code,
+    );
+  }
+
+  bool get esLibre => conceptoLibre != null;
+
+  /// Importe de la línea sin descuento.
   double get subtotal => roundMoney(precio * cantidad);
 
-  SaleLineEntity copyWith({int? cantidad, double? precio}) => SaleLineEntity(
+  /// Lo que se descuenta: el monto fijo, o el porcentaje del subtotal (nunca más que el subtotal).
+  double get montoDto => roundMoney(
+        dtoFijo ? math.min(dto, subtotal) : subtotal * math.min(dto, 100) / 100,
+      );
+
+  /// Importe de la línea ya con el descuento.
+  double get subtotalConDto => roundMoney(subtotal - montoDto);
+
+  bool get tieneDescuento => montoDto > 0;
+
+  /// El descuento no puede pasar del 100 % ni, si es un monto, del subtotal (igual que la web).
+  SaleLineEntity _acotada() {
+    final tope = dtoFijo ? subtotal : 100.0;
+    if (dto <= tope) return this;
+    return _con(dto: tope);
+  }
+
+  SaleLineEntity _con({int? cantidad, double? precio, double? dto, bool? dtoFijo}) => SaleLineEntity(
         product: product,
         cantidad: cantidad ?? this.cantidad,
         precio: precio ?? this.precio,
+        dto: dto ?? this.dto,
+        dtoFijo: dtoFijo ?? this.dtoFijo,
+        conceptoLibre: conceptoLibre,
+        codigoLibre: codigoLibre,
       );
+
+  SaleLineEntity copyWith({int? cantidad, double? precio, double? dto, bool? dtoFijo}) =>
+      _con(cantidad: cantidad, precio: precio, dto: dto, dtoFijo: dtoFijo)._acotada();
 }
 
 /// Redondea a 2 decimales (importes que se envían al backend).
@@ -334,6 +411,9 @@ class SaleFormEntity {
   /// Mínimo de puntos que se pueden canjear (según la empresa).
   final double minimoCanjePuntos;
 
+  /// Vendedor encargado de la cotización o de la venta (el de la cotización que se culmina).
+  final int? vendedorId;
+
   const SaleFormEntity({
     required this.tipoDocumento,
     required this.client,
@@ -350,10 +430,12 @@ class SaleFormEntity {
     this.tipoCambio,
     this.fromQuoteId,
     this.minimoCanjePuntos = 0,
+    this.vendedorId,
   });
 
+  /// Total ya con los descuentos de cada línea.
   double get total =>
-      roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotal));
+      roundMoney(lines.fold<double>(0, (sum, l) => sum + l.subtotalConDto));
 
   /// Lo que vale la venta en soles (con el tipo de cambio si es en dólares).
   double get totalEnSoles => dolares ? roundMoney(total * (tipoCambio ?? 1)) : total;

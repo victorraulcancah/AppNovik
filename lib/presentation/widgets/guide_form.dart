@@ -9,8 +9,11 @@ import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/guide_form_entity.dart';
 import '../../domain/entities/other_document_entity.dart';
 import '../components/components.dart';
+import '../pages/other_document_pdf_page.dart';
+import '../providers/auth_provider.dart';
 import '../providers/clients_provider.dart';
 import '../providers/guide_provider.dart';
+import '../utils/guide_preview.dart';
 
 final _dateFormat = DateFormat(AppConstants.dateFormat);
 
@@ -73,6 +76,23 @@ class _Ubigeo extends ChangeNotifier {
     province = prov;
     district = dist;
     notifyListeners();
+  }
+
+  /// `Distrito, Provincia, Departamento` con lo elegido hasta ahora (`null` si no se eligió nada).
+  String? label(List<UbigeoItemEntity> departments) {
+    String? nameOf(List<UbigeoItemEntity> items, String? id) {
+      for (final i in items) {
+        if (i.id == id) return i.name;
+      }
+      return null;
+    }
+
+    final parts = [
+      nameOf(districts, district),
+      nameOf(provinces, province),
+      nameOf(departments, department),
+    ].whereType<String>();
+    return parts.isEmpty ? null : parts.join(', ');
   }
 
   @override
@@ -163,6 +183,9 @@ Future<OtherDocumentEntity?> showGuideForm(
   BuildContext context, {
   required DocumentEntity document,
   DateTime Function() now = DateTime.now,
+
+  /// Solo para pruebas: arma la pantalla de la vista previa (por defecto, el visor de PDF).
+  Widget Function(OtherDocumentEntity preview)? previewPageBuilder,
 }) async {
   final guide = context.read<GuideProvider>();
   final clients = context.read<ClientsProvider>();
@@ -193,7 +216,13 @@ Future<OtherDocumentEntity?> showGuideForm(
     },
     child: AppDisposer(
       onDispose: [draft.dispose, error.dispose],
-      child: _GuideBody(document: document, draft: draft, error: error, now: now),
+      child: _GuideBody(
+        document: document,
+        draft: draft,
+        error: error,
+        now: now,
+        previewPageBuilder: previewPageBuilder,
+      ),
     ),
   );
   return created;
@@ -204,12 +233,14 @@ class _GuideBody extends StatefulWidget {
   final _GuideDraft draft;
   final ValueNotifier<String?> error;
   final DateTime Function() now;
+  final Widget Function(OtherDocumentEntity preview)? previewPageBuilder;
 
   const _GuideBody({
     required this.document,
     required this.draft,
     required this.error,
     required this.now,
+    this.previewPageBuilder,
   });
 
   @override
@@ -316,6 +347,29 @@ class _GuideBodyState extends State<_GuideBody> {
     if (picked != null) target.value = picked;
   }
 
+  /// Muestra el PDF de la guía con lo escrito hasta ahora, sin crear nada ni gastar el número.
+  /// Como en la web, no valida: se puede previsualizar con el formulario a medias.
+  Future<void> _preview() async {
+    FocusScope.of(context).unfocus();
+    final company = context.read<AuthProvider>().session?.company;
+    if (company == null) return;
+    final document = buildGuidePreview(
+      form: _d.toEntity(widget.document),
+      sale: widget.document,
+      company: company,
+      ubigeoSalida: _d.salida.label(_departments),
+      ubigeoLlegada: _d.llegada.label(_departments),
+      now: widget.now(),
+    );
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            widget.previewPageBuilder?.call(document) ??
+            OtherDocumentPdfPage(document: document, preview: true),
+      ),
+    );
+  }
+
   String? _required(String? value, String message) =>
       (value == null || value.trim().isEmpty) ? message : null;
 
@@ -345,6 +399,15 @@ class _GuideBodyState extends State<_GuideBody> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _preview,
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('Previsualizar'),
+              ),
+            ),
+            const SizedBox(height: 12),
             AppDropdownField<GuideKind>(
               label: 'Tipo de guía *',
               value: _d.tipo.value,

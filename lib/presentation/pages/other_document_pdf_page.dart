@@ -16,7 +16,16 @@ class OtherDocumentPdfPage extends StatefulWidget {
   final OtherDocumentEntity document;
   final bool showAmounts;
 
-  const OtherDocumentPdfPage({super.key, required this.document, this.showAmounts = true});
+  /// Vista previa de una guía que aún no se crea: lleva el aviso "sin guardar" y no tiene un
+  /// número real, así que el archivo se llama distinto.
+  final bool preview;
+
+  const OtherDocumentPdfPage({
+    super.key,
+    required this.document,
+    this.showAmounts = true,
+    this.preview = false,
+  });
 
   @override
   State<OtherDocumentPdfPage> createState() => _OtherDocumentPdfPageState();
@@ -26,6 +35,8 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
   Future<Uint8List?>? _logo;
 
   OtherDocumentEntity get d => widget.document;
+
+  String get _fileName => widget.preview ? 'guia-de-remision-vista-previa.pdf' : '${d.numero}.pdf';
 
   @override
   void initState() {
@@ -52,7 +63,7 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
           AppPageHeader(
             icon: Icons.picture_as_pdf_outlined,
             title: d.numero,
-            subtitle: d.kind.label,
+            subtitle: widget.preview ? 'VISTA PREVIA — sin guardar' : d.kind.label,
             trailing: IconButton(
               tooltip: 'Cerrar',
               onPressed: () => Navigator.of(context).pop(),
@@ -62,7 +73,7 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
           Expanded(
             child: PdfPreview(
               build: (_) => _build(),
-              pdfFileName: '${d.numero}.pdf',
+              pdfFileName: _fileName,
               canChangePageFormat: false,
               canChangeOrientation: false,
               canDebug: false,
@@ -76,7 +87,7 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
                   onPressed: (context, build, pageFormat) async {
                     final bytes = await build(pageFormat);
                     if (context.mounted) {
-                      await downloadFile(context, DownloadedFile(name: '${d.numero}.pdf', bytes: bytes));
+                      await downloadFile(context, DownloadedFile(name: _fileName, bytes: bytes));
                     }
                   },
                 ),
@@ -84,7 +95,7 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
               loadingWidget: const CircularProgressIndicator(),
               onError: (context, error) => Padding(
                 padding: const EdgeInsets.all(24),
-                child: Center(child: Text('No se pudo generar el PDF: \$error')),
+                child: Center(child: Text('No se pudo generar el PDF: $error')),
               ),
             ),
           ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/data/datasources/sale_remote_datasource.dart';
@@ -23,6 +25,7 @@ import 'package:app_novik/domain/usecases/client_usecases.dart';
 import 'package:app_novik/domain/usecases/sale_usecases.dart';
 import 'package:app_novik/domain/usecases/stock_usecases.dart';
 import 'package:app_novik/presentation/pages/sales_page.dart';
+import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/clients_provider.dart';
 import 'package:app_novik/presentation/providers/sales_provider.dart';
@@ -83,6 +86,17 @@ class _FakeSaleRepository implements SaleRepository {
   bool rateFails = false;
   bool walkInFails = false;
   bool searchFails = false;
+  int sellerCalls = 0;
+  List<SellerEntity> sellers = const [
+    SellerEntity(id: 5, name: 'LUIS VENDEDOR'),
+    SellerEntity(id: 9, name: 'ANA'),
+  ];
+
+  @override
+  Future<Either<Failure, List<SellerEntity>>> getSellers(int companyId) async {
+    sellerCalls++;
+    return Either.right(sellers);
+  }
 
   @override
   Future<Either<Failure, ExchangeRateEntity>> getExchangeRate() async {
@@ -278,6 +292,7 @@ SalesProvider _provider(_FakeSaleRepository sales) {
     searchClientsUseCase: SearchClientsUseCase(repository: sales),
     searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: sales),
     createSaleUseCase: CreateSaleUseCase(repository: sales),
+    getSellersUseCase: GetSellersUseCase(repository: sales),
   );
 }
 
@@ -286,9 +301,15 @@ Future<SalesProvider> _ready(
   bool certificado = false,
   bool puntos = false,
   double minimoCanje = 0,
+  Set<String> permissions = const {'ventas.store'},
 }) async {
   final p = _provider(repo)
-    ..syncSession(_session(certificado: certificado, puntos: puntos, minimoCanje: minimoCanje));
+    ..syncSession(_session(
+      certificado: certificado,
+      puntos: puntos,
+      minimoCanje: minimoCanje,
+      permissions: permissions,
+    ));
   await p.ensureLoaded();
   return p;
 }
@@ -2714,6 +2735,855 @@ void main() {
       expect(find.textContaining('Está trabajando con la Cotización'), findsNothing);
       expect(sales.fromQuote, isNull);
       expect(sales.lines, isEmpty);
+    });
+  });
+
+  group('Descuentos por línea, ítems libres y vendedor encargado (reglas)', () {
+    const libre = {'ventas.store', 'factura.libre'};
+
+    SaleLineEntity line({int cantidad = 2, double precio = 50, double dto = 0, bool fijo = false}) =>
+        SaleLineEntity(product: _product(), cantidad: cantidad, precio: precio, dto: dto, dtoFijo: fijo);
+
+    SaleFormEntity formOf(
+      List<SaleLineEntity> lines, {
+      SaleDocumentType tipo = SaleDocumentType.ticket,
+      int? vendedorId,
+    }) =>
+        SaleFormEntity(
+          tipoDocumento: tipo,
+          client: _acme,
+          warehouseId: 1,
+          priceListId: 11,
+          vendedorId: vendedorId,
+          lines: lines,
+        );
+
+    test('un descuento en porcentaje se resta del subtotal de la línea', () {
+      final l = line(dto: 10);
+
+      expect(l.subtotal, 100);
+      expect(l.montoDto, 10);
+      expect(l.subtotalConDto, 90);
+      expect(l.tieneDescuento, isTrue);
+      expect(line().tieneDescuento, isFalse);
+    });
+
+    test('un descuento fijo es un monto', () {
+      final l = line(fijo: true, dto: 15);
+
+      expect(l.montoDto, 15);
+      expect(l.subtotalConDto, 85);
+    });
+
+    test('el descuento no pasa del 100 % ni, si es un monto, del subtotal', () {
+      expect(line().copyWith(dto: 150).dto, 100);
+      expect(line().copyWith(dto: 150).subtotalConDto, 0);
+
+      final fijo = line(fijo: true).copyWith(dto: 500);
+      expect(fijo.dto, 100); // el subtotal de la línea
+      expect(fijo.subtotalConDto, 0);
+    });
+
+    test('al bajar la cantidad un descuento fijo se recorta al nuevo subtotal', () {
+      final l = line(fijo: true, dto: 80).copyWith(cantidad: 1);
+
+      expect(l.dto, 50);
+      expect(l.subtotalConDto, 0);
+    });
+
+    test('cambiar el tipo de descuento conserva el valor escrito', () {
+      final l = line(dto: 10).copyWith(dtoFijo: true);
+
+      expect(l.dto, 10);
+      expect(l.montoDto, 10);
+      expect(l.subtotalConDto, 90);
+    });
+
+    test('el total del formulario suma las líneas ya con su descuento', () {
+      final form = formOf([line(dto: 10), line(cantidad: 1, precio: 30, fijo: true, dto: 5)]);
+
+      expect(form.total, 115); // 90 + 25
+    });
+
+    test('el provider aplica el descuento al total y se puede cambiar de tipo', () async {
+      final p = await _ready(_FakeSaleRepository());
+      p.selectWarehouse(1);
+      p.addProduct(_product(), cantidad: 2); // lista MAYORISTA: S/ 40 x 2 = 80
+      expect(p.total, 80);
+
+      p.setDto(0, 10);
+      expect(p.total, 72);
+
+      p.toggleDtoFijo(0);
+      expect(p.lines.first.dtoFijo, isTrue);
+      expect(p.total, 70); // S/ 10 de descuento
+
+      p.setDto(0, 500);
+      expect(p.lines.first.dto, 80);
+      expect(p.total, 0);
+
+      p.setDto(0, -5);
+      expect(p.lines.first.dto, 0);
+    });
+
+    test('cambiar de lista de precios conserva el descuento y no toca el precio del ítem libre', () async {
+      final p = await _ready(_FakeSaleRepository(), permissions: libre);
+      p.selectWarehouse(1);
+      p.addProduct(_product(), cantidad: 2);
+      p.setDto(0, 10);
+      await p.addFreeItem(descripcion: 'FLETE', precio: 25);
+
+      p.selectPriceList(10); // MINORISTA: S/ 50
+
+      expect(p.lines.first.precio, 50);
+      expect(p.lines.first.dto, 10);
+      expect(p.lines.last.precio, 25);
+      expect(p.total, 115); // 90 + 25
+    });
+
+    group('ítem libre', () {
+      test('sin el permiso factura.libre no se puede agregar', () async {
+        final p = await _ready(_FakeSaleRepository());
+
+        expect(p.puedeItemLibre, isFalse);
+        final r = await p.addFreeItem(descripcion: 'FLETE', precio: 20);
+
+        expect(r.problem, 'No tienes permiso para agregar ítems libres');
+        expect(p.lines, isEmpty);
+      });
+
+      test('con el permiso se agrega una línea sin producto, sin stock ni lista', () async {
+        final p = await _ready(_FakeSaleRepository(), permissions: libre);
+
+        expect(p.puedeItemLibre, isTrue);
+        final r = await p.addFreeItem(descripcion: '  FLETE A PROVINCIA ', codigo: ' SRV-1 ', cantidad: 2, precio: 15);
+
+        expect(r.problem, isNull);
+        expect(r.info, isNull);
+        final l = p.lines.single;
+        expect(l.esLibre, isTrue);
+        expect(l.conceptoLibre, 'FLETE A PROVINCIA');
+        expect(l.codigoLibre, 'SRV-1');
+        expect(l.product.id, 0);
+        expect(l.product.maximoEn(1), isNull); // sin tope de stock
+        expect(p.total, 30);
+        expect(p.lineProblem(l), isNull);
+      });
+
+      test('el ítem libre sin código no manda codigo_libre', () async {
+        final p = await _ready(_FakeSaleRepository(), permissions: libre);
+        await p.addFreeItem(descripcion: 'FLETE', precio: 15);
+
+        expect(p.lines.single.codigoLibre, isNull);
+      });
+
+      test('pide la descripción, una cantidad válida y no vale en una cotización', () async {
+        final p = await _ready(_FakeSaleRepository(), permissions: libre);
+
+        expect((await p.addFreeItem(descripcion: '  ', precio: 15)).problem, 'Escribe la descripción del concepto');
+        expect((await p.addFreeItem(descripcion: 'X', cantidad: 0, precio: 15)).problem, 'La cantidad mínima es 1');
+
+        p.selectTipoDocumento(SaleDocumentType.cotizacion);
+        expect((await p.addFreeItem(descripcion: 'X', precio: 15)).problem, 'Una cotización no admite ítems libres');
+        expect(p.lines, isEmpty);
+      });
+
+      test('dos ítems libres iguales son dos líneas (no se juntan)', () async {
+        final p = await _ready(_FakeSaleRepository(), permissions: libre);
+        await p.addFreeItem(descripcion: 'FLETE', precio: 15);
+        await p.addFreeItem(descripcion: 'FLETE', precio: 15);
+
+        expect(p.lines, hasLength(2));
+        expect(p.total, 30);
+      });
+
+      test('un código que ya es un producto del catálogo se agrega como producto normal', () async {
+        final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12')];
+        final p = await _ready(repo, permissions: libre);
+        p.selectWarehouse(1);
+
+        final r = await p.addFreeItem(descripcion: 'LO QUE SEA', codigo: 'sub-12', cantidad: 2, precio: 33);
+
+        expect(r.problem, isNull);
+        expect(r.info, 'SUB-12 ya está en el catálogo: se agregó como producto normal.');
+        final l = p.lines.single;
+        expect(l.esLibre, isFalse);
+        expect(l.product.id, 100);
+        expect(l.cantidad, 2);
+        expect(l.precio, 33); // se conserva el precio escrito
+      });
+
+      test('si ese producto ya estaba en la venta se suma la cantidad y no se toca el precio', () async {
+        final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12')];
+        final p = await _ready(repo, permissions: libre);
+        p.selectWarehouse(1);
+        p.addProduct(_product(codigo: 'SUB-12'), cantidad: 1); // S/ 40
+
+        final r = await p.addFreeItem(descripcion: 'X', codigo: 'SUB-12', cantidad: 2, precio: 33);
+
+        expect(r.problem, isNull);
+        expect(p.lines.single.cantidad, 3);
+        expect(p.lines.single.precio, 40);
+      });
+
+      test('si el producto del catálogo no tiene stock no se vende como ítem libre', () async {
+        final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12', stock: const {1: 0})];
+        final p = await _ready(repo, permissions: libre);
+        p.selectWarehouse(1);
+
+        final r = await p.addFreeItem(descripcion: 'X', codigo: 'SUB-12', precio: 33);
+
+        expect(r.problem, contains('SUB-12 está en el catálogo pero no tiene stock en este almacén'));
+        expect(p.lines, isEmpty);
+      });
+
+      test('un código que no existe en el catálogo queda como ítem libre', () async {
+        final repo = _FakeSaleRepository()..products = [_product(codigo: 'OTRO')];
+        final p = await _ready(repo, permissions: libre);
+
+        final r = await p.addFreeItem(descripcion: 'FLETE', codigo: 'SRV-9', precio: 20);
+
+        expect(r.problem, isNull);
+        expect(p.lines.single.esLibre, isTrue);
+        expect(p.lines.single.codigoLibre, 'SRV-9');
+      });
+
+      test('si falla la búsqueda del código, igual se agrega como ítem libre', () async {
+        final repo = _FakeSaleRepository()..searchFails = true;
+        final p = await _ready(repo, permissions: libre);
+
+        final r = await p.addFreeItem(descripcion: 'FLETE', codigo: 'SRV-9', precio: 20);
+
+        expect(r.problem, isNull);
+        expect(p.lines.single.esLibre, isTrue);
+      });
+
+      test('una cotización con un ítem libre se rechaza antes de enviar', () {
+        final form = formOf(
+          [SaleLineEntity.libre(descripcion: 'FLETE', precio: 20)],
+          tipo: SaleDocumentType.cotizacion,
+        );
+
+        expect(CreateSaleUseCase.validate(form), 'Una cotización no admite ítems libres. Quita "FLETE" o emite una venta');
+      });
+
+      test('una venta con ítem libre es válida y sin descripción no', () {
+        final ok = formOf([SaleLineEntity.libre(descripcion: 'FLETE', precio: 20)]);
+        expect(CreateSaleUseCase.validate(ok, withPayments: false), isNull);
+
+        final vacio = formOf([
+          SaleLineEntity(
+            product: SaleProductEntity(id: 0, codigo: '', name: ' ', ventaSinStock: true),
+            cantidad: 1,
+            precio: 20,
+            conceptoLibre: '  ',
+          ),
+        ]);
+        expect(CreateSaleUseCase.validate(vacio, withPayments: false), 'Escribe la descripción del ítem libre');
+      });
+    });
+
+    group('lo que se manda al backend', () {
+      test('POST /ventas manda el descuento de cada línea con los campos de la web', () {
+        final form = formOf([line(dto: 10), line(cantidad: 1, precio: 30, fijo: true, dto: 5)]);
+
+        final lines = saleToJson(form, companyId: 3, userId: 9)['product_sales'] as List;
+
+        expect(lines[0], {
+          'product_id': 100,
+          'cantidad': 2,
+          'precio': 50,
+          'dto_fijo': false,
+          'dolares': false,
+          'dto': 10,
+          'monto_dto': 10,
+          'subtotal': 100,
+          'subtotal_con_dto': 90,
+        });
+        expect(lines[1]['dto_fijo'], true);
+        expect(lines[1]['monto_dto'], 5);
+        expect(lines[1]['subtotal'], 30);
+        expect(lines[1]['subtotal_con_dto'], 25);
+        expect(saleToJson(form, companyId: 3, userId: 9)['totales_soles'], 115);
+      });
+
+      test('el ítem libre va con product_id nulo, su concepto y su código', () {
+        final form = formOf([
+          SaleLineEntity.libre(descripcion: 'FLETE', codigo: 'SRV-1', cantidad: 2, precio: 15),
+          SaleLineEntity.libre(descripcion: 'INSTALACIÓN', precio: 40),
+        ]);
+
+        final lines = saleToJson(form, companyId: 3, userId: 9)['product_sales'] as List;
+
+        expect(lines[0], {
+          'product_id': null,
+          'concepto_libre': 'FLETE',
+          'codigo_libre': 'SRV-1',
+          'cantidad': 2,
+          'precio': 15,
+          'dto_fijo': false,
+          'dolares': false,
+          'dto': 0,
+          'monto_dto': 0,
+          'subtotal': 30,
+          'subtotal_con_dto': 30,
+        });
+        expect(lines[1]['product_id'], isNull);
+        expect(lines[1]['codigo_libre'], isNull);
+        expect(lines[1]['concepto_libre'], 'INSTALACIÓN');
+      });
+
+      test('una línea de producto no manda concepto_libre ni codigo_libre', () {
+        final line0 = (saleToJson(formOf([line()]), companyId: 3, userId: 9)['product_sales'] as List).single as Map;
+
+        expect(line0.containsKey('concepto_libre'), isFalse);
+        expect(line0.containsKey('codigo_libre'), isFalse);
+      });
+
+      test('la cotización también manda el descuento', () {
+        final form = formOf([line(dto: 10)], tipo: SaleDocumentType.cotizacion);
+
+        final l = (quoteToJson(form, companyId: 3, userId: 9)['product_sales'] as List).single as Map;
+
+        expect(l['dto'], 10);
+        expect(l['monto_dto'], 10);
+        expect(l['subtotal_con_dto'], 90);
+        expect(quoteToJson(form, companyId: 3, userId: 9)['totales_soles'], 90);
+      });
+
+      test('el vendedor encargado viaja como vendedor_id solo si hay uno', () {
+        final con = formOf([line()], vendedorId: 5);
+        final sin = formOf([line()]);
+
+        expect(saleToJson(con, companyId: 3, userId: 9)['vendedor_id'], 5);
+        expect(quoteToJson(con, companyId: 3, userId: 9)['vendedor_id'], 5);
+        expect(saleToJson(sin, companyId: 3, userId: 9).containsKey('vendedor_id'), isFalse);
+        expect(quoteToJson(sin, companyId: 3, userId: 9).containsKey('vendedor_id'), isFalse);
+      });
+
+      test('POST /ventas manda el cuerpo completo con descuento, ítem libre y vendedor', () async {
+        late Map<String, dynamic> sent;
+        final dataSource = SaleRemoteDataSourceImpl(
+          client: MockClient((request) async {
+            sent = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response('{"id": 1, "nro_documento": 1, "total_soles": 100}', 200);
+          }),
+        );
+        final form = SaleFormEntity(
+          tipoDocumento: SaleDocumentType.ticket,
+          client: _acme,
+          warehouseId: 1,
+          vendedorId: 5,
+          payments: const [SalePaymentEntity(paymentMethodId: 2, monto: 105)],
+          lines: [line(dto: 10), SaleLineEntity.libre(descripcion: 'FLETE', precio: 15)],
+        );
+
+        await dataSource.createSale(token: 't', companyId: 1, userId: 9, form: form);
+
+        expect(sent['vendedor_id'], 5);
+        expect(sent['totales_soles'], 105);
+        final lines = sent['product_sales'] as List;
+        expect(lines[0]['dto'], 10);
+        expect(lines[0]['subtotal_con_dto'], 90);
+        expect(lines[1]['product_id'], isNull);
+        expect(lines[1]['concepto_libre'], 'FLETE');
+      });
+    });
+
+    group('culminar o editar una cotización', () {
+      DocumentEntity quoteWith(List<Map<String, dynamic>> products, {int? vendedor}) => documentFromJson({
+            'id': 2,
+            'nro_documento': 2,
+            'estado': true,
+            'reservar_stock': false,
+            'warehouse_id': 1,
+            'list_price_id': 11,
+            'vendedor_id': vendedor,
+            'client': {'id': 7, 'razon_social': 'ACME SAC', 'dni_ruc': '20123456789', 'tipo': 'e'},
+            'products': products,
+          }, DocumentKind.cotizacion);
+
+      Map<String, dynamic> item({Object? cantidad = 2, Object? dto = 0, Object? fijo = 0}) => {
+            'id': 100,
+            'codigo': 'SUB-12',
+            'name': 'SUBWOOFER 12"',
+            'pivot': {'cantidad': cantidad, 'precio': '35', 'dolares': false, 'dto': dto, 'dto_fijo': fijo},
+          };
+
+      test('la cotización trae el descuento de cada línea y su vendedor encargado', () {
+        final d = quoteWith([item(dto: '10'), item(cantidad: 1, dto: 5, fijo: 1)], vendedor: 5).quoteDraft!;
+
+        expect(d.vendedorId, 5);
+        expect(d.lines[0].dto, 10);
+        expect(d.lines[0].dtoFijo, isFalse);
+        expect(d.lines[1].dto, 5);
+        expect(d.lines[1].dtoFijo, isTrue);
+      });
+
+      test('sin vendedor encargado ni descuento queda en nulo y en cero', () {
+        final d = quoteWith([item()]).quoteDraft!;
+
+        expect(d.vendedorId, isNull);
+        expect(d.lines.single.dto, 0);
+        expect(d.lines.single.dtoFijo, isFalse);
+      });
+
+      test('cargarla en Ventas conserva los descuentos y el vendedor', () async {
+        final p = await _ready(_FakeSaleRepository());
+        await p.loadFromQuote(quoteWith([item(dto: 10)], vendedor: 5));
+
+        expect(p.lines.single.dto, 10);
+        expect(p.lines.single.dtoFijo, isFalse);
+        expect(p.lines.single.subtotalConDto, 63); // 35 x 2 = 70 - 10 %
+        expect(p.total, 63);
+        expect(p.vendedorDeCotizacion, 5);
+        // La venta que se emite lleva ese vendedor (en la web va en un campo oculto).
+        expect(saleToJson(p.form, companyId: 1, userId: 9)['vendedor_id'], 5);
+      });
+
+      test('un mismo producto en dos líneas con distinto descuento se junta sumando lo descontado', () async {
+        final p = await _ready(_FakeSaleRepository());
+        await p.loadFromQuote(quoteWith([item(dto: 10), item(cantidad: 1, dto: 5, fijo: 1)]));
+
+        final l = p.lines.single;
+        expect(l.cantidad, 3);
+        expect(l.dtoFijo, isTrue);
+        expect(l.dto, 12); // 7 (10 % de 70) + 5
+        expect(p.total, 93); // 105 - 12
+      });
+
+      test('con el mismo porcentaje en ambas líneas se conserva el porcentaje', () async {
+        final p = await _ready(_FakeSaleRepository());
+        await p.loadFromQuote(quoteWith([item(dto: 10), item(cantidad: 1, dto: 10)]));
+
+        expect(p.lines.single.cantidad, 3);
+        expect(p.lines.single.dtoFijo, isFalse);
+        expect(p.lines.single.dto, 10);
+      });
+
+      test('al editar la cotización se manda el vendedor que se eligió (o ninguno)', () async {
+        final repo = _FakeSaleRepository();
+        final p = await _ready(repo);
+        await p.loadFromQuote(quoteWith([item()], vendedor: 5));
+        p.selectTipoDocumento(SaleDocumentType.cotizacion);
+
+        expect(await p.submit(vendedorId: 9), isTrue);
+        expect(repo.sent!.vendedorId, 9);
+        expect(repo.sent!.fromQuoteId, 2);
+
+        await p.loadFromQuote(quoteWith([item()], vendedor: 5));
+        p.selectTipoDocumento(SaleDocumentType.cotizacion);
+        expect(await p.submit(), isTrue);
+        expect(repo.sent!.vendedorId, isNull); // se quitó el vendedor encargado
+      });
+
+      test('una cotización nueva manda el vendedor que se elige en su modal', () async {
+        final repo = _FakeSaleRepository();
+        final p = await _ready(repo);
+        p.selectWarehouse(1);
+        p.selectClient(_acme);
+        p.selectPriceList(11);
+        p.addProduct(_product(), cantidad: 1);
+        p.selectTipoDocumento(SaleDocumentType.cotizacion);
+
+        expect(await p.submit(vendedorId: 5), isTrue);
+        expect(repo.sent!.vendedorId, 5);
+      });
+    });
+
+    group('vendedores', () {
+      test('se piden una sola vez', () async {
+        final repo = _FakeSaleRepository();
+        final p = await _ready(repo);
+
+        await p.ensureSellers();
+        await p.ensureSellers();
+
+        expect(repo.sellerCalls, 1);
+        expect(p.sellers.map((s) => s.name), ['LUIS VENDEDOR', 'ANA']);
+      });
+
+      test('GET /usuarios/list pide los roles Vendedor y Admin Empresa de la empresa', () async {
+        late Uri uri;
+        final dataSource = SaleRemoteDataSourceImpl(
+          client: MockClient((request) async {
+            uri = request.url;
+            return http.Response('[{"id": 5, "name": "LUIS", "usuario": "luis"}, {"id": 6}]', 200);
+          }),
+        );
+
+        final sellers = await dataSource.getSellers('t', 3);
+
+        expect(uri.path, endsWith('/usuarios/list'));
+        expect(uri.queryParameters, {'company_id': '3', 'roles[0]': 'Vendedor', 'roles[1]': 'Admin Empresa'});
+        expect(sellers, hasLength(1)); // el que no trae nombre se descarta
+        expect(sellers.single.id, 5);
+        expect(sellers.single.name, 'LUIS');
+      });
+
+      test('sellersFromJson ignora lo que no es una lista', () {
+        expect(sellersFromJson({'message': 'x'}), isEmpty);
+        expect(sellersFromJson(null), isEmpty);
+      });
+    });
+  });
+
+  group('Pantalla de ventas: descuento, ítem libre y vendedor encargado', () {
+    Future<(SalesProvider, _FakeSaleRepository)> pumpSales(
+      WidgetTester tester, {
+      Set<String> permissions = const {'ventas.store'},
+    }) async {
+      _phoneScreen(tester);
+      final repo = _FakeSaleRepository();
+      final session = _session(permissions: permissions);
+      final sales = _provider(repo)..syncSession(session);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<SalesProvider>.value(value: sales),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: SalesPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (sales, repo);
+    }
+
+    Finder inSheet(Finder f) => find.descendant(of: find.byType(BottomSheet), matching: f);
+
+    testWidgets('el botón de ítem libre solo sale con el permiso factura.libre', (tester) async {
+      await pumpSales(tester);
+      expect(find.text('Agregar ítem libre'), findsNothing);
+    });
+
+    testWidgets('con el permiso se agrega un ítem libre desde su formulario', (tester) async {
+      final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+
+      await tester.ensureVisible(find.text('Agregar ítem libre'));
+      await tester.tap(find.text('Agregar ítem libre'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Agregar ítem libre'), findsWidgets);
+      await tester.enterText(inSheet(_field('Descripción del concepto')), 'FLETE A PROVINCIA');
+      await tester.enterText(inSheet(_field('Código (opcional)')), 'SRV-1');
+      await tester.enterText(inSheet(_field('Precio S/')), '30');
+      await tester.tap(inSheet(find.text('Agregar')));
+      await tester.pumpAndSettle();
+
+      expect(sales.lines, hasLength(1));
+      expect(sales.lines.single.esLibre, isTrue);
+      expect(sales.lines.single.codigoLibre, 'SRV-1');
+      expect(find.text('FLETE A PROVINCIA'), findsOneWidget);
+      expect(find.text('SRV-1 · Ítem libre'), findsOneWidget);
+      expect(find.text('S/ 30.00'), findsWidgets);
+    });
+
+    testWidgets('el formulario del ítem libre pide descripción y precio', (tester) async {
+      final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+
+      await tester.ensureVisible(find.text('Agregar ítem libre'));
+      await tester.tap(find.text('Agregar ítem libre'));
+      await tester.pumpAndSettle();
+      await tester.tap(inSheet(find.text('Agregar')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escribe la descripción'), findsOneWidget);
+      expect(find.text('Escribe el precio'), findsOneWidget);
+      expect(sales.lines, isEmpty);
+    });
+
+    testWidgets('en una cotización el ítem libre se rechaza con el motivo en el formulario', (tester) async {
+      final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Agregar ítem libre'));
+      await tester.tap(find.text('Agregar ítem libre'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSheet(_field('Descripción del concepto')), 'FLETE');
+      await tester.enterText(inSheet(_field('Precio S/')), '30');
+      await tester.tap(inSheet(find.text('Agregar')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Una cotización no admite ítems libres'), findsOneWidget);
+      expect(sales.lines, isEmpty);
+    });
+
+    testWidgets('cada línea tiene su descuento en % y se puede cambiar a monto', (tester) async {
+      final (sales, _) = await pumpSales(tester);
+      sales.selectWarehouse(1);
+      sales.addProduct(_product(), cantidad: 2); // S/ 40 x 2
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento %'), findsOneWidget);
+      await tester.ensureVisible(_field('Descuento %'));
+      await tester.enterText(_field('Descuento %'), '10');
+      await tester.pumpAndSettle();
+
+      expect(sales.lines.single.dto, 10);
+      expect(sales.total, 72);
+      expect(find.text('Desc. −S/ 8.00'), findsOneWidget);
+      expect(find.text('S/ 72.00'), findsWidgets);
+
+      await tester.tap(find.byTooltip('Descontar un monto fijo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento S/'), findsOneWidget);
+      expect(sales.lines.single.dtoFijo, isTrue);
+      expect(sales.total, 70);
+      expect(find.text('Desc. −S/ 10.00'), findsOneWidget);
+    });
+
+    testWidgets('el descuento escrito se recorta al máximo y el campo lo refleja', (tester) async {
+      final (sales, _) = await pumpSales(tester);
+      sales.selectWarehouse(1);
+      sales.addProduct(_product(), cantidad: 2);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(_field('Descuento %'));
+      await tester.enterText(_field('Descuento %'), '150');
+      await tester.pumpAndSettle();
+
+      expect(sales.lines.single.dto, 100);
+      expect(tester.widget<TextField>(_field('Descuento %')).controller!.text, '100');
+      expect(sales.total, 0);
+    });
+
+    testWidgets('la cotización pregunta por el vendedor encargado y lo manda', (tester) async {
+      final (sales, repo) = await pumpSales(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 1);
+      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crear cotización'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vendedor encargado (opcional)'), findsOneWidget);
+      expect(repo.sellerCalls, 1);
+
+      // El propio usuario (Ana, id 9) no se ofrece: solo los demás.
+      await tester.tap(find.text('Sin vendedor encargado'));
+      await tester.pumpAndSettle();
+      expect(find.text('ANA'), findsNothing);
+      await tester.tap(find.text('LUIS VENDEDOR').last);
+      await tester.pumpAndSettle();
+      await tester.tap(inSheet(find.text('Crear')));
+      await tester.pumpAndSettle();
+
+      expect(repo.sent!.tipoDocumento, SaleDocumentType.cotizacion);
+      expect(repo.sent!.vendedorId, 5);
+    });
+
+    testWidgets('el vendedor encargado es opcional', (tester) async {
+      final (sales, repo) = await pumpSales(tester);
+      sales.selectWarehouse(1);
+      sales.selectClient(_acme);
+      sales.addProduct(_product(), cantidad: 1);
+      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crear cotización'));
+      await tester.pumpAndSettle();
+      await tester.tap(inSheet(find.text('Crear')));
+      await tester.pumpAndSettle();
+
+      expect(repo.sent!.vendedorId, isNull);
+    });
+  });
+
+  group('Modal de la cotización: vendedor encargado', () {
+    const sellers = [
+      SellerEntity(id: 5, name: 'LUIS VENDEDOR'),
+      SellerEntity(id: 6, name: 'MARÍA'),
+      SellerEntity(id: 9, name: 'ANA'),
+    ];
+
+    /// Abre el modal desde un botón; lo que devuelve al cerrarse queda en la lista.
+    Future<List<QuoteOptions?>> open(
+      WidgetTester tester, {
+      List<SellerEntity> sellers = const [],
+      int? initial,
+      int? exclude,
+      bool editing = false,
+    }) async {
+      _phoneScreen(tester);
+      final results = <QuoteOptions?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async => results.add(
+                  await showQuoteOptions(
+                    context,
+                    now: DateTime(2026, 10, 20),
+                    client: 'ACME',
+                    total: 'S/ 100.00',
+                    sellers: sellers,
+                    initialSellerId: initial,
+                    excludeSellerId: exclude,
+                    editing: editing,
+                  ),
+                ),
+                child: const Text('abrir'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+      return results;
+    }
+
+    testWidgets('sin vendedores no sale el campo', (tester) async {
+      await open(tester);
+
+      expect(find.text('Vendedor encargado (opcional)'), findsNothing);
+    });
+
+    testWidgets('el propio usuario no se ofrece y se puede elegir a otro', (tester) async {
+      final results = await open(tester, sellers: sellers, exclude: 9);
+
+      expect(find.text('Vendedor encargado (opcional)'), findsOneWidget);
+      await tester.tap(find.text('Sin vendedor encargado'));
+      await tester.pumpAndSettle();
+      expect(find.text('LUIS VENDEDOR'), findsOneWidget);
+      expect(find.text('MARÍA'), findsOneWidget);
+      expect(find.text('ANA'), findsNothing);
+
+      await tester.tap(find.text('MARÍA'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(results.single!.vendedorId, 6);
+      expect(results.single!.reservarStock, isFalse);
+    });
+
+    testWidgets('sin tocar nada la cotización queda sin vendedor encargado', (tester) async {
+      final results = await open(tester, sellers: sellers, exclude: 9);
+
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(results.single!.vendedorId, isNull);
+    });
+
+    testWidgets('al editar arranca con el vendedor que ya tenía y se puede quitar', (tester) async {
+      final results = await open(tester, sellers: sellers, initial: 6, exclude: 9, editing: true);
+
+      expect(find.text('Editar cotización'), findsOneWidget);
+      expect(find.text('MARÍA'), findsOneWidget);
+
+      await tester.tap(find.text('MARÍA'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sin vendedor encargado').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+
+      expect(results.single!.vendedorId, isNull);
+    });
+
+    testWidgets('al editar sin tocar el campo se conserva el vendedor', (tester) async {
+      final results = await open(tester, sellers: sellers, initial: 6, exclude: 9, editing: true);
+
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+
+      expect(results.single!.vendedorId, 6);
+    });
+
+    testWidgets('si el vendedor de la cotización ya no se puede elegir, queda sin vendedor', (tester) async {
+      final results = await open(tester, sellers: sellers, initial: 77, exclude: 9);
+
+      await tester.tap(find.text('Crear'));
+      await tester.pumpAndSettle();
+
+      expect(results.single!.vendedorId, isNull);
+    });
+
+    testWidgets('cancelar no devuelve nada', (tester) async {
+      final results = await open(tester, sellers: sellers, exclude: 9);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(results.single, isNull);
+    });
+  });
+
+  group('Comprobante con descuento e ítem libre', () {
+    final venta = documentFromJson({
+      'id': 1,
+      'nro_documento': 1,
+      'estado': true,
+      'total_soles': 110,
+      'warehouse': {'id': 1, 'name': 'LIMA'},
+      'client': {'id': 7, 'razon_social': 'ACME SAC', 'dni_ruc': '20123456789', 'tipo': 'e'},
+      // El backend entrega los ítems libres como un producto sin id, con su descripción en `name`.
+      'products': [
+        {
+          'id': null,
+          'name': 'FLETE A PROVINCIA',
+          'codigo': 'SRV-1',
+          'brand': null,
+          'pivot': {
+            'id': 1,
+            'concepto_libre': 'FLETE A PROVINCIA',
+            'cantidad': 1,
+            'precio': 20,
+            'dto': 0,
+            'monto_dto': 0,
+            'subtotal': 20,
+            'subtotal_con_dto': 20,
+            'dolares': false,
+          },
+        },
+        {
+          'id': 100,
+          'name': 'SUBWOOFER 12"',
+          'codigo': 'SUB-12',
+          'brand': {'name': 'PIONEER'},
+          'pivot': {
+            'id': 2,
+            'cantidad': 2,
+            'precio': 50,
+            'dto': 10,
+            'dto_fijo': 0,
+            'monto_dto': 10,
+            'subtotal': 100,
+            'subtotal_con_dto': 90,
+            'dolares': false,
+          },
+        },
+      ],
+    }, DocumentKind.venta);
+
+    test('el comprobante lee el ítem libre y el descuento de la línea', () {
+      expect(venta.items, hasLength(2));
+      expect(venta.items[0].name, 'FLETE A PROVINCIA');
+      expect(venta.items[0].codigo, 'SRV-1');
+      expect(venta.items[1].descuento, 10);
+      expect(venta.items[1].subtotal, 90); // ya con el descuento
+      expect(venta.descuento, 10); // el comprobante muestra el descuento total
+    });
+
+    test('el PDF A4 y el ticket salen con el ítem libre y el descuento', () async {
+      const company = CompanyEntity(id: 1, razonSocial: 'ACME');
+      for (final ticket in [false, true]) {
+        final bytes = await buildReceiptPdf(document: venta, company: company, ticket: ticket);
+        expect(String.fromCharCodes(bytes.take(5)), '%PDF-', reason: 'ticket=$ticket');
+        expect(bytes.length, greaterThan(800));
+      }
     });
   });
 }

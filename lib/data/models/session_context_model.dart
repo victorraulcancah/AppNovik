@@ -77,6 +77,8 @@ class SessionContextModel extends SessionContextEntity {
       programaDePuntos: _bool(c['programa_de_puntos']),
       minimoCanjePuntos: _double(c['minimo_canje_puntos']) ?? 0,
       emiteComprobantes: c['certificado'] != null && '${c['certificado']}'.isNotEmpty,
+      guiaSerie: _int(c['guia_serie']),
+      guiaNumero: _int(c['guia_numero']),
       plan: profile == null
           ? null
           : PlanEntity(

@@ -24,6 +24,9 @@ abstract class SaleRepository {
   /// Categorías y marcas de la empresa, para filtrar el buscador de productos.
   Future<Either<Failure, SaleProductFiltersEntity>> getProductFilters();
 
+  /// Usuarios de la empresa que pueden ser "vendedor encargado" (roles Vendedor y Admin Empresa).
+  Future<Either<Failure, List<SellerEntity>>> getSellers(int companyId);
+
   /// Formas de pago que el usuario puede usar.
   Future<Either<Failure, List<PaymentMethodEntity>>> getPaymentMethods();
 

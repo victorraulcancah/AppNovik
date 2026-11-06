@@ -5,6 +5,7 @@ import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/sales_provider.dart';
+import 'sale_free_item.dart';
 import 'sale_product_picker.dart';
 
 /// Formulario "Buscar producto" de la venta: se elige el producto (tocando el campo, o con
@@ -92,6 +93,16 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
         _quantity.text = '1';
         _price.clear();
       });
+    }
+  }
+
+  /// Ítem libre (solo con el permiso `factura.libre`): una línea sin producto del catálogo.
+  Future<void> _addFree() async {
+    final info = await showFreeItemForm(context);
+    if (info != null && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(info)));
     }
   }
 
@@ -242,6 +253,15 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
           label: const Text('Agregar producto'),
           style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
         ),
+        if (sales.puedeItemLibre) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _addFree,
+            icon: const Icon(Icons.edit_note_outlined),
+            label: const Text('Agregar ítem libre'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52)),
+          ),
+        ],
       ],
     );
   }

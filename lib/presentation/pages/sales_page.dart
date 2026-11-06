@@ -95,15 +95,18 @@ class _SalesPageState extends State<SalesPage> {
 
     final client = sales.client!;
     final tipo = sales.tipoDocumento;
-    // Igual que la web: vender a un cliente de la cartera de otro ejecutivo pide confirmación.
+    // Igual que la web: vender a un cliente de la cartera de otro ejecutivo pide confirmación. El
+    // vendedor de la venta es el de la cotización que se culmina, o quien la registra.
     final ejecutivoId = client.ejecutivoComercialId;
-    if (!client.esVarios && ejecutivoId != null && ejecutivoId != session?.user.id) {
+    final vendedorId = sales.vendedorDeCotizacion ?? session?.user.id;
+    final esMiVenta = vendedorId == session?.user.id;
+    if (!client.esVarios && ejecutivoId != null && vendedorId != null && ejecutivoId != vendedorId) {
       final seguir = await showAppConfirm(
         context,
         title: tipo.esCotizacion ? '¿Deseas continuar con la cotización?' : '¿Deseas continuar con la venta?',
         subtitle: client.name,
         icon: Icons.groups_outlined,
-        message: 'Este cliente no pertenece a tu cartera comercial. '
+        message: 'Este cliente no pertenece a ${esMiVenta ? 'tu' : 'la'} cartera comercial. '
             '${client.ejecutivoComercial != null ? 'Actualmente está asignado a ${client.ejecutivoComercial}.' : 'Actualmente está asignado a otro ejecutivo.'}',
         confirmLabel: 'Sí, continuar',
         tone: AppModalTone.warning,
@@ -113,17 +116,24 @@ class _SalesPageState extends State<SalesPage> {
 
     var ok = false;
     if (tipo.esCotizacion) {
-      // La cotización pregunta si reserva el stock y hasta cuándo.
+      // La cotización pregunta si reserva el stock y hasta cuándo, y quién es el vendedor encargado.
+      await sales.ensureSellers();
+      if (!mounted) return;
       final options = await showQuoteOptions(
         context,
         now: DateTime.now(),
         client: client.name,
         total: formatMoney(sales.total, symbol: sales.moneySymbol),
+        sellers: sales.sellers,
+        initialSellerId: sales.vendedorDeCotizacion,
+        excludeSellerId: session?.user.id,
+        editing: sales.fromQuote != null,
       );
       if (options == null || !mounted) return;
       ok = await sales.submit(
         reservarStock: options.reservarStock,
         vencimientoStock: options.vencimientoStock,
+        vendedorId: options.vendedorId,
       );
     } else {
       // La venta se arma y se crea en el modal "Crear venta" (fecha, entrega y pagos).
@@ -469,6 +479,8 @@ class _SalesPageState extends State<SalesPage> {
                 if (aviso != null) _snack(aviso);
               },
               onPrice: (v) => sales.setPrecio(i, v),
+              onDto: (v) => sales.setDto(i, v),
+              onToggleDto: () => sales.toggleDtoFijo(i),
               onRemove: () => sales.removeLine(i),
             ),
             if (i < sales.lines.length - 1) const SizedBox(height: 10),
@@ -562,12 +574,15 @@ class _SalesPageState extends State<SalesPage> {
   }
 }
 
-/// Una línea de la venta: producto, cantidad con − / +, precio editable y subtotal.
+/// Una línea de la venta: producto, cantidad con − / +, precio editable, descuento (en % o en
+/// monto) y subtotal. Un ítem libre se muestra con su descripción y una marca "Ítem libre".
 class _SaleLineTile extends StatefulWidget {
   final SaleLineEntity line;
   final String? problem;
   final ValueChanged<int> onQuantity;
   final ValueChanged<double> onPrice;
+  final ValueChanged<double> onDto;
+  final VoidCallback onToggleDto;
   final VoidCallback onRemove;
 
   const _SaleLineTile({
@@ -576,6 +591,8 @@ class _SaleLineTile extends StatefulWidget {
     required this.problem,
     required this.onQuantity,
     required this.onPrice,
+    required this.onDto,
+    required this.onToggleDto,
     required this.onRemove,
   });
 
@@ -586,10 +603,15 @@ class _SaleLineTile extends StatefulWidget {
 class _SaleLineTileState extends State<_SaleLineTile> {
   late final _quantity = TextEditingController(text: '${widget.line.cantidad}');
   late final _price = TextEditingController(text: _priceText(widget.line.precio));
+  late final _dto = TextEditingController(text: _dtoText(widget.line.dto));
   final _quantityFocus = FocusNode();
   final _priceFocus = FocusNode();
+  final _dtoFocus = FocusNode();
 
   static String _priceText(double v) => v == 0 ? '' : v.toStringAsFixed(2);
+
+  static String _dtoText(double v) =>
+      v == 0 ? '' : (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString());
 
   @override
   void didUpdateWidget(_SaleLineTile old) {
@@ -601,14 +623,23 @@ class _SaleLineTileState extends State<_SaleLineTile> {
     if (!_priceFocus.hasFocus && (double.tryParse(_price.text) ?? 0) != widget.line.precio) {
       _price.text = _priceText(widget.line.precio);
     }
+    // El descuento se recorta (100 %, o el subtotal si es un monto): el campo muestra el valor
+    // que quedó, aunque se esté escribiendo.
+    final typed = double.tryParse(_dto.text) ?? 0;
+    if (typed != widget.line.dto && (!_dtoFocus.hasFocus || typed > widget.line.dto)) {
+      final text = _dtoText(widget.line.dto);
+      _dto.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+    }
   }
 
   @override
   void dispose() {
     _quantity.dispose();
     _price.dispose();
+    _dto.dispose();
     _quantityFocus.dispose();
     _priceFocus.dispose();
+    _dtoFocus.dispose();
     super.dispose();
   }
 
@@ -647,7 +678,9 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        [line.product.codigo, ?line.product.marca].join(' · '),
+                        line.esLibre
+                            ? [if (line.codigoLibre != null) line.codigoLibre!, 'Ítem libre'].join(' · ')
+                            : [line.product.codigo, ?line.product.marca].join(' · '),
                         style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     ],
@@ -700,6 +733,59 @@ class _SaleLineTileState extends State<_SaleLineTile> {
             ),
           ),
           const SizedBox(height: 12),
+          // Descuento: un porcentaje o, cambiando el tipo, un monto (como la web).
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: TextField(
+                    controller: _dto,
+                    focusNode: _dtoFocus,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                    decoration: InputDecoration(
+                      labelText: line.dtoFijo
+                          ? 'Descuento ${context.watch<SalesProvider>().moneySymbol}'
+                          : 'Descuento %',
+                      hintText: '0',
+                      prefixIcon: IconButton(
+                        tooltip: line.dtoFijo
+                            ? 'Descontar en porcentaje (%)'
+                            : 'Descontar un monto fijo',
+                        onPressed: widget.onToggleDto,
+                        icon: const Icon(Icons.swap_horiz, size: 20),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 44),
+                      suffixText: line.dtoFijo ? null : '%',
+                    ),
+                    onChanged: (text) => widget.onDto(double.tryParse(text) ?? 0),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 4,
+                  child: line.tieneDescuento
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Text(
+                            'Desc. −${formatMoney(line.montoDto, symbol: context.watch<SalesProvider>().moneySymbol)}',
+                            textAlign: TextAlign.end,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           // El aviso (si lo hay) a la izquierda y el subtotal de la línea a la derecha.
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -729,7 +815,7 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                   style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 Text(
-                  formatMoney(line.subtotal, symbol: context.watch<SalesProvider>().moneySymbol),
+                  formatMoney(line.subtotalConDto, symbol: context.watch<SalesProvider>().moneySymbol),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                     fontFeatures: const [FontFeature.tabularFigures()],

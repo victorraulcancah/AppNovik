@@ -14,6 +14,7 @@ abstract class SaleRemoteDataSource {
   Future<ClientEntity> getWalkInClient(String token, int companyId);
   Future<SaleProductFiltersEntity> getProductFilters(String token);
   Future<List<PaymentMethodEntity>> getPaymentMethods(String token);
+  Future<List<SellerEntity>> getSellers(String token, int companyId);
   Future<SaleResultEntity> createSale({
     required String token,
     required int companyId,
@@ -89,6 +90,22 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
           headers: ApiConstants.authHeaders(token),
         ),
       ));
+
+  @override
+  Future<List<SellerEntity>> getSellers(String token, int companyId) async {
+    // Como la web: los usuarios activos con rol Vendedor o Admin Empresa (`roles[0]`, `roles[1]`).
+    final body = await sendApiRequest(
+      () => client.get(
+        _uri('/usuarios/list', {
+          'company_id': '$companyId',
+          'roles[0]': 'Vendedor',
+          'roles[1]': 'Admin Empresa',
+        }),
+        headers: ApiConstants.authHeaders(token),
+      ),
+    );
+    return sellersFromJson(body);
+  }
 
   @override
   Future<SaleResultEntity> createSale({

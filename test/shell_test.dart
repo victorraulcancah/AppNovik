@@ -101,6 +101,8 @@ Future<ShellNavigation> _pump(
 
 const _todos = ['Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos', 'Clientes'];
 
+// Clientes está construido pero oculto: no debe aparecer aunque la empresa lo tenga.
+
 void main() {
   testWidgets('Inicio siempre aparece primero, aunque la empresa no tenga módulos', (tester) async {
     await _pump(tester, const []);
@@ -108,8 +110,8 @@ void main() {
   });
 
   testWidgets('con cinco módulos o menos la barra los muestra todos, sin "Más"', (tester) async {
-    await _pump(tester, const ['Ventas', 'Stock', 'Productos', 'Clientes']);
-    for (final t in ['Inicio', 'Ventas', 'Stock', 'Productos', 'Clientes']) {
+    await _pump(tester, const ['Ventas', 'Stock', 'Productos', 'Documentos']);
+    for (final t in ['Inicio', 'Ventas', 'Stock', 'Productos', 'Documentos']) {
       expect(find.descendant(of: find.byType(NavigationBar), matching: find.text(t)), findsOneWidget);
     }
     expect(find.text('Más'), findsNothing);
@@ -132,12 +134,12 @@ void main() {
 
     expect(find.text('Documentos'), findsOneWidget);
     expect(find.text('Productos'), findsOneWidget);
-    expect(find.text('Clientes'), findsOneWidget);
+    expect(find.text('Clientes'), findsNothing);
     expect(find.text('pantalla inicio'), findsNothing);
 
-    await tester.tap(find.text('Clientes'));
+    await tester.tap(find.text('Productos'));
     await tester.pumpAndSettle();
-    expect(find.text('pantalla clientes'), findsOneWidget);
+    expect(find.text('pantalla productos'), findsOneWidget);
     // Sigue marcado "Más" porque Clientes no cabe en la barra.
     final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(bar.selectedIndex, 4);
@@ -165,9 +167,16 @@ void main() {
     await _pump(tester, _todos, size: const Size(1100, 800));
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
-    for (final t in ['Inicio', 'Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos', 'Clientes']) {
+    for (final t in ['Inicio', 'Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos']) {
       expect(find.descendant(of: find.byType(NavigationRail), matching: find.text(t)), findsOneWidget);
     }
     expect(find.text('Más'), findsNothing);
+    expect(find.text('Clientes'), findsNothing);
+  });
+
+  testWidgets('Clientes no aparece en el menú aunque la empresa lo tenga', (tester) async {
+    await _pump(tester, const ['Ventas', 'Clientes']);
+    expect(find.text('Clientes'), findsNothing);
+    expect(find.text('Ventas'), findsOneWidget);
   });
 }
