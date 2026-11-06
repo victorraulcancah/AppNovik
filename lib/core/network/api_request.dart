@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../constants/api_constants.dart';
 import '../errors/exceptions.dart';
+import 'connection_monitor.dart';
 
 /// Hace una petición a la API de 7power y devuelve el JSON de la respuesta.
 /// Traduce los errores del backend y de la red a las excepciones de la app.
@@ -29,6 +30,8 @@ Future<Uint8List> sendApiBytes(Future<http.Response> Function() request) async {
 Future<http.Response> _send(Future<http.Response> Function() request, {Duration? timeout}) async {
   try {
     final response = await request().timeout(timeout ?? ApiConstants.connectionTimeout);
+    // Hubo respuesta (buena o mala): el servidor es alcanzable.
+    ConnectionMonitor.reachedServer();
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response;
@@ -46,8 +49,10 @@ Future<http.Response> _send(Future<http.Response> Function() request, {Duration?
   } on AppException {
     rethrow;
   } on SocketException {
+    ConnectionMonitor.lostConnection();
     throw const NetworkException('Sin conexión a internet');
   } on TimeoutException {
+    ConnectionMonitor.lostConnection();
     throw const NetworkException('Tiempo de espera agotado');
   } catch (e) {
     throw ServerException('Error de conexión: $e');

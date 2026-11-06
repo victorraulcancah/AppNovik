@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -15,6 +16,7 @@ Future<void> showSaleRegistered(
   BuildContext context,
   DocumentEntity sale,
 ) async {
+  HapticFeedback.mediumImpact();
   final verPdf = await showAppModal(
     context,
     title: sale.esCotizacion ? 'Cotización registrada' : 'Venta registrada',
@@ -25,6 +27,10 @@ Future<void> showSaleRegistered(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Center(child: AppSuccessCheck(size: 64)),
+        ),
         AppDetailRow(label: 'Comprobante', value: sale.comprobante),
         AppDetailRow(label: 'Cliente', value: sale.cliente),
         AppDetailRow(label: 'Almacén', value: sale.almacen),

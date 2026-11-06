@@ -28,6 +28,7 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: theme.mode,
+          builder: (context, child) => AppConnectionBanner(child: child!),
           home: const bool.fromEnvironment('GALLERY')
               ? const ComponentGalleryPage()
               : const AppWrapper(),

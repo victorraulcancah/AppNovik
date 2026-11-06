@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
 import '../providers/other_documents_provider.dart';
 import '../utils/download_file.dart';
+import '../utils/success_snack.dart';
 import '../widgets/document_modals.dart';
 import '../widgets/guide_form.dart';
 
@@ -72,7 +73,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
     final created = await showGuideForm(context, document: widget.document);
     if (created == null || !mounted) return;
     setState(() => _guideCreated = true);
-    _snack('Guía creada con éxito');
+    showSuccessSnack(context, 'Guía creada con éxito');
     // Si ya se miraron las guías en Documentos, la lista se actualiza con la nueva.
     final others = context.read<OtherDocumentsProvider>();
     if (others.stateOf(OtherDocumentKind.guia).loadedOnce) {
@@ -83,7 +84,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   Future<void> _creditNote() async {
     final done = await showCreditNoteForm(context, widget.document);
     if (done == true && mounted) {
-      _snack('Nota de crédito creada con éxito');
+      showSuccessSnack(context, 'Nota de crédito creada con éxito');
       Navigator.of(context).pop();
     }
   }

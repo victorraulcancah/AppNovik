@@ -65,6 +65,10 @@ Módulo **Inicio**: el Dashboard de la web. Siempre aparece (no depende de un m�
 - **Carga con esqueletos**: mientras carga la primera página de Productos, Stock, Documentos (las seis listas) las pantallas muestran tarjetas grises con brillo (`AppSkeletonList`) en vez de un círculo suelto.
 - **Cifras que corren**: las tarjetas de Reportes cuentan hasta su valor (`AppCountUp`).
 - **Detalles**: los avisos (snackbars) salen flotando con esquinas redondeadas y el cambio de módulo da un toque de vibración suave.
+- **Respuesta al tocar** (`AppPressScale`): botones, tarjetas de lista y botones de acción se hunden un poco mientras se presionan; si el dedo se arrastra (scroll) dejan de hundirse. Los botones de acción tienen ahora un área táctil de 48 px.
+- **Éxito** (`AppSuccessCheck`, `showSuccessSnack`): al registrar una venta o cotización el modal muestra un check que se dibuja y vibra; al crear o editar un cliente, crear una guía o nota de crédito y subir archivos, el aviso lleva el mismo check.
+- **Estados vacíos y de error**: ícono en un círculo de color (de la marca, o de error en los "no se pudo cargar") con entrada suave.
+- **Sin conexión** (`AppConnectionBanner`, `ConnectionMonitor`): si una petición falla por la red, sale un aviso rojo arriba de toda la app; se quita solo cuando el servidor vuelve a responder. Solo reconoce las peticiones que pasan por `sendApiRequest`; el login tiene su propio mensaje.
 
 ### Estado de Productos
 

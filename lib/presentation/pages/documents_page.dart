@@ -14,6 +14,7 @@ import '../providers/documents_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/shell_navigation.dart';
 import '../utils/download_file.dart';
+import '../utils/success_snack.dart';
 import '../widgets/document_filters.dart';
 import '../widgets/document_modals.dart';
 import 'other_documents_view.dart';
@@ -173,7 +174,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
 
   Future<void> _creditNote(DocumentEntity d) async {
     final done = await showCreditNoteForm(context, d);
-    if (done == true && mounted) _snack('Nota de crédito creada con éxito');
+    if (done == true && mounted) {
+      showSuccessSnack(context, 'Nota de crédito creada con éxito');
+    }
   }
 
   /// Las acciones del botón flotante: descargar el Excel de lo que se ve y ver los totales.

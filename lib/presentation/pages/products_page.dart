@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/products_provider.dart';
 import '../utils/import_file.dart';
 import '../utils/download_file.dart';
+import '../utils/success_snack.dart';
 import '../widgets/product_modals.dart';
 
 /// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle, crear y editar, y
@@ -173,7 +174,11 @@ class _ProductsPageState extends State<ProductsPage> {
 
     final done = result;
     if (done == null || !mounted) return;
-    _snack('${kind.label} subidos');
+    if (done.hasFailures) {
+      _snack('${kind.label} subidos');
+    } else {
+      showSuccessSnack(context, '${kind.label} subidos');
+    }
     if (done.hasFailures) {
       await showImportFailures(context, kind: kind, failures: done.failures);
     }

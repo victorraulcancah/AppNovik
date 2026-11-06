@@ -6,6 +6,7 @@ import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/sales_provider.dart';
+import '../utils/success_snack.dart';
 import '../widgets/client_modals.dart';
 import '../widgets/exchange_rate_badge.dart';
 import '../widgets/sale_checkout.dart';
@@ -77,7 +78,7 @@ class _SalesPageState extends State<SalesPage> {
     final created = await showCreateClientForm(context);
     if (created != null && mounted) {
       sales.selectClient(created);
-      _snack('Cliente creado');
+      showSuccessSnack(context, 'Cliente creado');
     }
   }
 

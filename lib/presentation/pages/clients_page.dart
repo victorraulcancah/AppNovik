@@ -7,6 +7,7 @@ import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/client_list_provider.dart';
 import '../utils/download_file.dart';
+import '../utils/success_snack.dart';
 import '../widgets/client_record_form.dart';
 import '../widgets/client_record_modals.dart';
 
@@ -86,7 +87,7 @@ class _ClientsPageState extends State<ClientsPage> {
       loadCatalogs: provider.loadFormCatalogs,
       onSubmit: (form) async {
         final error = await provider.saveClient(form);
-        if (error == null && mounted) _snack('Cliente creado');
+        if (error == null && mounted) showSuccessSnack(context, 'Cliente creado');
         return error;
       },
     );
@@ -101,7 +102,7 @@ class _ClientsPageState extends State<ClientsPage> {
       loadCatalogs: provider.loadFormCatalogs,
       onSubmit: (form) async {
         final error = await provider.saveClient(form, id: client.id, originalEmail: client.email);
-        if (error == null && mounted) _snack('Cliente editado');
+        if (error == null && mounted) showSuccessSnack(context, 'Cliente editado');
         return error;
       },
     );
