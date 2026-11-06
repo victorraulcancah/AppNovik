@@ -17,6 +17,7 @@ abstract class ProductRemoteDataSource {
     required int pageSize,
     required List<String> search,
     String? tipo,
+    bool? activo,
   });
 
   Future<ProductCatalogsEntity> getCatalogs(String token);
@@ -88,6 +89,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
     required int pageSize,
     required List<String> search,
     String? tipo,
+    bool? activo,
   }) async {
     // Mismos parámetros que usa la web (`/productos`).
     final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.productosEndpoint}')
@@ -97,6 +99,8 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
       'pagination[pageSize]': ['$pageSize'],
       if (search.isNotEmpty) 'search[]': search,
       if (tipo != null) 'tipo_producto': [tipo],
+      // El filtro de la columna "Estado" de la tabla de la web.
+      if (activo != null) 'filters[estado][]': ['$activo'],
     });
 
     final body = await sendApiRequest(

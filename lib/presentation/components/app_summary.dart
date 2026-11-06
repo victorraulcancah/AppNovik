@@ -24,6 +24,11 @@ class AppMetricCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final accent = color ?? scheme.outline;
+    // La franja lleva el color tal cual; el texto se oscurece (claro) o aclara (oscuro) para leerse.
+    final dark = theme.brightness == Brightness.dark;
+    final labelColor = color == null
+        ? scheme.onSurfaceVariant
+        : _readable(color!, scheme.surfaceContainerLowest, lighter: dark);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -46,7 +51,7 @@ class AppMetricCard extends StatelessWidget {
                     Text(
                       label,
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: color ?? scheme.onSurfaceVariant,
+                        color: labelColor,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -106,4 +111,21 @@ Future<void> showAppSummary(
       ],
     ),
   );
+}
+
+/// Mueve el tono de [color] (más claro o más oscuro) hasta que se lea sobre [background]
+/// con un contraste de al menos 4.5 (AA para texto).
+Color _readable(Color color, Color background, {required bool lighter}) {
+  final hsl = HSLColor.fromColor(color);
+  var lightness = hsl.lightness;
+  var result = color;
+  for (var i = 0; i < 20; i++) {
+    result = hsl.withLightness(lightness.clamp(0.0, 1.0)).toColor();
+    final l1 = result.computeLuminance();
+    final l2 = background.computeLuminance();
+    final ratio = (l1 > l2 ? l1 + 0.05 : l2 + 0.05) / (l1 > l2 ? l2 + 0.05 : l1 + 0.05);
+    if (ratio >= 4.5) return result;
+    lightness += lighter ? 0.04 : -0.04;
+  }
+  return result;
 }

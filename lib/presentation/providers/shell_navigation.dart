@@ -19,4 +19,22 @@ class ShellNavigation extends ChangeNotifier {
     _requested = null;
     return slug;
   }
+
+  ({DateTime? desde, DateTime? hasta})? _pendingQuotes;
+
+  /// Pedido para Documentos: abrir la lista de Cotizaciones solo con las pendientes y, si hay, en
+  /// ese rango de emisión (el enlace "Cotizaciones pendientes" del Inicio). Lo atiende
+  /// `DocumentsPage` con [takePendingQuotes].
+  ({DateTime? desde, DateTime? hasta})? get pendingQuotes => _pendingQuotes;
+
+  void goToPendingQuotes({DateTime? desde, DateTime? hasta}) {
+    _pendingQuotes = (desde: desde, hasta: hasta);
+    goTo('documentos');
+  }
+
+  ({DateTime? desde, DateTime? hasta})? takePendingQuotes() {
+    final request = _pendingQuotes;
+    _pendingQuotes = null;
+    return request;
+  }
 }

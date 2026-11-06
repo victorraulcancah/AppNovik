@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:app_novik/core/errors/exceptions.dart';
@@ -6,6 +7,7 @@ import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/data/datasources/inicio_remote_datasource.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/data/models/inicio_model.dart';
+import 'package:app_novik/domain/entities/module_entity.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/inicio_entity.dart';
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
@@ -24,6 +26,7 @@ import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/utils/inicio_copy.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show ByteData, FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -376,11 +379,16 @@ class _FakeRepo implements InicioRepository {
   }
 }
 
-SessionContextEntity _session({List<String> roles = const ['Vendedor'], int companyId = 7, Set<String>? permissions}) =>
+SessionContextEntity _session({
+  List<String> roles = const ['Vendedor'],
+  int companyId = 7,
+  Set<String>? permissions,
+  bool documentos = false,
+}) =>
     SessionContextEntity(
       user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
       company: CompanyEntity(id: companyId, razonSocial: 'ACME', igv: 0.18, renta: 0.015),
-      modules: const [],
+      modules: [if (documentos) const ModuleEntity(id: 5, name: 'Documentos')],
       permissions: permissions ?? const {},
       roles: roles,
       warehouses: const [],
@@ -928,6 +936,7 @@ void main() {
       WidgetTester tester, {
       List<String> roles = const ['Vendedor'],
       Set<String>? permissions,
+      bool documentos = false,
     }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
       tester.view.physicalSize = const Size(360 * 3, 4000 * 3);
@@ -939,7 +948,7 @@ void main() {
       });
 
       final repo = _FakeRepo();
-      final session = _session(roles: roles, permissions: permissions);
+      final session = _session(roles: roles, permissions: permissions, documentos: documentos);
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -1023,7 +1032,7 @@ void main() {
     testWidgets('la ayuda del mensaje muestra todos los tramos y resalta el actual', (tester) async {
       await pump(tester);
 
-      await tester.tap(find.byIcon(Icons.help_outline));
+      await tester.tap(find.byTooltip('Mensajes según el avance'));
       await tester.pumpAndSettle();
 
       expect(find.text('Mensajes según el avance de la meta'), findsOneWidget);
@@ -1203,6 +1212,221 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(shell.requested, isNull);
+      expect(shell.pendingQuotes, isNull);
+    });
+
+    testWidgets('con módulo y permiso, tocar las cotizaciones pendientes abre Documentos con el rango del resumen', (tester) async {
+      await pump(tester, permissions: {'documentos.cotizaciones.index'}, documentos: true);
+      await tester.tap(find.text('Cotizaciones pendientes').first);
+      await tester.pumpAndSettle();
+
+      expect(shell.requested, 'documentos');
+      expect(shell.pendingQuotes, isNotNull);
+      expect(shell.pendingQuotes!.desde, DateTime(2026, 10, 1));
+      expect(shell.pendingQuotes!.hasta, DateTime(2026, 10, 31));
+      shell
+        ..take()
+        ..takePendingQuotes();
+    });
+
+    testWidgets('con el módulo pero sin el permiso de cotizaciones no hay enlace', (tester) async {
+      await pump(tester, permissions: {'documentos.ventas.index'}, documentos: true);
+      await tester.tap(find.text('Cotizaciones pendientes').first);
+      await tester.pumpAndSettle();
+
+      expect(shell.requested, isNull);
+    });
+  });
+
+  group('InicioPage: ayudas (?), modo oscuro y letra grande', () {
+    var fontLoaded = false;
+
+    /// Con la letra real (Roboto) y no Ahem, para que los anchos sean los de un celular.
+    Future<void> loadRoboto() async {
+      if (fontLoaded) return;
+      final bytes = File('assets/fonts/Roboto-Regular.ttf').readAsBytesSync();
+      final loader = FontLoader('Roboto')..addFont(Future.value(ByteData.view(bytes.buffer)));
+      await loader.load();
+      fontLoaded = true;
+    }
+
+    ThemeData withRoboto(ThemeData base) => base.copyWith(
+      textTheme: base.textTheme.apply(fontFamily: 'Roboto'),
+      primaryTextTheme: base.primaryTextTheme.apply(fontFamily: 'Roboto'),
+    );
+
+    Future<void> pumpPage(
+      WidgetTester tester, {
+      required List<String> roles,
+      bool dark = false,
+      double scale = 1,
+      Size size = const Size(360, 4000),
+    }) async {
+      await loadRoboto();
+      tester.view.physicalSize = Size(size.width * 3, size.height * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+
+      final repo = _FakeRepo();
+      final session = _session(roles: roles);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider(storage: _FakeThemeStorage())),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<ShellNavigation>.value(value: ShellNavigation()),
+            ChangeNotifierProvider<InicioProvider>.value(value: _provider(repo, roles: roles)),
+          ],
+          child: MaterialApp(
+            theme: withRoboto(AppTheme.light),
+            darkTheme: withRoboto(AppTheme.dark),
+            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+            home: const Scaffold(body: InicioPage()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    const views = {
+      'Ejecutivo (Vendedor)': ['Vendedor'],
+      'Jefe (JEFE COMERCIAL)': ['JEFE COMERCIAL'],
+      'CEO (Ceo Empresa)': ['Ceo Empresa'],
+      'general (jefe de almacén)': ['jefe de almacén'],
+    };
+
+    for (final entry in views.entries) {
+      for (final dark in [false, true]) {
+        testWidgets('${entry.key}: ${dark ? 'modo oscuro' : 'modo claro'} con letra 1.3x y 360 px, sin desbordes', (tester) async {
+          await pumpPage(tester, roles: entry.value, dark: dark, scale: 1.3);
+
+          expect(tester.takeException(), isNull);
+          final scheme = Theme.of(tester.element(find.byType(InicioPage))).colorScheme;
+          expect(scheme.brightness, dark ? Brightness.dark : Brightness.light);
+          // Nada de fondos blancos fijos: el color de la pantalla sigue al tema.
+          final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+          expect(scaffold.backgroundColor, isNull);
+        });
+      }
+    }
+
+    for (final entry in views.entries) {
+      for (final dark in [false, true]) {
+        testWidgets('${entry.key}: los textos tienen contraste suficiente en ${dark ? 'modo oscuro' : 'modo claro'}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pumpPage(tester, roles: entry.value, dark: dark, size: const Size(360, 2400));
+          await expectLater(tester, meetsGuideline(textContrastGuideline));
+          handle.dispose();
+        });
+      }
+    }
+
+    testWidgets('control: la prueba de contraste sí detecta un texto ilegible', (tester) async {
+      final handle = tester.ensureSemantics();
+      await loadRoboto();
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            backgroundColor: Color(0xFF222222),
+            body: Center(child: Text('texto ilegible', style: TextStyle(color: Color(0xFF2A2A2A), fontSize: 12))),
+          ),
+        ),
+      );
+      final result = await textContrastGuideline.evaluate(tester);
+      expect(result.passed, isFalse);
+      handle.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    testWidgets('el Ejecutivo también cabe en una pantalla angosta de 320 px con letra 1.3x', (tester) async {
+      await pumpPage(tester, roles: const ['Vendedor'], dark: true, scale: 1.3, size: const Size(320, 4000));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('el CEO también cabe en una pantalla angosta de 320 px con letra 1.3x', (tester) async {
+      await pumpPage(tester, roles: const ['Ceo Empresa'], dark: true, scale: 1.3, size: const Size(320, 4000));
+      expect(tester.takeException(), isNull);
+    });
+
+    // Cada sección con (?) en la web lo tiene acá; los íconos "Ayuda" son los de las secciones.
+    const helpCounts = {
+      'Ejecutivo (Vendedor)': 10,
+      'Jefe (JEFE COMERCIAL)': 9,
+      'CEO (Ceo Empresa)': 10,
+    };
+    for (final entry in helpCounts.entries) {
+      testWidgets('${entry.key}: trae ${entry.value} ayudas (?)', (tester) async {
+        await pumpPage(tester, roles: views[entry.key]!);
+        expect(find.byTooltip('Ayuda'), findsNWidgets(entry.value));
+      });
+    }
+
+    testWidgets('la pantalla general (jefe de almacén) no tiene ayudas', (tester) async {
+      await pumpPage(tester, roles: const ['jefe de almacén']);
+      expect(find.byTooltip('Ayuda'), findsNothing);
+    });
+
+    Future<void> openHelp(WidgetTester tester, int index) async {
+      final button = find.byTooltip('Ayuda').at(index);
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Ejecutivo: la ayuda de Ventas explica los conceptos y se cierra', (tester) async {
+      await pumpPage(tester, roles: const ['Vendedor'], scale: 1);
+      await openHelp(tester, 0);
+
+      expect(find.text('Ventas y meta'), findsOneWidget);
+      expect(find.textContaining('Tus ventas del rango elegido'), findsOneWidget);
+      expect(find.text('Ticket promedio'), findsWidgets);
+      expect(find.text('Ventas ÷ N.º de ventas.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tapAt(const Offset(180, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Ventas y meta'), findsNothing);
+    });
+
+    testWidgets('Ejecutivo: la ayuda de Cotizaciones pendientes trae la prioridad por días', (tester) async {
+      await pumpPage(tester, roles: const ['Vendedor']);
+      await openHelp(tester, 8); // ayudas en orden: ventas, evolución, 3 tops, oportunidades, tareas, caída, pendientes
+
+      expect(find.text('Prioridad según los días desde la emisión'), findsOneWidget);
+      expect(find.text('0 - 3 días'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Baja')), findsOneWidget);
+      expect(find.text('8 días o más'), findsOneWidget);
+      expect(find.text('Urge cerrarla antes de que se enfríe.'), findsOneWidget);
+    });
+
+    testWidgets('Jefe: la ayuda de Cumplimiento de metas por vendedor trae sus tres columnas', (tester) async {
+      await pumpPage(tester, roles: const ['JEFE COMERCIAL']);
+      await openHelp(tester, 1);
+
+      expect(find.text('Cumplimiento de metas por vendedor'), findsWidgets);
+      expect(find.text('Avance'), findsWidgets);
+      expect(find.text('Ventas ÷ meta. Verde desde el 100 %, ámbar del 50 % al 99 %, rojo debajo del 50 %.'), findsOneWidget);
+    });
+
+    testWidgets('CEO: la ayuda de Ingresos por entidad bancaria y su filtro conviven en el título', (tester) async {
+      await pumpPage(tester, roles: const ['Ceo Empresa'], dark: true, scale: 1.3);
+      // Ingresos es la séptima sección con ayuda: indicadores, cumplimiento, departamentos, canal, por cobrar,
+      // cobro por vendedor, ingresos.
+      await openHelp(tester, 6);
+
+      expect(find.text('Ingresos por entidad bancaria'), findsWidgets);
+      expect(find.text('Depósitos de clientes'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('las ayudas de un solo párrafo (los tooltips de texto de la web) se abren sin tabla', (tester) async {
+      await pumpPage(tester, roles: const ['Ceo Empresa']);
+      await openHelp(tester, 4); // Cuentas por cobrar lleva tabla; la 3 (canal) es de texto
+
+      expect(find.text('Cuentas por cobrar'), findsWidgets);
     });
   });
 }

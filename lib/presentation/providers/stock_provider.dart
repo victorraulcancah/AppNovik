@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import 'dart:typed_data';
 import '../../domain/entities/document_entity.dart' show DownloadedFile;
+import '../../domain/entities/other_document_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../../domain/entities/stock_entity.dart';
+import '../../domain/entities/stock_manage_entity.dart';
+import '../../domain/usecases/stock_manage_usecases.dart';
 import '../../domain/usecases/stock_usecases.dart';
 
-/// Estado del módulo Stock: almacén elegido, lista de precios, búsqueda y las
-/// existencias paginadas de ese almacén.
+/// Estado del módulo Stock: almacén elegido, lista de precios, búsqueda, filtros y las
+/// existencias paginadas de ese almacén; y las operaciones que cambian el stock (aumentar,
+/// actualizar, subir desde Excel y transferir).
 class StockProvider extends ChangeNotifier {
   static const pageSize = 20;
 
@@ -15,6 +20,12 @@ class StockProvider extends ChangeNotifier {
   final GetPriceListsUseCase _getPriceLists;
   final GetStockUseCase _getStock;
   final ExportStockUseCase _exportStock;
+  final SearchStockProductsUseCase _searchProducts;
+  final AddStockUseCase _addStock;
+  final UpdateStockUseCase _updateStock;
+  final DownloadStockTemplateUseCase _downloadTemplate;
+  final ImportStockUseCase _importStock;
+  final TransferStockUseCase _transferStock;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -24,14 +35,27 @@ class StockProvider extends ChangeNotifier {
     required GetPriceListsUseCase getPriceListsUseCase,
     required GetStockUseCase getStockUseCase,
     required ExportStockUseCase exportStockUseCase,
+    required SearchStockProductsUseCase searchStockProductsUseCase,
+    required AddStockUseCase addStockUseCase,
+    required UpdateStockUseCase updateStockUseCase,
+    required DownloadStockTemplateUseCase downloadStockTemplateUseCase,
+    required ImportStockUseCase importStockUseCase,
+    required TransferStockUseCase transferStockUseCase,
     VoidCallback? onSessionExpired,
   })  : _getWarehouses = getWarehousesUseCase,
         _getPriceLists = getPriceListsUseCase,
         _getStock = getStockUseCase,
         _exportStock = exportStockUseCase,
+        _searchProducts = searchStockProductsUseCase,
+        _addStock = addStockUseCase,
+        _updateStock = updateStockUseCase,
+        _downloadTemplate = downloadStockTemplateUseCase,
+        _importStock = importStockUseCase,
+        _transferStock = transferStockUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
+  int? _userId;
   int? _defaultWarehouseId;
   int? _defaultPriceListId;
   bool _initialized = false;
@@ -43,7 +67,16 @@ class StockProvider extends ChangeNotifier {
   int? warehouseId;
   int? priceListId;
   bool includeZero = false;
+
+  /// Lo que se está escribiendo en el buscador (cada palabra es un término).
   List<String> search = const [];
+
+  /// Términos ya confirmados (con "buscar"), como los chips de la web; cada uno puede ser una
+  /// frase y se muestra para poder quitarlo.
+  List<String> searchTerms = const [];
+
+  /// `'p'` productos, `'s'` servicios, `null` ambos.
+  String? tipo;
 
   List<StockItemEntity> items = [];
   bool loading = false;
@@ -62,11 +95,20 @@ class StockProvider extends ChangeNotifier {
     return null;
   }
 
-  bool get filtersActive => includeZero;
+  bool get filtersActive => includeZero || tipo != null;
+
+  /// Todos los términos que se mandan al servidor: los confirmados y los que se están escribiendo.
+  List<String> get terms => [...searchTerms, ...search];
 
   /// Se llama cuando cambia la sesión. Al cambiar de empresa se descarta todo.
   /// No notifica: corre mientras se construye el árbol de widgets.
-  void syncSession(int? companyId, {int? defaultWarehouseId, int? defaultPriceListId}) {
+  void syncSession(
+    int? companyId, {
+    int? defaultWarehouseId,
+    int? defaultPriceListId,
+    int? userId,
+  }) {
+    _userId = userId;
     _defaultWarehouseId = defaultWarehouseId;
     _defaultPriceListId = defaultPriceListId;
     if (companyId == _companyId) return;
@@ -77,7 +119,9 @@ class StockProvider extends ChangeNotifier {
     warehouseId = null;
     priceListId = null;
     includeZero = false;
+    tipo = null;
     search = const [];
+    searchTerms = const [];
     items = [];
     loading = false;
     loadingMore = false;
@@ -171,8 +215,43 @@ class StockProvider extends ChangeNotifier {
     return refresh();
   }
 
+  /// Cambia "incluir sin stock" y el tipo a la vez, con un solo pedido al servidor.
+  Future<void> setFilters({required bool includeZero, String? tipo}) {
+    this.includeZero = includeZero;
+    this.tipo = tipo;
+    return refresh();
+  }
+
   Future<void> setSearch(String text) {
     search = text.split(RegExp(r'[\s,]+')).where((t) => t.isNotEmpty).toList();
+    return refresh();
+  }
+
+  Future<void> setTipo(String? value) {
+    tipo = value;
+    return refresh();
+  }
+
+  /// Confirma [text] como un término de búsqueda (como agregar un chip en la web). Los
+  /// repetidos y los vacíos se ignoran; lo que se estaba escribiendo pasa a ser el término.
+  Future<void> addSearchTerm(String text) {
+    final term = text.trim();
+    search = const [];
+    if (term.isEmpty || searchTerms.contains(term)) return refresh();
+    searchTerms = [...searchTerms, term];
+    return refresh();
+  }
+
+  Future<void> removeSearchTerm(String term) {
+    searchTerms = [
+      for (final t in searchTerms)
+        if (t != term) t,
+    ];
+    return refresh();
+  }
+
+  Future<void> clearSearchTerms() {
+    searchTerms = const [];
     return refresh();
   }
 
@@ -192,12 +271,110 @@ class StockProvider extends ChangeNotifier {
     final result = await _exportStock(
       warehouseId: warehouse,
       priceListId: priceListId,
-      search: search,
+      search: terms,
       name: '$name.xlsx',
     );
     exporting = false;
     if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
     notifyListeners();
+    return result;
+  }
+
+  // ---- Operaciones que cambian el stock ------------------------------------------------
+
+  /// Avisa que venció la sesión si el fallo es de autenticación.
+  void _check(Failure failure) {
+    if (failure is AuthenticationFailure) _onSessionExpired?.call();
+  }
+
+  /// Productos para armar un aumento de stock o una transferencia.
+  Future<Either<Failure, List<StockProductEntity>>> searchProducts(String text) async {
+    final companyId = _companyId;
+    if (companyId == null) {
+      return Either.left(const ValidationFailure('No hay una empresa activa'));
+    }
+    final result = await _searchProducts(companyId: companyId, search: text);
+    if (result.isLeft) _check(result.left);
+    return result;
+  }
+
+  /// Aumenta el stock de [lines] en [warehouseId]. Devuelve `null` si salió bien o el mensaje.
+  Future<String?> addStock(int? warehouseId, List<StockEntryLine> lines) async {
+    final result = await _addStock(warehouseId: warehouseId, lines: lines);
+    if (result.isLeft) {
+      _check(result.left);
+      return result.left.message;
+    }
+    if (warehouseId == this.warehouseId) await refresh();
+    return null;
+  }
+
+  /// Deja el stock de [item] en [newStock] en el almacén elegido (manda la diferencia).
+  Future<String?> updateStock(StockItemEntity item, double newStock) async {
+    final warehouse = warehouseId;
+    if (warehouse == null) return 'Elige un almacén';
+    final result = await _updateStock(warehouseId: warehouse, item: item, newStock: newStock);
+    if (result.isLeft) {
+      _check(result.left);
+      return result.left.message;
+    }
+    await refresh();
+    return null;
+  }
+
+  /// Plantilla de Excel para subir stocks.
+  Future<Either<Failure, DownloadedFile>> downloadStockTemplate() async {
+    final result = await _downloadTemplate();
+    if (result.isLeft) _check(result.left);
+    return result;
+  }
+
+  /// Sube el Excel de stocks de [warehouseId]; las filas buenas suman y las malas se devuelven.
+  Future<Either<Failure, StockImportResultEntity>> importStock({
+    required int? warehouseId,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final companyId = _companyId;
+    if (companyId == null) {
+      return Either.left(const ValidationFailure('No hay una empresa activa'));
+    }
+    final result = await _importStock(
+      companyId: companyId,
+      warehouseId: warehouseId,
+      fileName: fileName,
+      bytes: bytes,
+    );
+    if (result.isLeft) {
+      _check(result.left);
+    } else if (warehouseId == this.warehouseId) {
+      await refresh();
+    }
+    return result;
+  }
+
+  /// Transfiere [lines] de [from] a [to]; devuelve el traslado creado.
+  Future<Either<Failure, OtherDocumentEntity>> transferStock({
+    required int? from,
+    required int? to,
+    required List<StockTransferLine> lines,
+  }) async {
+    final companyId = _companyId;
+    if (companyId == null) {
+      return Either.left(const ValidationFailure('No hay una empresa activa'));
+    }
+    final result = await _transferStock(
+      companyId: companyId,
+      userId: _userId,
+      from: from,
+      to: to,
+      lines: lines,
+    );
+    if (result.isLeft) {
+      _check(result.left);
+    } else if (from == warehouseId || to == warehouseId) {
+      await refresh();
+    }
     return result;
   }
 
@@ -220,8 +397,9 @@ class StockProvider extends ChangeNotifier {
       companyId: companyId,
       warehouseId: warehouse,
       priceListId: priceListId,
-      search: search,
+      search: terms,
       includeZero: includeZero,
+      tipo: tipo,
       page: page,
       pageSize: pageSize,
     );

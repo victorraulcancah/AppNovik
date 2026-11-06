@@ -143,3 +143,211 @@ class AppSkeletonList extends StatelessWidget {
     );
   }
 }
+
+/// Esqueleto de un detalle (para dentro de un modal o una pantalla): filas de "dato a la
+/// izquierda, valor a la derecha", como las de `AppDetailRow`. No scrollea ni se estira.
+class AppSkeletonDetail extends StatelessWidget {
+  final int rows;
+
+  const AppSkeletonDetail({super.key, this.rows = 6});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Cargando',
+      child: AppShimmer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < rows; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Row(
+                    children: [
+                      AppSkeletonBox(height: 12, width: 70.0 + (i % 3) * 18),
+                      const Spacer(),
+                      AppSkeletonBox(height: 12, width: 100.0 + (i % 2) * 40),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Esqueleto de un formulario: una etiqueta y un campo por cada [fields]. Para los modales
+/// que esperan sus catálogos (listas, categorías, ubigeo) antes de mostrar los campos.
+class AppSkeletonForm extends StatelessWidget {
+  final int fields;
+
+  const AppSkeletonForm({super.key, this.fields = 4});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Cargando',
+      child: AppShimmer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < fields; i++) ...[
+                if (i > 0) const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppSkeletonBox(height: 10, width: 70.0 + (i % 3) * 22),
+                ),
+                const SizedBox(height: 8),
+                const AppSkeletonBox(height: 48, radius: 12),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Esqueleto de los resultados de una búsqueda (hoja de búsqueda): filas compactas de dos líneas.
+class AppSkeletonResults extends StatelessWidget {
+  final int count;
+
+  const AppSkeletonResults({super.key, this.count = 4});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Cargando',
+      child: AppShimmer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < count; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppSkeletonBox(height: 13, width: 150.0 + (i % 3) * 30),
+                            const SizedBox(height: 8),
+                            AppSkeletonBox(height: 10, width: 90.0 + (i % 2) * 40),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const AppSkeletonBox(height: 13, width: 54),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Esqueleto de la pantalla de Reportes: las cifras (de a dos), la gráfica y unas tarjetas.
+class AppSkeletonReport extends StatelessWidget {
+  const AppSkeletonReport({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget card({required double height, Widget? child}) => Container(
+      height: height,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: child,
+    );
+
+    Widget stat() => card(
+      height: 100,
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSkeletonBox(height: 11, width: 90),
+          SizedBox(height: 14),
+          AppSkeletonBox(height: 20, width: 110),
+          SizedBox(height: 10),
+          AppSkeletonBox(height: 12, width: 56, radius: 10),
+        ],
+      ),
+    );
+
+    Widget statsRow() => Row(
+      children: [
+        Expanded(child: stat()),
+        const SizedBox(width: 12),
+        Expanded(child: stat()),
+      ],
+    );
+
+    return Semantics(
+      label: 'Cargando',
+      child: AppShimmer(
+        child: ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            statsRow(),
+            const SizedBox(height: 12),
+            statsRow(),
+            const SizedBox(height: 16),
+            card(
+              height: 230,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppSkeletonBox(height: 14, width: 140),
+                  SizedBox(height: 14),
+                  Expanded(child: AppSkeletonBox(height: 10, radius: 10)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (var i = 0; i < 3; i++) ...[
+              card(
+                height: 76,
+                child: const Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AppSkeletonBox(height: 13, width: 170),
+                          SizedBox(height: 8),
+                          AppSkeletonBox(height: 10, width: 110),
+                        ],
+                      ),
+                    ),
+                    AppSkeletonBox(height: 14, width: 64),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_motion.dart';
 
 /// Una serie de [AppAreaChart]: su nombre, su color y un valor por cada rótulo del eje X.
 class AreaSeries {
@@ -38,6 +39,14 @@ class _AppAreaChartState extends State<AppAreaChart> {
   static const _bottom = 22.0;
 
   int? _selected;
+
+  /// Cambia cuando cambian los datos: la gráfica se vuelve a dibujar de izquierda a derecha.
+  int get _dataKey => Object.hash(
+    Object.hashAll(widget.labels),
+    Object.hashAll([
+      for (final s in widget.series) Object.hash(s.name, Object.hashAll(s.values)),
+    ]),
+  );
 
   /// Abrevia un valor del eje Y: 1.2k, 3.4M.
   static String compact(double v) {
@@ -136,19 +145,24 @@ class _AppAreaChartState extends State<AppAreaChart> {
             onHorizontalDragUpdate: (d) => _select(d.localPosition, width),
             child: Stack(
               children: [
-                CustomPaint(
-                  size: Size(width, widget.height),
-                  painter: _AreaPainter(
-                    labels: widget.labels,
-                    series: widget.series,
-                    max: _max,
-                    selected: selected,
-                    gridColor: scheme.outlineVariant,
-                    textStyle: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 10,
+                AppReveal(
+                  dataKey: _dataKey,
+                  builder: (context, progress) => CustomPaint(
+                    size: Size(width, widget.height),
+                    painter: _AreaPainter(
+                      labels: widget.labels,
+                      series: widget.series,
+                      max: _max,
+                      selected: selected,
+                      progress: progress,
+                      gridColor: scheme.outlineVariant,
+                      textStyle: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                      markerColor: scheme.onSurface,
+                      dotRing: scheme.surface,
                     ),
-                    markerColor: scheme.onSurface,
                   ),
                 ),
                 ?tooltip,
@@ -170,6 +184,12 @@ class _AreaPainter extends CustomPainter {
   final TextStyle textStyle;
   final Color markerColor;
 
+  /// Color del aro de los puntos marcados (el del fondo, para que se lea en claro y en oscuro).
+  final Color dotRing;
+
+  /// 0→1: cuánto de la gráfica se ha dibujado, de izquierda a derecha.
+  final Animation<double> progress;
+
   _AreaPainter({
     required this.labels,
     required this.series,
@@ -178,7 +198,9 @@ class _AreaPainter extends CustomPainter {
     required this.gridColor,
     required this.textStyle,
     required this.markerColor,
-  });
+    required this.dotRing,
+    required this.progress,
+  }) : super(repaint: progress);
 
   void _text(Canvas canvas, String text, Offset at, {TextAlign align = TextAlign.left}) {
     final painter = TextPainter(
@@ -223,6 +245,10 @@ class _AreaPainter extends CustomPainter {
       _text(canvas, labels[i], Offset(xOf(i), size.height - bottom / 2 + 2), align: TextAlign.center);
     }
 
+    // La línea y el área se descubren de izquierda a derecha.
+    final reveal = Curves.easeOutCubic.transform(progress.value.clamp(0.0, 1.0));
+    canvas.save();
+    canvas.clipRect(Rect.fromLTRB(0, 0, plot.left + (plot.width + right) * reveal, size.height));
     for (final s in series) {
       if (s.values.isEmpty) continue;
       final line = Path();
@@ -254,6 +280,7 @@ class _AreaPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
     }
+    canvas.restore();
 
     final sel = selected;
     if (sel != null) {
@@ -272,7 +299,7 @@ class _AreaPainter extends CustomPainter {
             Offset(x, yOf(s.values[sel])),
             4,
             Paint()
-              ..color = Colors.white
+              ..color = dotRing
               ..style = PaintingStyle.stroke
               ..strokeWidth = 1.5,
           );
@@ -287,5 +314,7 @@ class _AreaPainter extends CustomPainter {
       old.series != series ||
       old.max != max ||
       old.selected != selected ||
+      old.progress != progress ||
+      old.dotRing != dotRing ||
       old.gridColor != gridColor;
 }

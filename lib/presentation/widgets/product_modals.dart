@@ -559,10 +559,7 @@ class _ProductFormBodyState extends State<_ProductFormBody> {
       builder: (context, _) {
         final c = widget.loader;
         if (c.loading) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const AppSkeletonForm(fields: 5);
         }
         if (c.error != null) {
           return Column(

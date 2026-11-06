@@ -2948,6 +2948,111 @@ void main() {
         expect(p.lines.single.codigoLibre, 'SRV-9');
       });
 
+      group('editar un ítem libre ya agregado', () {
+        test('cambia la descripción y el código y conserva cantidad, precio y descuento', () async {
+          final p = await _ready(_FakeSaleRepository(), permissions: libre);
+          await p.addFreeItem(descripcion: 'FLETE', cantidad: 2, precio: 15);
+          p.setDto(0, 10);
+          final antes = p.lines.single.product;
+
+          final r = await p.editFreeItem(0, descripcion: '  FLETE A PROVINCIA ', codigo: ' SRV-1 ');
+
+          expect(r.problem, isNull);
+          expect(r.info, isNull);
+          final l = p.lines.single;
+          expect(l.esLibre, isTrue);
+          expect(l.conceptoLibre, 'FLETE A PROVINCIA');
+          expect(l.codigoLibre, 'SRV-1');
+          expect(l.cantidad, 2);
+          expect(l.precio, 15);
+          expect(l.dto, 10);
+          expect(identical(l.product, antes), isFalse, reason: 'la pantalla identifica la línea por su producto');
+        });
+
+        test('quitar el código lo deja sin codigo_libre', () async {
+          final p = await _ready(_FakeSaleRepository(), permissions: libre);
+          await p.addFreeItem(descripcion: 'FLETE', codigo: 'SRV-1', precio: 15);
+
+          await p.editFreeItem(0, descripcion: 'FLETE', codigo: '  ');
+
+          expect(p.lines.single.codigoLibre, isNull);
+        });
+
+        test('pide la descripción y solo vale en una línea libre', () async {
+          final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12')];
+          final p = await _ready(repo, permissions: libre);
+          p.selectWarehouse(1);
+          await p.addFreeItem(descripcion: 'FLETE', precio: 15);
+          p.addProduct(_product(codigo: 'SUB-12'));
+
+          expect((await p.editFreeItem(0, descripcion: '  ')).problem, 'Escribe la descripción del concepto');
+          expect((await p.editFreeItem(1, descripcion: 'X')).problem, 'Esa línea no es un ítem libre');
+          expect((await p.editFreeItem(9, descripcion: 'X')).problem, 'Esa línea no es un ítem libre');
+          expect(p.lines.first.conceptoLibre, 'FLETE');
+        });
+
+        test('un código que ya es un producto del catálogo pasa la línea a ese producto', () async {
+          final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12')];
+          final p = await _ready(repo, permissions: libre);
+          p.selectWarehouse(1);
+          await p.addFreeItem(descripcion: 'LO QUE SEA', cantidad: 3, precio: 33);
+
+          final r = await p.editFreeItem(0, descripcion: 'LO QUE SEA', codigo: 'sub-12');
+
+          expect(r.problem, isNull);
+          expect(r.info, 'SUB-12 ya está en el catálogo: se agregó como producto normal.');
+          final l = p.lines.single;
+          expect(l.esLibre, isFalse);
+          expect(l.product.id, 100);
+          expect(l.cantidad, 3);
+          expect(l.precio, 33);
+        });
+
+        test('si ese producto ya estaba en la venta se suma la cantidad y la línea libre desaparece', () async {
+          final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12')];
+          final p = await _ready(repo, permissions: libre);
+          p.selectWarehouse(1);
+          p.addProduct(_product(codigo: 'SUB-12'), cantidad: 1);
+          await p.addFreeItem(descripcion: 'X', cantidad: 2, precio: 33);
+
+          final r = await p.editFreeItem(1, descripcion: 'X', codigo: 'SUB-12');
+
+          expect(r.problem, isNull);
+          expect(p.lines.single.cantidad, 3);
+          expect(p.lines.single.precio, 40);
+        });
+
+        test('si el producto no tiene stock no se cambia nada y se da el motivo', () async {
+          final repo = _FakeSaleRepository()..products = [_product(codigo: 'SUB-12', stock: const {1: 0})];
+          final p = await _ready(repo, permissions: libre);
+          p.selectWarehouse(1);
+          await p.addFreeItem(descripcion: 'FLETE', precio: 20);
+
+          final r = await p.editFreeItem(0, descripcion: 'OTRA', codigo: 'SUB-12');
+
+          expect(r.problem, contains('SUB-12 está en el catálogo pero no tiene stock en este almacén'));
+          expect(p.lines.single.esLibre, isTrue);
+          expect(p.lines.single.conceptoLibre, 'FLETE');
+          expect(p.lines.single.codigoLibre, isNull);
+        });
+
+        test('un código que no existe en el catálogo queda como ítem libre; si no cambia el código no se busca', () async {
+          final repo = _FakeSaleRepository()..products = [_product(codigo: 'OTRO')];
+          final p = await _ready(repo, permissions: libre);
+          await p.addFreeItem(descripcion: 'FLETE', codigo: 'SRV-9', precio: 20);
+
+          final r = await p.editFreeItem(0, descripcion: 'FLETE EXPRESS', codigo: 'SRV-9');
+          expect(r.problem, isNull);
+          expect(p.lines.single.conceptoLibre, 'FLETE EXPRESS');
+          expect(p.lines.single.codigoLibre, 'SRV-9');
+
+          repo.searchFails = true;
+          final again = await p.editFreeItem(0, descripcion: 'FLETE EXPRESS 2', codigo: 'SRV-10');
+          expect(again.problem, isNull);
+          expect(p.lines.single.codigoLibre, 'SRV-10');
+        });
+      });
+
       test('si falla la búsqueda del código, igual se agrega como ítem libre', () async {
         final repo = _FakeSaleRepository()..searchFails = true;
         final p = await _ready(repo, permissions: libre);
@@ -3280,6 +3385,45 @@ void main() {
       expect(find.text('FLETE A PROVINCIA'), findsOneWidget);
       expect(find.text('SRV-1 · Ítem libre'), findsOneWidget);
       expect(find.text('S/ 30.00'), findsWidgets);
+    });
+
+    testWidgets('un ítem libre agregado se puede editar desde su línea', (tester) async {
+      final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+      await sales.addFreeItem(descripcion: 'FLETE', precio: 30);
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Editar descripción y código'), findsOneWidget);
+      await tester.ensureVisible(find.byTooltip('Editar descripción y código'));
+      await tester.tap(find.byTooltip('Editar descripción y código'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar ítem libre'), findsOneWidget);
+      await tester.enterText(inSheet(_field('Descripción del concepto')), 'FLETE A LIMA');
+      await tester.enterText(inSheet(_field('Código (opcional)')), 'SRV-2');
+      await tester.tap(inSheet(find.text('Guardar')));
+      await tester.pumpAndSettle();
+
+      expect(sales.lines.single.conceptoLibre, 'FLETE A LIMA');
+      expect(sales.lines.single.codigoLibre, 'SRV-2');
+      expect(find.text('FLETE A LIMA'), findsOneWidget);
+      expect(find.text('SRV-2 · Ítem libre'), findsOneWidget);
+      expect(find.text('S/ 30.00'), findsWidgets);
+    });
+
+    testWidgets('el formulario de edición pide la descripción', (tester) async {
+      final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+      await sales.addFreeItem(descripcion: 'FLETE', precio: 30);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byTooltip('Editar descripción y código'));
+      await tester.tap(find.byTooltip('Editar descripción y código'));
+      await tester.pumpAndSettle();
+      await tester.enterText(inSheet(_field('Descripción del concepto')), '');
+      await tester.tap(inSheet(find.text('Guardar')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escribe la descripción'), findsOneWidget);
+      expect(sales.lines.single.conceptoLibre, 'FLETE');
     });
 
     testWidgets('el formulario del ítem libre pide descripción y precio', (tester) async {

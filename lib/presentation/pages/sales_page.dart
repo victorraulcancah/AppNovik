@@ -10,6 +10,7 @@ import '../utils/success_snack.dart';
 import '../widgets/client_modals.dart';
 import '../widgets/exchange_rate_badge.dart';
 import '../widgets/sale_checkout.dart';
+import '../widgets/sale_free_item.dart';
 import '../widgets/sale_modals.dart';
 import '../widgets/sale_product_entry.dart';
 
@@ -48,6 +49,12 @@ class _SalesPageState extends State<SalesPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Cambia la descripción y el código de un ítem libre ya agregado.
+  Future<void> _editFree(SaleLineEntity line) async {
+    final info = await showFreeItemEdit(context, line);
+    if (info != null && mounted) _snack(info);
   }
 
   Future<void> _pickClient() async {
@@ -482,6 +489,7 @@ class _SalesPageState extends State<SalesPage> {
               onDto: (v) => sales.setDto(i, v),
               onToggleDto: () => sales.toggleDtoFijo(i),
               onRemove: () => sales.removeLine(i),
+              onEditFree: sales.lines[i].esLibre ? () => _editFree(sales.lines[i]) : null,
             ),
             if (i < sales.lines.length - 1) const SizedBox(height: 10),
           ],
@@ -585,6 +593,9 @@ class _SaleLineTile extends StatefulWidget {
   final VoidCallback onToggleDto;
   final VoidCallback onRemove;
 
+  /// Solo en un ítem libre: abre el formulario para cambiar su descripción y su código.
+  final VoidCallback? onEditFree;
+
   const _SaleLineTile({
     super.key,
     required this.line,
@@ -594,6 +605,7 @@ class _SaleLineTile extends StatefulWidget {
     required this.onDto,
     required this.onToggleDto,
     required this.onRemove,
+    this.onEditFree,
   });
 
   @override
@@ -687,6 +699,12 @@ class _SaleLineTileState extends State<_SaleLineTile> {
                   ),
                 ),
               ),
+              if (widget.onEditFree != null)
+                IconButton(
+                  tooltip: 'Editar descripción y código',
+                  onPressed: widget.onEditFree,
+                  icon: Icon(Icons.edit_outlined, size: 20, color: scheme.onSurfaceVariant),
+                ),
               IconButton(
                 tooltip: 'Quitar',
                 onPressed: widget.onRemove,

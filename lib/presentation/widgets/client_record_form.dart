@@ -1086,10 +1086,7 @@ class _ConditionsTab extends StatelessWidget {
       builder: (context, _) {
         final catalogs = draft.catalogs.value;
         if (catalogs == null) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-          );
+          return const AppSkeletonForm(fields: 3);
         }
 
         Widget dropdown(String label, List<ClientOption> options, ValueNotifier<int?> value) {

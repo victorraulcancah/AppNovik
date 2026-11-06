@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import 'app_skeleton.dart';
 import 'app_modal.dart';
 import 'error_banner.dart';
 
@@ -175,10 +176,7 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
     if (_error != null) {
       results = ErrorBanner(message: _error!);
     } else if (_loading && _results.isEmpty) {
-      results = const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      results = const AppSkeletonResults();
     } else if (_query.isEmpty) {
       results = _Message(icon: Icons.search, text: widget.emptyHint);
     } else if (_results.isEmpty && !_loading) {

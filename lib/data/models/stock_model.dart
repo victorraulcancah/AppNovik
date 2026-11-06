@@ -1,4 +1,6 @@
+import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/stock_entity.dart';
+import '../../domain/entities/stock_manage_entity.dart';
 
 double? _double(dynamic v) =>
     v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
@@ -42,6 +44,7 @@ StockItemEntity stockItemFromJson(Map<String, dynamic> json) {
     ventaSinStock: _bool(json['vender_sin_stock']),
     costoPromedio: _double(pivot?['costo_promedio']),
     precio: precio,
+    ultimoCosto: _double(pivot?['ultimo_costo_promedio']),
   );
 }
 
@@ -83,4 +86,79 @@ List<PriceListEntity> priceListsFromJson(dynamic json) {
     }
   }
   return result;
+}
+
+/// Producto de `GET /productos/search`: marca, último costo de entrada (`stocks[0].pivot.costo`)
+/// y `warehouses[].pivot` con lo que tiene en cada almacén.
+StockProductEntity stockProductFromJson(Map<String, dynamic> json) {
+  final brand = json['brand'];
+
+  double? ultimoCosto;
+  final stocks = json['stocks'];
+  if (stocks is List && stocks.isNotEmpty && stocks.first is Map) {
+    final pivot = (stocks.first as Map)['pivot'];
+    if (pivot is Map) ultimoCosto = _double(pivot['costo']);
+  }
+
+  final levels = <int, StockWarehouseLevel>{};
+  final warehouses = json['warehouses'];
+  if (warehouses is List) {
+    for (final w in warehouses) {
+      if (w is! Map) continue;
+      final id = _int(w['id']);
+      if (id == null) continue;
+      final pivot = w['pivot'];
+      levels[id] = StockWarehouseLevel(
+        stock: pivot is Map ? _double(pivot['stock']) ?? 0 : 0,
+        costoPromedio: pivot is Map ? _double(pivot['costo_promedio']) ?? 0 : 0,
+      );
+    }
+  }
+
+  return StockProductEntity(
+    id: _int(json['id']) ?? 0,
+    codigo: (json['codigo'] ?? '') as String,
+    name: (json['name'] ?? '') as String,
+    marca: brand is Map ? brand['name'] as String? : null,
+    ultimoCosto: ultimoCosto,
+    levels: levels,
+  );
+}
+
+List<StockProductEntity> stockProductsFromJson(dynamic json) {
+  if (json is! List) return const [];
+  return json.whereType<Map<String, dynamic>>().map(stockProductFromJson).toList();
+}
+
+/// Respuesta de `POST /stock/import`: `message` trae las filas leídas (una lista, o un objeto
+/// con las posiciones como claves cuando el servidor descartó alguna) y `failures` las filas con
+/// error (`{clave: {row, errors}}`).
+StockImportResultEntity stockImportResultFromJson(dynamic body) {
+  if (body is! Map) return const StockImportResultEntity();
+
+  final rows = <StockImportRow>[];
+  final message = body['message'];
+  final entries = message is Map ? message.values : (message is List ? message : const []);
+  for (final r in entries) {
+    if (r is! Map) continue;
+    final costo = r['costo'];
+    rows.add(StockImportRow(
+      row: _int(r['row_number']) ?? 0,
+      codigo: '${r['codigo'] ?? ''}',
+      costo: costo == null || '$costo'.isEmpty ? null : '$costo',
+      stock: '${r['stock'] ?? ''}',
+    ));
+  }
+
+  final failures = <ImportFailureEntity>[];
+  final raw = body['failures'];
+  final failureEntries = raw is Map ? raw.values : (raw is List ? raw : const []);
+  for (final f in failureEntries) {
+    if (f is! Map) continue;
+    failures.add(ImportFailureEntity(
+      row: _int(f['row']) ?? 0,
+      errors: [for (final e in (f['errors'] is List ? f['errors'] as List : const [])) '$e'],
+    ));
+  }
+  return StockImportResultEntity(rows: rows, failures: failures);
 }

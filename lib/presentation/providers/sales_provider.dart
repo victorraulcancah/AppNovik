@@ -652,6 +652,52 @@ class SalesProvider extends ChangeNotifier {
     return (problem: null, info: null);
   }
 
+  /// Cambia la descripción y el código de un ítem libre ya agregado (como los campos de su línea
+  /// en la web). Si el código nuevo ya es un producto del catálogo, la línea pasa a ser ese
+  /// producto con su cantidad y su precio (o se suma a la línea de ese producto si ya estaba), y se
+  /// devuelve el aviso. Si ese producto no tiene stock en el almacén, no se cambia nada y se
+  /// devuelve el motivo.
+  Future<({String? problem, String? info})> editFreeItem(
+    int index, {
+    required String descripcion,
+    String? codigo,
+  }) async {
+    if (index < 0 || index >= lines.length || !lines[index].esLibre) {
+      return (problem: 'Esa línea no es un ítem libre', info: null);
+    }
+    if (descripcion.trim().isEmpty) return (problem: 'Escribe la descripción del concepto', info: null);
+
+    final line = lines[index];
+    final code = codigo?.trim() ?? '';
+    final companyId = _companyId;
+    // La web busca el código cada vez que se sale del campo; acá solo si cambió.
+    if (code.isNotEmpty && code != (line.codigoLibre ?? '') && companyId != null) {
+      final result = await _searchProducts(companyId: companyId, search: code);
+      _checkSession(result);
+      if (companyId != _companyId) return (problem: null, info: null);
+      if (result.isRight) {
+        final match = result.right.where((p) => p.codigo.trim().toLowerCase() == code.toLowerCase()).firstOrNull;
+        if (match != null) {
+          // La línea pudo moverse mientras se buscaba: se vuelve a ubicar por identidad.
+          final at = lines.indexWhere((l) => identical(l.product, line.product));
+          if (at == -1) return (problem: null, info: null);
+          final outcome = _addCatalogInstead(match, line.cantidad, line.precio);
+          if (outcome.problem != null) return outcome;
+          lines = [...lines]..removeWhere((l) => identical(l.product, line.product));
+          notifyListeners();
+          return outcome;
+        }
+      }
+    }
+
+    final at = lines.indexWhere((l) => identical(l.product, line.product));
+    if (at == -1) return (problem: null, info: null);
+    lines = [...lines]..[at] = line.conTextoLibre(descripcion: descripcion, codigo: code);
+    submitError = null;
+    notifyListeners();
+    return (problem: null, info: null);
+  }
+
   ({String? problem, String? info}) _addCatalogInstead(SaleProductEntity match, int cantidad, double precio) {
     final warehouse = warehouseId;
     final max = warehouse == null ? null : match.maximoEn(warehouse);

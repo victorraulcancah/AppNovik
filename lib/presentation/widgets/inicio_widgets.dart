@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
+import 'inicio_help.dart';
 
 /// Piezas que comparten los tres resúmenes del Inicio (Ejecutivo, Jefe y CEO).
 
@@ -140,6 +141,9 @@ class InicioGoalCard extends StatelessWidget {
   final String name;
   final List<Widget> footer;
 
+  /// La ayuda (?) de la tarjeta, junto al título.
+  final InicioHelp? help;
+
   const InicioGoalCard({
     super.key,
     required this.view,
@@ -153,6 +157,7 @@ class InicioGoalCard extends StatelessWidget {
     required this.noGoalText,
     required this.name,
     this.footer = const [],
+    this.help,
   });
 
   @override
@@ -183,6 +188,7 @@ class InicioGoalCard extends StatelessWidget {
                   style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
+              if (help != null) InicioHelpButton(help: help!),
               if (showVariation) AppVariationBadge(value: variation),
             ],
           ),
@@ -443,8 +449,9 @@ class InicioKpiRow extends StatelessWidget {
 class InicioEvolution extends StatelessWidget {
   final String title;
   final EvolutionEntity evolution;
+  final InicioHelp? help;
 
-  const InicioEvolution({super.key, required this.title, required this.evolution});
+  const InicioEvolution({super.key, required this.title, required this.evolution, this.help});
 
   @override
   Widget build(BuildContext context) {
@@ -464,11 +471,17 @@ class InicioEvolution extends StatelessWidget {
     return AppSection(
       title: title,
       icon: Icons.bar_chart,
-      trailing: Wrap(
-        spacing: 10,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          legend(scheme.outlineVariant, '${evolution.anioAnterior}'),
-          legend(current, '${evolution.anioActual}'),
+          Wrap(
+            spacing: 10,
+            children: [
+              legend(scheme.outlineVariant, '${evolution.anioAnterior}'),
+              legend(current, '${evolution.anioActual}'),
+            ],
+          ),
+          if (help != null) InicioHelpButton(help: help!),
         ],
       ),
       child: AppGroupedBarChart(
@@ -724,16 +737,21 @@ class InicioGoalProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = goalColor(light);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(width: 38, child: InicioProgressBar(percent: percent, color: color, height: 6)),
-        const SizedBox(width: 6),
-        Text(
-          '${percent.round()}%',
-          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12, fontFeatures: _tabular),
-        ),
-      ],
+    // Si la celda no alcanza (letra grande, pantalla angosta) se achica en vez de desbordar.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 38, child: InicioProgressBar(percent: percent, color: color, height: 6)),
+          const SizedBox(width: 6),
+          Text(
+            '${percent.round()}%',
+            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12, fontFeatures: _tabular),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -745,14 +763,16 @@ class InicioSellerGoals extends StatelessWidget {
 
   /// Con un almacén elegido las metas (de toda la empresa) no se comparan con lo vendido allí.
   final bool hideGoals;
+  final InicioHelp? help;
 
-  const InicioSellerGoals({super.key, required this.title, required this.sellers, this.hideGoals = false});
+  const InicioSellerGoals({super.key, required this.title, required this.sellers, this.hideGoals = false, this.help});
 
   @override
   Widget build(BuildContext context) {
     return AppSection(
       title: title,
       icon: Icons.track_changes,
+      trailing: help == null ? null : InicioHelpButton(help: help!),
       child: InicioTable(
         columns: const ['Vendedor', 'Ventas (S/)', 'Meta (S/)', 'Avance'],
         emptyText: 'Sin ventas en el rango',
@@ -776,8 +796,9 @@ class InicioSellerGoals extends StatelessWidget {
 /// Ventas por departamento: monto y participación con su barra.
 class InicioDepartments extends StatelessWidget {
   final List<DepartmentEntity> departments;
+  final InicioHelp? help;
 
-  const InicioDepartments({super.key, required this.departments});
+  const InicioDepartments({super.key, required this.departments, this.help});
 
   @override
   Widget build(BuildContext context) {
@@ -785,6 +806,7 @@ class InicioDepartments extends StatelessWidget {
     return AppSection(
       title: 'Ventas por departamento',
       icon: Icons.map_outlined,
+      trailing: help == null ? null : InicioHelpButton(help: help!),
       child: InicioTable(
         columns: const ['Departamento', 'Ventas (S/)', 'Participación'],
         emptyText: 'Sin ventas en el rango',
@@ -793,13 +815,17 @@ class InicioDepartments extends StatelessWidget {
             [
               InicioCell(d.nombre),
               InicioCell(thousands(d.monto)),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(width: 30, child: InicioProgressBar(percent: d.participacion, color: _blue, height: 6)),
-                  const SizedBox(width: 6),
-                  Text('${d.participacion}%', style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular)),
-                ],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(width: 30, child: InicioProgressBar(percent: d.participacion, color: _blue, height: 6)),
+                    const SizedBox(width: 6),
+                    Text('${d.participacion}%', style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular)),
+                  ],
+                ),
               ),
             ],
         ],
@@ -813,12 +839,14 @@ class InicioFallClients extends StatelessWidget {
   final FallClientsEntity fall;
   final String previousLabel;
   final String currentLabel;
+  final InicioHelp? help;
 
   const InicioFallClients({
     super.key,
     required this.fall,
     required this.previousLabel,
     required this.currentLabel,
+    this.help,
   });
 
   @override
@@ -826,6 +854,7 @@ class InicioFallClients extends StatelessWidget {
     return AppSection(
       title: 'Clientes con mayor caída',
       icon: Icons.group_outlined,
+      trailing: help == null ? null : InicioHelpButton(help: help!),
       child: Column(
         children: [
           InicioTable(
@@ -862,12 +891,14 @@ class InicioFallProducts extends StatelessWidget {
   final List<FallProductEntity> products;
   final String previousLabel;
   final String currentLabel;
+  final InicioHelp? help;
 
   const InicioFallProducts({
     super.key,
     required this.products,
     required this.previousLabel,
     required this.currentLabel,
+    this.help,
   });
 
   @override
@@ -881,6 +912,7 @@ class InicioFallProducts extends StatelessWidget {
     return AppSection(
       title: 'Productos con mayor caída',
       icon: Icons.inventory_2_outlined,
+      trailing: help == null ? null : InicioHelpButton(help: help!),
       child: Column(
         children: [
           InicioTable(
@@ -919,6 +951,7 @@ class InicioPendingQuotes extends StatelessWidget {
   final bool showSeller;
   final int total;
   final Widget? totals;
+  final InicioHelp? help;
 
   const InicioPendingQuotes({
     super.key,
@@ -927,6 +960,7 @@ class InicioPendingQuotes extends StatelessWidget {
     this.showSeller = false,
     required this.total,
     this.totals,
+    this.help,
   });
 
   @override
@@ -934,6 +968,7 @@ class InicioPendingQuotes extends StatelessWidget {
     return AppSection(
       title: title,
       icon: Icons.description_outlined,
+      trailing: help == null ? null : InicioHelpButton(help: help!),
       child: Column(
         children: [
           InicioTable(

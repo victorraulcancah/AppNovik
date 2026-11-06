@@ -4,6 +4,7 @@ import '../../domain/entities/inicio_entity.dart';
 import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
+import 'inicio_help.dart';
 import 'inicio_widgets.dart';
 
 /// Resumen del Jefe Comercial ("Mi equipo"): las ventas de todo el equipo contra la meta de la
@@ -33,6 +34,7 @@ class InicioTeamView extends StatelessWidget {
       InicioGoalCard(
         view: InicioView.jefe,
         title: 'Ventas del equipo',
+        help: inicioTeamSalesHelp(),
         total: sales.total,
         variation: sales.variacionPct,
         comparison: comparison,
@@ -61,10 +63,15 @@ class InicioTeamView extends StatelessWidget {
         ],
       ),
       InicioEvolution(title: 'Evolución de ventas del equipo', evolution: data.evolucion),
-      InicioSellerGoals(title: 'Cumplimiento de metas por vendedor', sellers: data.vendedores),
+      InicioSellerGoals(
+        title: 'Cumplimiento de metas por vendedor',
+        sellers: data.vendedores,
+        help: inicioSellerGoalsHelp(),
+      ),
       AppSection(
         title: 'Productos más vendidos del equipo',
         icon: Icons.inventory_2_outlined,
+        trailing: InicioHelpButton(help: inicioTeamTopProductsHelp()),
         child: InicioTable(
           columns: const ['Producto', 'Ventas (S/)', 'Avance', 'Porcentaje'],
           emptyText: 'Sin ventas en el rango',
@@ -83,11 +90,17 @@ class InicioTeamView extends StatelessWidget {
           ],
         ),
       ),
-      InicioDepartments(departments: data.departamentos),
+      InicioDepartments(departments: data.departamentos, help: inicioTeamDepartmentsHelp()),
       _TeamOpportunities(data: data, onOpenQuotes: onOpenQuotes),
       _TeamManagements(data: data),
-      InicioFallClients(fall: data.clientesCaida, previousLabel: previousLabel, currentLabel: currentLabel),
+      InicioFallClients(
+        fall: data.clientesCaida,
+        previousLabel: previousLabel,
+        currentLabel: currentLabel,
+        help: inicioFallClientsHelpTeam(),
+      ),
       InicioPendingQuotes(
+        help: inicioPriorityHelp(),
         title: 'Cotizaciones pendientes del equipo (${data.cotizacionesCantidad})',
         quotes: data.cotizaciones,
         showSeller: true,
@@ -110,6 +123,7 @@ class InicioTeamView extends StatelessWidget {
         products: data.productosMayorCaida,
         previousLabel: previousLabel,
         currentLabel: currentLabel,
+        help: inicioFallProductsHelpTeam(),
       ),
     ]);
   }
@@ -131,6 +145,7 @@ class _TeamOpportunities extends StatelessWidget {
     return AppSection(
       title: 'Oportunidades comerciales del equipo',
       icon: Icons.track_changes,
+      trailing: InicioHelpButton(help: inicioTeamOpportunitiesHelp()),
       child: Column(
         children: [
           InicioOpportunity(
@@ -194,6 +209,7 @@ class _TeamManagementsState extends State<_TeamManagements> {
     return AppSection(
       title: 'Gestiones del equipo (${_period.label.toLowerCase()})',
       icon: Icons.assignment_outlined,
+      trailing: InicioHelpButton(help: inicioManagementsHelp()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -208,52 +224,62 @@ class _TeamManagementsState extends State<_TeamManagements> {
           if (items.isEmpty)
             const InicioEmpty(text: 'Sin gestiones programadas')
           else
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.2,
+            // De a dos por fila; cada fila toma la altura de su contenido (con letra grande una
+            // proporción fija recortaba el texto).
+            for (var i = 0; i < items.length; i += 2) ...[
+              if (i > 0) const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _managementTile(items[i], theme, scheme)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: i + 1 < items.length
+                          ? _managementTile(items[i + 1], theme, scheme)
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _managementTile(ManagementEntity g, ThemeData theme, ColorScheme scheme) {
+    final type = contactType(g.tipo);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(type.icon, size: 24, color: type.color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final g in items)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: scheme.outlineVariant),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(contactType(g.tipo).icon, size: 24, color: contactType(g.tipo).color),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${g.hechas} / ${g.programadas}',
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                              ),
-                              Text(
-                                contactType(g.tipo).plural,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                        ),
-                        InicioChip(
-                          label: g.pct == null ? '—' : '${g.pct!.round()}%',
-                          color: _pctColor(g.pct),
-                        ),
-                      ],
-                    ),
-                  ),
+                Text(
+                  '${g.hechas} / ${g.programadas}',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  type.plural,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
               ],
             ),
+          ),
+          const SizedBox(width: 6),
+          InicioChip(label: g.pct == null ? '—' : '${g.pct!.round()}%', color: _pctColor(g.pct)),
         ],
       ),
     );

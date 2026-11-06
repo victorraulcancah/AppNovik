@@ -76,11 +76,18 @@ class ProductPageEntity {
   final int lastPage;
   final int total;
 
+  /// Cuántos productos y cuántos servicios hay con la búsqueda y los filtros actuales
+  /// (`total_productos` y `total_servicios` de la respuesta).
+  final int totalProductos;
+  final int totalServicios;
+
   const ProductPageEntity({
     required this.items,
     required this.currentPage,
     required this.lastPage,
     required this.total,
+    this.totalProductos = 0,
+    this.totalServicios = 0,
   });
 
   bool get hasMore => currentPage < lastPage;

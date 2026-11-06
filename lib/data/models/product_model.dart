@@ -84,6 +84,8 @@ class ProductPageModel extends ProductPageEntity {
     required super.currentPage,
     required super.lastPage,
     required super.total,
+    super.totalProductos,
+    super.totalServicios,
   });
 
   /// Respuesta paginada de Laravel.
@@ -99,6 +101,8 @@ class ProductPageModel extends ProductPageEntity {
       currentPage: (json['current_page'] as num?)?.toInt() ?? 1,
       lastPage: (json['last_page'] as num?)?.toInt() ?? 1,
       total: (json['total'] as num?)?.toInt() ?? 0,
+      totalProductos: (json['total_productos'] as num?)?.toInt() ?? 0,
+      totalServicios: (json['total_servicios'] as num?)?.toInt() ?? 0,
     );
   }
 }

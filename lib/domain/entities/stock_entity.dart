@@ -34,6 +34,10 @@ class StockItemEntity {
   final double? costoPromedio;
   final double? precio;
 
+  /// Último costo promedio distinto de 0 (`ultimo_costo_promedio`); la web lo usa cuando el
+  /// costo promedio es 0 o ya no hay stock.
+  final double? ultimoCosto;
+
   const StockItemEntity({
     required this.productId,
     required this.codigo,
@@ -46,6 +50,7 @@ class StockItemEntity {
     this.ventaSinStock = false,
     this.costoPromedio,
     this.precio,
+    this.ultimoCosto,
   });
 
   /// Disponible más lo reservado por despachar (igual que la web).

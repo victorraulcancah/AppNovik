@@ -18,6 +18,7 @@ class GetProductsUseCase {
     int pageSize = 20,
     List<String> search = const [],
     String? tipo,
+    bool? activo,
   }) =>
       repository.getProducts(
         companyId: companyId,
@@ -25,6 +26,7 @@ class GetProductsUseCase {
         pageSize: pageSize,
         search: search,
         tipo: tipo,
+        activo: activo,
       );
 }
 

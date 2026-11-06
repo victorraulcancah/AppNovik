@@ -149,3 +149,66 @@ class AppCountUp extends StatelessWidget {
     );
   }
 }
+
+/// Progreso 0→1 para dibujar una gráfica: arranca al aparecer y vuelve a arrancar desde cero
+/// cuando cambia [dataKey] (por ejemplo, un hash de los datos). No repite nada por su cuenta,
+/// así que `pumpAndSettle` termina. Con "quitar animaciones" el progreso queda en 1 de entrada.
+class AppReveal extends StatefulWidget {
+  final Object? dataKey;
+  final Duration duration;
+  final Widget Function(BuildContext context, Animation<double> progress)
+  builder;
+
+  const AppReveal({
+    super.key,
+    required this.dataKey,
+    required this.builder,
+    this.duration = const Duration(milliseconds: 900),
+  });
+
+  @override
+  State<AppReveal> createState() => _AppRevealState();
+}
+
+class _AppRevealState extends State<AppReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  );
+  bool _started = false;
+
+  bool get _still => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (_still) {
+      _controller.value = 1;
+    } else {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(AppReveal old) {
+    super.didUpdateWidget(old);
+    if (old.dataKey == widget.dataKey) return;
+    if (_still) {
+      _controller.value = 1;
+    } else {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controller);
+}

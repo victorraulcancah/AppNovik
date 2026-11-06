@@ -349,10 +349,7 @@ class _ClientFiltersBodyState extends State<_ClientFiltersBody> {
         ),
         const SizedBox(height: 16),
         if (catalogs == null)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-          )
+          const AppSkeletonForm(fields: 2)
         else ...[
           const Text('Categoría', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
@@ -489,10 +486,7 @@ class _CategoriesViewState extends State<_CategoriesView> {
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-          );
+          return const AppSkeletonForm(fields: 3);
         }
         if (snapshot.hasError) {
           return ErrorBanner(message: '${snapshot.error}'.replaceFirst('Exception: ', ''));
@@ -711,10 +705,7 @@ class _CategoriesConfigBodyState extends State<_CategoriesConfigBody> {
       listenable: _c,
       builder: (context, _) {
         if (_c.loading) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-          );
+          return const AppSkeletonForm(fields: 3);
         }
         final period = _c.periodos[_c.ciclo];
         return Column(

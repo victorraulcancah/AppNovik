@@ -51,12 +51,13 @@ class _InicioPageState extends State<InicioPage> {
   }
 
   /// Las cotizaciones se ven en Documentos: solo se ofrece el enlace si el usuario puede verlas.
-  VoidCallback? _quotesLink() {
+  /// Abre Documentos en Cotizaciones pendientes, en el rango del resumen (como la web).
+  VoidCallback? _quotesLink(DateTime desde, DateTime hasta) {
     final session = context.read<AuthProvider>().session;
     if (session == null || !session.hasModule('documentos') || !session.can('documentos.cotizaciones.index')) {
       return null;
     }
-    return () => context.read<ShellNavigation>().goTo('documentos');
+    return () => context.read<ShellNavigation>().goToPendingQuotes(desde: desde, hasta: hasta);
   }
 
   @override
@@ -163,13 +164,20 @@ class _InicioPageState extends State<InicioPage> {
         view,
         inicio,
         inicio.executive!.vendedor,
-        InicioExecutiveView(data: inicio.executive!, now: now, onOpenQuotes: _quotesLink()),
+        InicioExecutiveView(
+          data: inicio.executive!,
+          now: now,
+          onOpenQuotes: _quotesLink(inicio.executive!.desde, inicio.executive!.hasta),
+        ),
       ),
       InicioView.jefe => _withGreeting(
         view,
         inicio,
         inicio.team!.jefe,
-        InicioTeamView(data: inicio.team!, onOpenQuotes: _quotesLink()),
+        InicioTeamView(
+          data: inicio.team!,
+          onOpenQuotes: _quotesLink(inicio.team!.desde, inicio.team!.hasta),
+        ),
       ),
       InicioView.ceo => _withGreeting(
         view,

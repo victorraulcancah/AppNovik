@@ -213,7 +213,7 @@ class _ReportsPageState extends State<ReportsPage> {
           action: AppButton(label: 'Reintentar', icon: Icons.refresh, onPressed: reports.refresh),
         );
       }
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonReport();
     }
 
     final products = report.products;

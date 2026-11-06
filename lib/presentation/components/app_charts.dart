@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/format.dart';
 import '../../theme/app_theme.dart';
+import 'app_motion.dart';
 
 /// Variación contra el año pasado: "+31.0 % ↑" en verde, "-5.0 % ↓" en rojo.
 /// Sin base de comparación (`null`) muestra "—".
@@ -119,6 +120,7 @@ class AppBarList extends StatelessWidget {
 
     final maximum = items.fold<double>(1, (m, i) => i.value > m ? i.value : m);
     final fill = AppTheme.strongFill(theme.brightness);
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return Column(
       children: [
@@ -151,11 +153,17 @@ class AppBarList extends StatelessWidget {
                 const SizedBox(height: 4),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (item.value / maximum).clamp(0.02, 1.0),
-                    minHeight: 8,
-                    color: fill,
-                    backgroundColor: scheme.surfaceContainer,
+                  // La barra se llena al aparecer y se ajusta si el valor cambia.
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: (item.value / maximum).clamp(0.02, 1.0)),
+                    duration: still ? Duration.zero : const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) => LinearProgressIndicator(
+                      value: value,
+                      minHeight: 8,
+                      color: fill,
+                      backgroundColor: scheme.surfaceContainer,
+                    ),
                   ),
                 ),
               ],
@@ -198,16 +206,25 @@ class AppGroupedBarChart extends StatelessWidget {
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: CustomPaint(
-        painter: _GroupedBarPainter(
-          labels: labels,
-          previous: previous,
-          current: current,
-          previousColor: scheme.outlineVariant,
-          currentColor: AppTheme.strongFill(theme.brightness),
-          gridColor: scheme.outlineVariant.withValues(alpha: 0.5),
-          textStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 10))
-              .copyWith(color: scheme.onSurfaceVariant),
+      // Las barras crecen desde la base, una tras otra, al aparecer o cuando cambian los datos.
+      child: AppReveal(
+        dataKey: Object.hash(
+          Object.hashAll(labels),
+          Object.hashAll(previous),
+          Object.hashAll(current),
+        ),
+        builder: (context, progress) => CustomPaint(
+          painter: _GroupedBarPainter(
+            labels: labels,
+            previous: previous,
+            current: current,
+            progress: progress,
+            previousColor: scheme.outlineVariant,
+            currentColor: AppTheme.strongFill(theme.brightness),
+            gridColor: scheme.outlineVariant.withValues(alpha: 0.5),
+            textStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 10))
+                .copyWith(color: scheme.onSurfaceVariant),
+          ),
         ),
       ),
     );
@@ -218,6 +235,7 @@ class _GroupedBarPainter extends CustomPainter {
   final List<String> labels;
   final List<double> previous;
   final List<double> current;
+  final Animation<double> progress;
   final Color previousColor;
   final Color currentColor;
   final Color gridColor;
@@ -227,11 +245,12 @@ class _GroupedBarPainter extends CustomPainter {
     required this.labels,
     required this.previous,
     required this.current,
+    required this.progress,
     required this.previousColor,
     required this.currentColor,
     required this.gridColor,
     required this.textStyle,
-  });
+  }) : super(repaint: progress);
 
   TextPainter _text(String text) => TextPainter(
         text: TextSpan(text: text, style: textStyle),
@@ -268,9 +287,16 @@ class _GroupedBarPainter extends CustomPainter {
     final barWidth = (slot * 0.34).clamp(2.0, 14.0);
     const gap = 1.5;
 
-    void bar(double x, double value, Color color) {
+    // Cada grupo arranca un poquito después del anterior.
+    final n = labels.length;
+    double growth(int i) {
+      final t = ((progress.value * 1.5) - 0.5 * i / n).clamp(0.0, 1.0);
+      return Curves.easeOutCubic.transform(t);
+    }
+
+    void bar(double x, double value, Color color, double grow) {
       if (value <= 0) return;
-      final h = plot.height * (value / top);
+      final h = plot.height * (value / top) * grow;
       canvas.drawRRect(
         RRect.fromRectAndCorners(
           Rect.fromLTWH(x, plot.bottom - h, barWidth, h),
@@ -283,8 +309,9 @@ class _GroupedBarPainter extends CustomPainter {
 
     for (var i = 0; i < labels.length; i++) {
       final center = plot.left + slot * i + slot / 2;
-      bar(center - barWidth - gap / 2, previous[i], previousColor);
-      bar(center + gap / 2, current[i], currentColor);
+      final grow = growth(i);
+      bar(center - barWidth - gap / 2, previous[i], previousColor, grow);
+      bar(center + gap / 2, current[i], currentColor, grow);
 
       final label = _text(labels[i]);
       label.paint(canvas, Offset(center - label.width / 2, plot.bottom + 4));
@@ -296,6 +323,7 @@ class _GroupedBarPainter extends CustomPainter {
       old.labels != labels ||
       old.previous != previous ||
       old.current != current ||
+      old.progress != progress ||
       old.currentColor != currentColor ||
       old.previousColor != previousColor;
 }

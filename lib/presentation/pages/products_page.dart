@@ -34,6 +34,7 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   Timer? _debounce;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _ProductsPageState extends State<ProductsPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -54,6 +56,14 @@ class _ProductsPageState extends State<ProductsPage> {
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (mounted) context.read<ProductsProvider>().setSearch(text);
     });
+  }
+
+  /// "Buscar" en el teclado: lo escrito pasa a ser un chip (puede ser una frase) y el campo queda
+  /// libre para otro término, como en la web.
+  void _onSearchSubmitted(String text) {
+    _debounce?.cancel();
+    _searchController.clear();
+    context.read<ProductsProvider>().addSearchTerm(text);
   }
 
   Future<void> _openFilters() async {
@@ -71,9 +81,22 @@ class _ProductsPageState extends State<ProductsPage> {
             AppFilterOption('s', 'Servicios'),
           ],
         ),
+        AppFilterField(
+          id: 'estado',
+          label: 'Estado',
+          allLabel: 'Todos',
+          value: provider.activo == null ? null : '${provider.activo}',
+          options: const [
+            AppFilterOption('true', 'Activos'),
+            AppFilterOption('false', 'Inactivos'),
+          ],
+        ),
       ],
     );
-    if (result != null) provider.setTipo(result['tipo']);
+    if (result != null) {
+      final estado = result['estado'];
+      provider.setFilters(tipo: result['tipo'], activo: estado == null ? null : estado == 'true');
+    }
   }
 
   void _snack(String message) {
@@ -247,23 +270,18 @@ class _ProductsPageState extends State<ProductsPage> {
             ),
             AppSearchBar(
               hint: 'Buscar por nombre, código…',
+              controller: _searchController,
               onChanged: _onSearchChanged,
+              onSubmitted: _onSearchSubmitted,
               onFilter: _openFilters,
               filterActive: products.filtersActive,
             ),
-            if (products.total > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${products.total} productos',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ),
-              ),
+            AppSearchChips(
+              terms: products.searchTerms,
+              onRemove: products.removeSearchTerm,
+              onClear: products.clearSearchTerms,
+            ),
+            _counters(products),
             Expanded(child: _body(products)),
           ],
         ),
@@ -275,6 +293,35 @@ class _ProductsPageState extends State<ProductsPage> {
             child: AppSpeedDial(actions: actions),
           ),
       ],
+    );
+  }
+
+  /// Todos / Productos / Servicios: como en la web, son los números del servidor y tocarlos
+  /// filtra por tipo.
+  Widget _counters(ProductsProvider products) {
+    if (products.items.isEmpty && products.total == 0) return const SizedBox.shrink();
+
+    Widget chip(String label, int count, String? value) => ChoiceChip(
+          key: ValueKey('tipo-${value ?? 'todos'}'),
+          label: Text('$label: $count'),
+          selected: products.tipo == value,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) => products.setTipo(value),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Wrap(
+          spacing: 8,
+          children: [
+            chip('Todos', products.total, null),
+            chip('Productos', products.totalProductos, 'p'),
+            chip('Servicios', products.totalServicios, 's'),
+          ],
+        ),
+      ),
     );
   }
 

@@ -340,6 +340,26 @@ class SaleLineEntity {
 
   bool get esLibre => conceptoLibre != null;
 
+  /// El mismo ítem libre con otra descripción y otro código (cantidad, precio y descuento se
+  /// conservan). Lleva un producto nuevo: es lo que identifica la línea en pantalla.
+  SaleLineEntity conTextoLibre({required String descripcion, String? codigo}) {
+    final libre = SaleLineEntity.libre(
+      descripcion: descripcion,
+      codigo: codigo,
+      cantidad: cantidad,
+      precio: precio,
+    );
+    return SaleLineEntity(
+      product: libre.product,
+      cantidad: cantidad,
+      precio: precio,
+      dto: dto,
+      dtoFijo: dtoFijo,
+      conceptoLibre: libre.conceptoLibre,
+      codigoLibre: libre.codigoLibre,
+    );
+  }
+
   /// Importe de la línea sin descuento.
   double get subtotal => roundMoney(precio * cantidad);
 

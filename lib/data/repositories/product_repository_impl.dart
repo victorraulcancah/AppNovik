@@ -29,6 +29,7 @@ class ProductRepositoryImpl with TokenGuard implements ProductRepository {
     int pageSize = 20,
     List<String> search = const [],
     String? tipo,
+    bool? activo,
   }) =>
       withToken(
         (token) => remoteDataSource.getProducts(
@@ -38,6 +39,7 @@ class ProductRepositoryImpl with TokenGuard implements ProductRepository {
           pageSize: pageSize,
           search: search,
           tipo: tipo,
+          activo: activo,
         ),
       );
 

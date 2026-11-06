@@ -8,7 +8,8 @@ import '../entities/product_entity.dart';
 import '../entities/product_form_entity.dart';
 
 abstract class ProductRepository {
-  /// [tipo]: `'p'` productos, `'s'` servicios, `null` ambos.
+  /// [tipo]: `'p'` productos, `'s'` servicios, `null` ambos. [activo]: `true` solo activos,
+  /// `false` solo inactivos, `null` todos.
   /// [search]: términos; cada uno debe aparecer en nombre, código, marca, etc.
   Future<Either<Failure, ProductPageEntity>> getProducts({
     required int companyId,
@@ -16,6 +17,7 @@ abstract class ProductRepository {
     int pageSize = 20,
     List<String> search = const [],
     String? tipo,
+    bool? activo,
   });
 
   /// Marcas, categorías, medidas, proveedores, canales y giros de la empresa.

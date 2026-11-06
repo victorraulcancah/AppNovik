@@ -48,15 +48,30 @@ class ProductsProvider extends ChangeNotifier {
   bool loadingMore = false;
   bool hasMore = false;
   int total = 0;
+
+  /// Productos y servicios que hay con la búsqueda y los filtros actuales.
+  int totalProductos = 0;
+  int totalServicios = 0;
   String? error;
   bool exporting = false;
   bool importing = false;
+
+  /// Lo que se está escribiendo en el buscador (cada palabra es un término).
   List<String> search = const [];
+
+  /// Términos ya confirmados (con "buscar"), como los chips de la web.
+  List<String> searchTerms = const [];
 
   /// `'p'` productos, `'s'` servicios, `null` ambos.
   String? tipo;
 
-  bool get filtersActive => tipo != null;
+  /// `true` solo activos, `false` solo inactivos, `null` todos.
+  bool? activo;
+
+  bool get filtersActive => tipo != null || activo != null;
+
+  /// Todos los términos que se mandan al servidor: los confirmados y los que se están escribiendo.
+  List<String> get terms => [...searchTerms, ...search];
 
   /// Se llama cuando cambia la sesión. Al cambiar de empresa se descarta todo,
   /// para no mostrar productos de la empresa anterior. No notifica: corre
@@ -70,8 +85,12 @@ class ProductsProvider extends ChangeNotifier {
     hasMore = false;
     total = 0;
     error = null;
+    totalProductos = 0;
+    totalServicios = 0;
     search = const [];
+    searchTerms = const [];
     tipo = null;
+    activo = null;
     _page = 0;
     _request++;
     _catalogs = null;
@@ -209,6 +228,41 @@ class ProductsProvider extends ChangeNotifier {
     return refresh();
   }
 
+  /// Cambia el tipo y el estado a la vez, con un solo pedido al servidor.
+  Future<void> setFilters({String? tipo, bool? activo}) {
+    this.tipo = tipo;
+    this.activo = activo;
+    return refresh();
+  }
+
+  Future<void> setActivo(bool? value) {
+    activo = value;
+    return refresh();
+  }
+
+  /// Confirma [text] como un término de búsqueda (como agregar un chip en la web). Los
+  /// repetidos y los vacíos se ignoran; lo que se estaba escribiendo pasa a ser el término.
+  Future<void> addSearchTerm(String text) {
+    final term = text.trim();
+    search = const [];
+    if (term.isEmpty || searchTerms.contains(term)) return refresh();
+    searchTerms = [...searchTerms, term];
+    return refresh();
+  }
+
+  Future<void> removeSearchTerm(String term) {
+    searchTerms = [
+      for (final t in searchTerms)
+        if (t != term) t,
+    ];
+    return refresh();
+  }
+
+  Future<void> clearSearchTerms() {
+    searchTerms = const [];
+    return refresh();
+  }
+
   Future<void> _fetch({required int page}) async {
     final companyId = _companyId;
     if (companyId == null) return;
@@ -227,8 +281,9 @@ class ProductsProvider extends ChangeNotifier {
       companyId: companyId,
       page: page,
       pageSize: pageSize,
-      search: search,
+      search: terms,
       tipo: tipo,
+      activo: activo,
     );
 
     // Llegó tarde: ya se pidió otra cosa (otra búsqueda, otra empresa).
@@ -248,6 +303,8 @@ class ProductsProvider extends ChangeNotifier {
         _page = data.currentPage;
         hasMore = data.hasMore;
         total = data.total;
+        totalProductos = data.totalProductos;
+        totalServicios = data.totalServicios;
         error = null;
       },
     );

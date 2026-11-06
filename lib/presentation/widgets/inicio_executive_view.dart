@@ -4,6 +4,7 @@ import '../../domain/entities/inicio_entity.dart';
 import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
+import 'inicio_help.dart';
 import 'inicio_widgets.dart';
 
 /// Resumen Ejecutivo (rol Vendedor): sus ventas contra la meta, la evolución, sus tops, las
@@ -33,6 +34,7 @@ class InicioExecutiveView extends StatelessWidget {
       InicioGoalCard(
         view: InicioView.ejecutivo,
         title: 'Ventas',
+        help: inicioExecutiveSalesHelp(),
         total: sales.total,
         variation: sales.variacionPct,
         comparison: comparison,
@@ -87,29 +89,42 @@ class InicioExecutiveView extends StatelessWidget {
           ],
         ],
       ),
-      InicioEvolution(title: 'Evolución de mis ventas', evolution: data.evolucion),
+      InicioEvolution(
+        title: 'Evolución de mis ventas',
+        evolution: data.evolucion,
+        help: inicioExecutiveEvolutionHelp(),
+      ),
       AppSection(
         title: 'Ventas por cliente',
         icon: Icons.group_outlined,
+        trailing: InicioHelpButton(help: inicioTopHelp('Ventas por cliente', 'clientes')),
         child: InicioTopBars(items: data.topClientes),
       ),
       AppSection(
         title: 'Productos más vendidos',
         icon: Icons.inventory_2_outlined,
+        trailing: InicioHelpButton(help: inicioTopHelp('Productos más vendidos', 'productos')),
         child: InicioTopBars(items: data.topProductos),
       ),
       AppSection(
         title: 'Venta por departamento',
         icon: Icons.map_outlined,
+        trailing: InicioHelpButton(help: inicioTopHelp('Venta por departamento', 'departamentos (del cliente)')),
         child: InicioTopBars(items: data.departamentos),
       ),
       _Opportunities(data: data, onOpenQuotes: onOpenQuotes),
       _TasksSection(tasks: data.tareas, now: now),
-      InicioFallClients(fall: data.conCaida, previousLabel: previousLabel, currentLabel: currentLabel),
+      InicioFallClients(
+        fall: data.conCaida,
+        previousLabel: previousLabel,
+        currentLabel: currentLabel,
+        help: inicioFallClientsHelpExecutive(),
+      ),
       InicioPendingQuotes(
         title: 'Cotizaciones pendientes',
         quotes: data.cotizaciones,
         total: data.cotizacionesCantidad,
+        help: inicioPriorityHelp(),
       ),
       _Birthdays(birthdays: data.cumpleanos, oneMonth: oneMonth, month: data.desde.month),
     ]);
@@ -133,6 +148,7 @@ class _Opportunities extends StatelessWidget {
     return AppSection(
       title: 'Oportunidades comerciales',
       icon: Icons.track_changes,
+      trailing: InicioHelpButton(help: inicioExecutiveOpportunitiesHelp()),
       child: Column(
         children: [
           InicioOpportunity(
@@ -207,6 +223,7 @@ class _TasksSectionState extends State<_TasksSection> {
     return AppSection(
       title: 'Mis tareas (${tasks.length})',
       icon: Icons.assignment_outlined,
+      trailing: InicioHelpButton(help: inicioTasksHelp()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -311,6 +328,7 @@ class _Birthdays extends StatelessWidget {
     return AppSection(
       title: oneMonth ? 'Cumpleaños de ${monthsLong[month - 1]}' : 'Cumpleaños del periodo',
       icon: Icons.cake_outlined,
+      trailing: InicioHelpButton(help: inicioBirthdaysHelp()),
       child: birthdays.isEmpty
           ? const InicioEmpty(text: 'Ningún cliente de tu cartera cumple años en este periodo')
           : Column(

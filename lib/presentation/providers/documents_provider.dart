@@ -149,6 +149,19 @@ class DocumentsProvider extends ChangeNotifier {
     return refresh();
   }
 
+  /// Abre Cotizaciones solo con las pendientes y, si se da, en ese rango de emisión (sin rango,
+  /// todas las fechas), como la web al llegar desde el Dashboard.
+  Future<void> showPendingQuotes({DateTime? desde, DateTime? hasta}) {
+    kind = DocumentKind.cotizacion;
+    search = '';
+    _quoteFilters = DocumentFilters(
+      desde: desde,
+      hasta: hasta,
+      estadoCotizacion: DocumentQuoteState.pendientes,
+    );
+    return refresh();
+  }
+
   /// Vuelve a como se entra: los documentos de hoy, sin otros filtros.
   Future<void> resetFilters() => applyFilters(DocumentFilters.hoy(_now()));
 

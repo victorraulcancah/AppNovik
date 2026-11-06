@@ -3,6 +3,7 @@ import '../../core/utils/either.dart';
 import '../entities/document_entity.dart' show DownloadedFile;
 import '../entities/product_form_entity.dart';
 import '../entities/stock_entity.dart';
+import '../repositories/stock_management_repository.dart';
 import '../repositories/stock_repository.dart';
 
 class GetWarehousesUseCase {
@@ -40,7 +41,7 @@ class ExportStockUseCase {
 }
 
 class GetStockUseCase {
-  final StockRepository repository;
+  final StockManagementRepository repository;
   GetStockUseCase({required this.repository});
 
   Future<Either<Failure, StockPageEntity>> call({
@@ -51,6 +52,7 @@ class GetStockUseCase {
     bool includeZero = false,
     int page = 1,
     int pageSize = 20,
+    String? tipo,
   }) =>
       repository.getStock(
         companyId: companyId,
@@ -60,5 +62,6 @@ class GetStockUseCase {
         includeZero: includeZero,
         page: page,
         pageSize: pageSize,
+        tipo: tipo,
       );
 }

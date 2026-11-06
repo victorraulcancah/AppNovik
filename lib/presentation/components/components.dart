@@ -20,6 +20,7 @@ export 'app_page_header.dart';
 export 'app_pickers.dart';
 export 'app_press.dart';
 export 'app_search_bar.dart';
+export 'app_search_chips.dart';
 export 'app_skeleton.dart';
 export 'app_search_sheet.dart';
 export 'app_summary.dart';

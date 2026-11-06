@@ -24,6 +24,7 @@ import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/documents_provider.dart';
 import 'package:app_novik/presentation/providers/other_documents_provider.dart';
+import 'package:app_novik/presentation/providers/shell_navigation.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'package:app_novik/presentation/widgets/document_filters.dart';
@@ -544,6 +545,36 @@ void main() {
       expect(provider.filters.estadoCotizacion, DocumentQuoteState.todas);
     });
 
+    test('showPendingQuotes abre Cotizaciones solo con las pendientes y en ese rango', () async {
+      final repo = _FakeDocumentRepository();
+      final provider = _provider(repo);
+      await provider.setSearch('V001');
+
+      await provider.showPendingQuotes(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31));
+
+      expect(provider.kind, DocumentKind.cotizacion);
+      expect(provider.search, '');
+      expect(repo.calls.last.kind, DocumentKind.cotizacion);
+      expect(repo.calls.last.filters.estadoCotizacion, DocumentQuoteState.pendientes);
+      expect(repo.calls.last.filters.desde, DateTime(2026, 10, 1));
+      expect(repo.calls.last.filters.hasta, DateTime(2026, 10, 31));
+      expect(provider.filtersActive, isTrue);
+    });
+
+    test('showPendingQuotes sin rango no limita las fechas y no toca los filtros de ventas', () async {
+      final repo = _FakeDocumentRepository();
+      final provider = _provider(repo);
+      await provider.applyFilters(provider.filters.copyWith(tipo: DocumentTipo.boleta));
+
+      await provider.showPendingQuotes();
+
+      expect(repo.calls.last.filters.desde, isNull);
+      expect(repo.calls.last.filters.hasta, isNull);
+      expect(repo.calls.last.filters.estadoCotizacion, DocumentQuoteState.pendientes);
+      await provider.selectKind(DocumentKind.venta);
+      expect(repo.calls.last.filters.tipo, DocumentTipo.boleta);
+    });
+
     test('restablecer vuelve a los documentos de hoy', () async {
       final repo = _FakeDocumentRepository();
       final provider = _provider(repo);
@@ -1053,6 +1084,7 @@ void main() {
       Set<String> permissions = const {'documentos.ventas.index'},
       _FakeOtherRepository? other,
       DocumentEntity? serving,
+      ShellNavigation? shell,
     }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
       tester.view.physicalSize = const Size(360 * 3, 780 * 3);
@@ -1086,6 +1118,7 @@ void main() {
             ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
             ChangeNotifierProvider<DocumentsProvider>.value(value: documents),
             ChangeNotifierProvider<OtherDocumentsProvider>.value(value: otherDocuments),
+            ChangeNotifierProvider<ShellNavigation>.value(value: shell ?? ShellNavigation()),
           ],
           child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: DocumentsPage())),
         ),
@@ -1093,6 +1126,41 @@ void main() {
       await tester.pumpAndSettle();
       return (repo, documents);
     }
+
+    testWidgets('llegar desde las cotizaciones pendientes del Inicio abre Cotizaciones ya filtradas', (tester) async {
+      final shell = ShellNavigation()..goToPendingQuotes(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31));
+      final (repo, documents) = await pump(
+        tester,
+        permissions: const {'documentos.ventas.index', 'documentos.cotizaciones.index'},
+        shell: shell,
+      );
+
+      expect(documents.kind, DocumentKind.cotizacion);
+      expect(repo.calls.last.kind, DocumentKind.cotizacion);
+      expect(repo.calls.last.filters.estadoCotizacion, DocumentQuoteState.pendientes);
+      expect(repo.calls.last.filters.desde, DateTime(2026, 10, 1));
+      expect(repo.calls.last.filters.hasta, DateTime(2026, 10, 31));
+      expect(shell.pendingQuotes, isNull, reason: 'el pedido se atiende una sola vez');
+    });
+
+    testWidgets('sin pedido, Documentos arranca en la primera lista, con los documentos de hoy', (tester) async {
+      final (repo, documents) = await pump(
+        tester,
+        permissions: const {'documentos.ventas.index', 'documentos.cotizaciones.index'},
+      );
+
+      expect(documents.kind, DocumentKind.venta);
+      expect(repo.calls.last.filters.estadoCotizacion, DocumentQuoteState.todas);
+    });
+
+    testWidgets('si no puede ver cotizaciones el pedido se descarta y arranca en Ventas', (tester) async {
+      final shell = ShellNavigation()..goToPendingQuotes(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31));
+      final (repo, documents) = await pump(tester, shell: shell);
+
+      expect(documents.kind, DocumentKind.venta);
+      expect(repo.calls.last.kind, DocumentKind.venta);
+      expect(shell.pendingQuotes, isNull);
+    });
 
     testWidgets('no muestra etiquetas de filtros ni totales sueltos; descargar y totales van en Acciones', (tester) async {
       await pump(tester);

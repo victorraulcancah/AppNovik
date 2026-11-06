@@ -379,10 +379,7 @@ class _GuideBodyState extends State<_GuideBody> {
     final today = _d.today;
 
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 48),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const AppSkeletonForm(fields: 5);
     }
     if (_hasGuide) {
       return const Padding(

@@ -6,6 +6,7 @@ import '../../domain/entities/inicio_entity.dart';
 import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
+import 'inicio_help.dart';
 import 'inicio_widgets.dart';
 
 const _tabular = [FontFeature.tabularFigures()];
@@ -82,8 +83,9 @@ class _InicioCeoViewState extends State<InicioCeoView> {
         title: 'Cumplimiento por vendedor',
         sellers: data.vendedores,
         hideGoals: data.sucursal != null,
+        help: inicioCeoSellerGoalsHelp(),
       ),
-      InicioDepartments(departments: data.departamentos),
+      InicioDepartments(departments: data.departamentos, help: inicioCeoDepartmentsHelp()),
       _Channels(channels: data.canales),
       _Receivables(data: data.cuentasPorCobrar),
       _Collections(sellers: data.cobroPorVendedor),
@@ -92,8 +94,14 @@ class _InicioCeoViewState extends State<InicioCeoView> {
         products: data.productosMayorCaida,
         previousLabel: previousLabel,
         currentLabel: currentLabel,
+        help: inicioFallProductsHelpCeo(),
       ),
-      InicioFallClients(fall: data.clientesCaida, previousLabel: previousLabel, currentLabel: currentLabel),
+      InicioFallClients(
+        fall: data.clientesCaida,
+        previousLabel: previousLabel,
+        currentLabel: currentLabel,
+        help: inicioFallClientsHelpCeo(),
+      ),
       _NewClients(data: data.nuevosClientes, comparedWith: '$monthShort ${data.desdeAnterior.year}'),
     ]);
   }
@@ -203,11 +211,17 @@ class _Indicators extends StatelessWidget {
     return AppSection(
       title: 'Indicadores estratégicos (YTD)',
       icon: Icons.insights_outlined,
-      trailing: IconButton(
-        tooltip: showProfit ? 'Ocultar utilidad' : 'Mostrar utilidad',
-        visualDensity: VisualDensity.compact,
-        icon: Icon(showProfit ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-        onPressed: onToggleProfit,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: showProfit ? 'Ocultar utilidad' : 'Mostrar utilidad',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(showProfit ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+            onPressed: onToggleProfit,
+          ),
+          InicioHelpButton(help: inicioIndicatorsHelp()),
+        ],
       ),
       child: Column(
         children: [
@@ -282,6 +296,7 @@ class _Channels extends StatelessWidget {
     return AppSection(
       title: 'Ventas por canal',
       icon: Icons.donut_large,
+      trailing: InicioHelpButton(help: inicioChannelsHelp()),
       child: channels.isEmpty
           ? const InicioEmpty(text: 'Sin categorías de clientes')
           : Column(
@@ -396,6 +411,7 @@ class _Receivables extends StatelessWidget {
     return AppSection(
       title: 'Cuentas por cobrar',
       icon: Icons.request_quote_outlined,
+      trailing: InicioHelpButton(help: inicioReceivablesHelp()),
       child: Column(
         children: [
           _Indicator(
@@ -438,6 +454,7 @@ class _Collections extends StatelessWidget {
     return AppSection(
       title: 'Cobro por vendedor',
       icon: Icons.payments_outlined,
+      trailing: InicioHelpButton(help: inicioCollectionsHelp()),
       child: Column(
         children: [
           InicioTable(
@@ -576,14 +593,19 @@ class _IncomesState extends State<_Incomes> {
     return AppSection(
       title: 'Ingresos por entidad bancaria',
       icon: Icons.account_balance_outlined,
-      trailing: incomes.metodos.isEmpty
-          ? null
-          : IconButton(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (incomes.metodos.isNotEmpty)
+            IconButton(
               tooltip: filtering ? '${filter.length} de ${available.length} métodos' : 'Filtrar métodos de pago',
               visualDensity: VisualDensity.compact,
               icon: Icon(Icons.filter_alt, color: filtering ? scheme.primary : scheme.outline),
               onPressed: _pickMethods,
             ),
+          InicioHelpButton(help: inicioIncomesHelp()),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -662,13 +684,18 @@ class _TotalWithVariation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        InicioTotal(label: label, value: value),
-        const SizedBox(width: 6),
-        _Pct(value: variation, arrow: true),
-      ],
+    // Si no cabe (letra grande, pantalla angosta) se achica en vez de desbordar.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InicioTotal(label: label, value: value),
+          const SizedBox(width: 6),
+          _Pct(value: variation, arrow: true),
+        ],
+      ),
     );
   }
 }
@@ -703,6 +730,7 @@ class _NewClients extends StatelessWidget {
     return AppSection(
       title: 'Nuevos clientes',
       icon: Icons.person_add_alt_1_outlined,
+      trailing: InicioHelpButton(help: inicioNewClientsHelp()),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

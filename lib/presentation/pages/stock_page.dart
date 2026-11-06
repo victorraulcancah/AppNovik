@@ -8,6 +8,9 @@ import '../providers/auth_provider.dart';
 import '../providers/stock_provider.dart';
 import '../utils/download_file.dart';
 import '../widgets/stock_modals.dart';
+import '../widgets/stock_operations_modals.dart';
+import 'stock_add_page.dart';
+import 'stock_transfer_page.dart';
 
 /// Roles que ven los totales de costo y venta del almacén (igual que la web).
 const _rolesConTotales = ['Admin Global', 'Ceo Empresa', 'Contador'];
@@ -23,20 +26,30 @@ class StockPage extends StatefulWidget {
 
 class _StockPageState extends State<StockPage> {
   Timer? _debounce;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<StockProvider>().ensureLoaded();
+      if (mounted && _canList) context.read<StockProvider>().ensureLoaded();
     });
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
+
+  /// Entrar al módulo pide alguno de estos permisos (como la web); ver la lista, además,
+  /// `almacenes.show`.
+  bool get _hasAccess =>
+      _can('stock.show') || _can('stock.store') || _can('stock.update') || _can('almacenes.show');
+
+  /// La lista de existencias la ven quienes pueden ver o actualizar stock.
+  bool get _canList => _can('stock.show') || _can('stock.update') || _can('almacenes.show');
 
   void _onSearchChanged(String text) {
     _debounce?.cancel();
@@ -45,11 +58,29 @@ class _StockPageState extends State<StockPage> {
     });
   }
 
+  /// "Buscar" en el teclado: lo escrito pasa a ser un chip (puede ser una frase) y el campo queda
+  /// libre para otro término, como en la web.
+  void _onSearchSubmitted(String text) {
+    _debounce?.cancel();
+    _searchController.clear();
+    context.read<StockProvider>().addSearchTerm(text);
+  }
+
   Future<void> _openFilters() async {
     final stock = context.read<StockProvider>();
     final result = await showAppFilterSheet(
       context,
       fields: [
+        AppFilterField(
+          id: 'tipo',
+          label: 'Tipo',
+          allLabel: 'Todos',
+          value: stock.tipo,
+          options: const [
+            AppFilterOption('p', 'Productos'),
+            AppFilterOption('s', 'Servicios'),
+          ],
+        ),
         AppFilterField(
           id: 'productos',
           label: 'Productos',
@@ -59,7 +90,9 @@ class _StockPageState extends State<StockPage> {
         ),
       ],
     );
-    if (result != null) stock.setIncludeZero(result['productos'] != null);
+    if (result != null) {
+      stock.setFilters(includeZero: result['productos'] != null, tipo: result['tipo']);
+    }
   }
 
   bool _can(String permission) =>
@@ -105,8 +138,35 @@ class _StockPageState extends State<StockPage> {
     );
   }
 
-  /// Las acciones del botón flotante: exportar el Excel y, con permiso, ver los totales.
+  /// "Agregar Stock" de la web (permiso `stock.store`).
+  Future<void> _addStock() async {
+    await Navigator.of(context).push(MaterialPageRoute<bool>(builder: (_) => const StockAddPage()));
+  }
+
+  /// "Transferir Stock" de la web (permiso `transferir-stock.store`).
+  Future<void> _transferStock() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<bool>(builder: (_) => const StockTransferPage()),
+    );
+  }
+
+  /// Las acciones del botón flotante: exportar el Excel, ver los totales (con permiso) y, según
+  /// los permisos de la web, agregar stock y transferirlo entre almacenes.
   List<AppSpeedDialAction> _actions(StockProvider stock, bool canSeeTotals, String symbol) => [
+        if (_can('stock.store'))
+          AppSpeedDialAction(
+            label: 'Agregar stock',
+            icon: Icons.add_box_outlined,
+            color: const Color(0xFF16A34A),
+            onPressed: _addStock,
+          ),
+        if (_can('transferir-stock.store'))
+          AppSpeedDialAction(
+            label: 'Transferir stock',
+            icon: Icons.swap_horiz,
+            color: const Color(0xFF7C3AED),
+            onPressed: _transferStock,
+          ),
         AppSpeedDialAction(
           label: 'Exportar',
           icon: Icons.description_outlined,
@@ -131,6 +191,26 @@ class _StockPageState extends State<StockPage> {
     final canSeeTotals = (session?.can('almacenes.show.totales') ?? false) &&
         _rolesConTotales.any((r) => session?.hasRole(r) ?? false);
     final symbol = stock.priceList?.simboloMoneda ?? 'S/';
+
+    if (!_hasAccess) {
+      return Column(
+        children: [
+          const AppPageHeader(
+            icon: Icons.inventory_2_outlined,
+            title: 'Stock',
+            subtitle: 'Existencias de cada producto por almacén.',
+            trailing: AppAccountMenu(),
+          ),
+          const Expanded(
+            child: AppEmptyState(
+              icon: Icons.lock_outline,
+              title: 'Sin acceso',
+              message: 'No tienes permiso para ver el stock.',
+            ),
+          ),
+        ],
+      );
+    }
 
     return Stack(
       children: [
@@ -180,12 +260,21 @@ class _StockPageState extends State<StockPage> {
                 ],
               ),
             ),
-            AppSearchBar(
-              hint: 'Buscar por nombre, código…',
-              onChanged: _onSearchChanged,
-              onFilter: _openFilters,
-              filterActive: stock.filtersActive,
-            ),
+            if (_canList) ...[
+              AppSearchBar(
+                hint: 'Buscar por nombre, código…',
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                onSubmitted: _onSearchSubmitted,
+                onFilter: _openFilters,
+                filterActive: stock.filtersActive,
+              ),
+              AppSearchChips(
+                terms: stock.searchTerms,
+                onRemove: stock.removeSearchTerm,
+                onClear: stock.clearSearchTerms,
+              ),
+            ],
             if (stock.total > 0)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -194,7 +283,15 @@ class _StockPageState extends State<StockPage> {
                   child: Text('${stock.total} productos', style: _small(context)),
                 ),
               ),
-            Expanded(child: _body(stock, symbol)),
+            Expanded(
+              child: _canList
+                  ? _body(stock, symbol)
+                  : const AppEmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Solo puedes registrar stock',
+                      message: 'Usa el botón de acciones para agregar stock.',
+                    ),
+            ),
           ],
         ),
         // Botón "Acciones": abajo a la derecha, sobre la lista, como en Productos.
@@ -235,7 +332,7 @@ class _StockPageState extends State<StockPage> {
       items: stock.items,
       emptyIcon: Icons.inventory_2_outlined,
       emptyTitle: 'No hay productos',
-      emptyMessage: stock.search.isNotEmpty || stock.includeZero
+      emptyMessage: stock.terms.isNotEmpty || stock.includeZero || stock.tipo != null
           ? 'Prueba con otra búsqueda o cambia el filtro.'
           : 'Este almacén no tiene productos con stock.',
       onRefresh: stock.refresh,
@@ -271,7 +368,29 @@ class _StockPageState extends State<StockPage> {
       onTap: () => _verDetalle(s, symbol),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => _verDetalle(s, symbol)),
+        // "Actualizar" de la lista de stock de la web (permiso `stock.update`).
+        if (_can('stock.update'))
+          AppActionButton(
+            type: AppActionType.edit,
+            label: 'Actualizar stock',
+            onPressed: () => _actualizar(s),
+          ),
       ],
+    );
+  }
+
+  Future<void> _actualizar(StockItemEntity s) {
+    final stock = context.read<StockProvider>();
+    var warehouseName = '';
+    for (final w in stock.warehouses) {
+      if (w.id == stock.warehouseId) warehouseName = w.name;
+    }
+    return showStockUpdate(
+      context,
+      stock: stock,
+      item: s,
+      warehouseName: warehouseName,
+      canSeeCost: _can('almacenes.show.costo_promedio'),
     );
   }
 

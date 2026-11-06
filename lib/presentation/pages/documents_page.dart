@@ -51,6 +51,14 @@ class _DocumentsPageState extends State<DocumentsPage> {
     final documents = context.read<DocumentsProvider>();
     final options = _options();
     if (options.isEmpty) return;
+
+    // Llegó desde "Cotizaciones pendientes" del Inicio: esa lista, ya filtrada.
+    final request = context.read<ShellNavigation>().takePendingQuotes();
+    if (request != null && options.any((o) => o.id == 'cotizacion')) {
+      setState(() => _selected = 'cotizacion');
+      documents.showPendingQuotes(desde: request.desde, hasta: request.hasta);
+      return;
+    }
     final first = options.first.id;
     setState(() => _selected = first);
 

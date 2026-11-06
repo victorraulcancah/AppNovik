@@ -33,6 +33,7 @@ import 'package:provider/provider.dart';
 
 class _FakeProductRepository implements ProductRepository {
   final List<(int companyId, int page, List<String> search, String? tipo)> calls = [];
+  final List<bool?> activos = [];
   final List<(int companyId, int? id)> saves = [];
   final List<ProductFormEntity> forms = [];
   Either<Failure, ProductPageEntity>? next;
@@ -49,8 +50,10 @@ class _FakeProductRepository implements ProductRepository {
     int pageSize = 20,
     List<String> search = const [],
     String? tipo,
+    bool? activo,
   }) async {
     calls.add((companyId, page, search, tipo));
+    activos.add(activo);
     return next ??
         Either.right(ProductPageEntity(
           items: [
@@ -59,6 +62,8 @@ class _FakeProductRepository implements ProductRepository {
           currentPage: page,
           lastPage: 2,
           total: 2,
+          totalProductos: 1,
+          totalServicios: 1,
         ));
   }
 
@@ -1040,6 +1045,296 @@ void main() {
       expect(repo.imports, isEmpty);
     });
   });
+  group('Productos: estado, contadores y términos de búsqueda', () {
+    late _FakeProductRepository repo;
+    late ProductsProvider provider;
+
+    setUp(() {
+      repo = _FakeProductRepository();
+      provider = ProductsProvider(
+        getProductsUseCase: GetProductsUseCase(repository: repo),
+        getCatalogsUseCase: GetProductCatalogsUseCase(repository: repo),
+        saveProductUseCase: SaveProductUseCase(repository: repo),
+        exportProductsUseCase: ExportProductsUseCase(repository: repo),
+        importCatalogUseCase: ImportCatalogUseCase(repository: repo),
+        createCatalogItemUseCase: CreateCatalogItemUseCase(repository: repo),
+      )..syncCompany(7);
+    });
+
+    test('la respuesta trae los contadores de productos y servicios', () {
+      final page = ProductPageModel.fromJson({
+        'current_page': 1,
+        'last_page': 1,
+        'total': 9,
+        'total_productos': 6,
+        'total_servicios': 3,
+        'data': [],
+      });
+
+      expect(page.total, 9);
+      expect(page.totalProductos, 6);
+      expect(page.totalServicios, 3);
+    });
+
+    test('sin contadores en la respuesta quedan en 0', () {
+      final page = ProductPageModel.fromJson({'current_page': 1, 'last_page': 1, 'total': 0, 'data': []});
+
+      expect(page.totalProductos, 0);
+      expect(page.totalServicios, 0);
+    });
+
+    test('el provider guarda los contadores de la última página', () async {
+      repo.next = Either.right(const ProductPageEntity(
+        items: [],
+        currentPage: 1,
+        lastPage: 1,
+        total: 9,
+        totalProductos: 6,
+        totalServicios: 3,
+      ));
+      await provider.refresh();
+
+      expect(provider.total, 9);
+      expect(provider.totalProductos, 6);
+      expect(provider.totalServicios, 3);
+    });
+
+    test('el filtro de estado se manda al repositorio y activa el indicador de filtros', () async {
+      await provider.refresh();
+      expect(provider.filtersActive, isFalse);
+
+      await provider.setActivo(false);
+
+      expect(repo.activos.last, isFalse);
+      expect(provider.filtersActive, isTrue);
+      expect(repo.calls.last.$2, 1);
+
+      await provider.setActivo(null);
+      expect(repo.activos.last, isNull);
+      expect(provider.filtersActive, isFalse);
+    });
+
+    test('setFilters cambia tipo y estado con un solo pedido', () async {
+      await provider.refresh();
+      final before = repo.calls.length;
+
+      await provider.setFilters(tipo: 's', activo: true);
+
+      expect(repo.calls.length, before + 1);
+      expect(repo.calls.last.$4, 's');
+      expect(repo.activos.last, isTrue);
+    });
+
+    test('un término confirmado se suma a lo que se está escribiendo', () async {
+      await provider.refresh();
+      await provider.addSearchTerm('  tubo pvc  ');
+      await provider.setSearch('azul marino');
+
+      expect(provider.searchTerms, ['tubo pvc']);
+      expect(repo.calls.last.$3, ['tubo pvc', 'azul', 'marino']);
+    });
+
+    test('confirmar un término limpia lo que se estaba escribiendo y no repite ni acepta vacíos', () async {
+      await provider.refresh();
+      await provider.setSearch('subwoofer');
+      await provider.addSearchTerm('subwoofer');
+      await provider.addSearchTerm('subwoofer');
+      await provider.addSearchTerm('   ');
+
+      expect(provider.searchTerms, ['subwoofer']);
+      expect(provider.search, isEmpty);
+      expect(repo.calls.last.$3, ['subwoofer']);
+    });
+
+    test('quitar un término o limpiarlos todos vuelve a pedir la lista', () async {
+      await provider.addSearchTerm('uno');
+      await provider.addSearchTerm('dos');
+
+      await provider.removeSearchTerm('uno');
+      expect(provider.searchTerms, ['dos']);
+      expect(repo.calls.last.$3, ['dos']);
+
+      await provider.clearSearchTerms();
+      expect(provider.searchTerms, isEmpty);
+      expect(repo.calls.last.$3, isEmpty);
+    });
+
+    test('cambiar de empresa limpia términos y filtros', () async {
+      await provider.addSearchTerm('uno');
+      await provider.setFilters(tipo: 'p', activo: false);
+
+      provider.syncCompany(8);
+
+      expect(provider.searchTerms, isEmpty);
+      expect(provider.tipo, isNull);
+      expect(provider.activo, isNull);
+    });
+
+    test('GET /productos manda el estado como filters[estado][] y el tipo como tipo_producto', () async {
+      late Uri sent;
+      final dataSource = ProductRemoteDataSourceImpl(
+        client: MockClient((request) async {
+          sent = request.url;
+          return http.Response(
+            jsonEncode({'current_page': 1, 'last_page': 1, 'total': 0, 'data': []}),
+            200,
+          );
+        }),
+      );
+
+      await dataSource.getProducts(
+        token: 'tok',
+        companyId: 7,
+        page: 1,
+        pageSize: 20,
+        search: const ['tubo pvc', 'azul'],
+        tipo: 's',
+        activo: false,
+      );
+
+      expect(sent.queryParametersAll['filters[estado][]'], ['false']);
+      expect(sent.queryParametersAll['tipo_producto'], ['s']);
+      expect(sent.queryParametersAll['search[]'], ['tubo pvc', 'azul']);
+    });
+
+    test('sin estado no se manda el filtro', () async {
+      late Uri sent;
+      final dataSource = ProductRemoteDataSourceImpl(
+        client: MockClient((request) async {
+          sent = request.url;
+          return http.Response(
+            jsonEncode({'current_page': 1, 'last_page': 1, 'total': 0, 'data': []}),
+            200,
+          );
+        }),
+      );
+
+      await dataSource.getProducts(token: 'tok', companyId: 7, page: 1, pageSize: 20, search: const []);
+
+      expect(sent.queryParametersAll.keys.any((k) => k.contains('estado')), isFalse);
+      expect(sent.queryParametersAll.containsKey('tipo_producto'), isFalse);
+    });
+  });
+
+  group('ProductsPage: búsqueda, filtros y contadores', () {
+    Future<({_FakeProductRepository repo, ProductsProvider products})> pump(WidgetTester tester) async {
+      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+
+      final repo = _FakeProductRepository();
+      repo.next = Either.right(
+        ProductPageEntity(
+          items: [ProductEntity(id: 1, codigo: 'P1', name: 'Producto 1')],
+          currentPage: 1,
+          lastPage: 1,
+          total: 9,
+          totalProductos: 6,
+          totalServicios: 3,
+        ),
+      );
+      final products = ProductsProvider(
+        getProductsUseCase: GetProductsUseCase(repository: repo),
+        getCatalogsUseCase: GetProductCatalogsUseCase(repository: repo),
+        saveProductUseCase: SaveProductUseCase(repository: repo),
+        exportProductsUseCase: ExportProductsUseCase(repository: repo),
+        importCatalogUseCase: ImportCatalogUseCase(repository: repo),
+        createCatalogItemUseCase: CreateCatalogItemUseCase(repository: repo),
+      )..syncCompany(7);
+      final session = SessionContextEntity(
+        user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
+        company: const CompanyEntity(id: 7, razonSocial: 'ACME'),
+        modules: const [],
+        permissions: const {},
+        roles: const [],
+        warehouses: const [],
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(
+              create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+            ),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+            ChangeNotifierProvider<ProductsProvider>.value(value: products),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: ProductsPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (repo: repo, products: products);
+    }
+
+    testWidgets('muestra Todos / Productos / Servicios con los números del servidor', (tester) async {
+      await pump(tester);
+
+      expect(find.text('Todos: 9'), findsOneWidget);
+      expect(find.text('Productos: 6'), findsOneWidget);
+      expect(find.text('Servicios: 3'), findsOneWidget);
+    });
+
+    testWidgets('tocar un contador filtra por ese tipo y lo marca', (tester) async {
+      final env = await pump(tester);
+
+      await tester.tap(find.text('Servicios: 3'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.calls.last.$4, 's');
+      expect(env.products.tipo, 's');
+      expect(
+        tester.widget<ChoiceChip>(find.byKey(const ValueKey('tipo-s'))).selected,
+        isTrue,
+      );
+
+      await tester.tap(find.text('Todos: 9'));
+      await tester.pumpAndSettle();
+      expect(env.repo.calls.last.$4, isNull);
+    });
+
+    testWidgets('el panel de filtros ofrece el estado y lo aplica', (tester) async {
+      final env = await pump(tester);
+
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      expect(find.text('Estado'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Estado'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Inactivos').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver resultados'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.activos.last, isFalse);
+      expect(env.products.filtersActive, isTrue);
+    });
+
+    testWidgets('enviar la búsqueda la vuelve un chip que se puede quitar', (tester) async {
+      final env = await pump(tester);
+
+      await tester.enterText(find.byType(SearchBar), 'tubo pvc');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('chip-tubo pvc')), findsOneWidget);
+      expect(env.repo.calls.last.$3, ['tubo pvc']);
+      // El campo queda libre para otro término.
+      expect(tester.widget<SearchBar>(find.byType(SearchBar)).controller!.text, isEmpty);
+
+      await tester.tap(find.byTooltip('Quitar "tubo pvc"'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('chip-tubo pvc')), findsNothing);
+      expect(env.repo.calls.last.$3, isEmpty);
+    });
+  });
+
 }
 
 class _FakeThemeStorage implements ThemeLocalDataSource {

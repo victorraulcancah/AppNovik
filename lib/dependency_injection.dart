@@ -39,6 +39,7 @@ import 'domain/repositories/other_document_repository.dart';
 import 'domain/repositories/product_repository.dart';
 import 'domain/repositories/report_repository.dart';
 import 'domain/repositories/sale_repository.dart';
+import 'domain/repositories/stock_management_repository.dart';
 import 'domain/repositories/stock_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_record_usecases.dart';
@@ -50,6 +51,7 @@ import 'domain/usecases/other_document_usecases.dart';
 import 'domain/usecases/product_usecases.dart';
 import 'domain/usecases/report_usecases.dart';
 import 'domain/usecases/sale_usecases.dart';
+import 'domain/usecases/stock_manage_usecases.dart';
 import 'domain/usecases/stock_usecases.dart';
 
 // Presentation Layer
@@ -215,8 +217,16 @@ class DependencyInjection {
           create: (context) => StockProvider(
             getWarehousesUseCase: GetWarehousesUseCase(repository: _stockRepository),
             getPriceListsUseCase: GetPriceListsUseCase(repository: _stockRepository),
-            getStockUseCase: GetStockUseCase(repository: _stockRepository),
+            getStockUseCase: GetStockUseCase(repository: _stockManagementRepository),
             exportStockUseCase: ExportStockUseCase(repository: _stockRepository),
+            searchStockProductsUseCase:
+                SearchStockProductsUseCase(repository: _stockManagementRepository),
+            addStockUseCase: AddStockUseCase(repository: _stockManagementRepository),
+            updateStockUseCase: UpdateStockUseCase(repository: _stockManagementRepository),
+            downloadStockTemplateUseCase:
+                DownloadStockTemplateUseCase(repository: _stockManagementRepository),
+            importStockUseCase: ImportStockUseCase(repository: _stockManagementRepository),
+            transferStockUseCase: TransferStockUseCase(repository: _stockManagementRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!
@@ -224,6 +234,7 @@ class DependencyInjection {
               auth.session?.company.id,
               defaultWarehouseId: auth.session?.defaultWarehouseId,
               defaultPriceListId: auth.session?.defaultListPriceId,
+              userId: auth.session?.user.id,
             ),
         ),
       ];
@@ -274,7 +285,9 @@ class DependencyInjection {
         authLocalDataSource: _authLocalDataSource,
       );
 
-  static StockRepository get _stockRepository => StockRepositoryImpl(
+  static StockRepository get _stockRepository => _stockManagementRepository;
+
+  static StockManagementRepository get _stockManagementRepository => StockRepositoryImpl(
         remoteDataSource: StockRemoteDataSourceImpl(client: _httpClient),
         authLocalDataSource: _authLocalDataSource,
       );
