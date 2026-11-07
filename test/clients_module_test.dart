@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:app_novik/core/constants/api_constants.dart';
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/network/api_request.dart';
 import 'package:app_novik/core/utils/either.dart';
@@ -85,6 +86,9 @@ Map<String, dynamic> _pageJson({int page = 1, int last = 1, int count = 1}) => {
       'total_empresas': 5,
       'data': [for (var i = 0; i < count; i++) _clientJson(id: (page - 1) * count + i + 1)],
     };
+
+/// Ruta base de la API según la URL con la que se compile (en producción lleva `/7power/public`).
+final _apiPath = Uri.parse(ApiConstants.baseUrl).path;
 
 void main() {
   group('Modelo del cliente', () {
@@ -282,8 +286,8 @@ void main() {
       await ds(client).saveClient('tok', companyId: 7, form: form);
       await ds(client).saveClient('tok', companyId: 7, form: form, id: 5);
 
-      expect(calls[0], endsWith('POST /api/clientes'));
-      expect(calls[1], endsWith('PUT /api/clientes/5'));
+      expect(calls[0], endsWith('POST $_apiPath/clientes'));
+      expect(calls[1], endsWith('PUT $_apiPath/clientes/5'));
       expect(sent!['name'], 'Ana');
     });
 
@@ -359,8 +363,8 @@ void main() {
       );
 
       expect(calc, isNull);
-      expect(calls[0], endsWith('PUT /api/categorias-cliente/1'));
-      expect(calls[1], endsWith('POST /api/categorias-cliente/ciclo'));
+      expect(calls[0], endsWith('PUT $_apiPath/categorias-cliente/1'));
+      expect(calls[1], endsWith('POST $_apiPath/categorias-cliente/ciclo'));
       expect(bodies[0]['nombre'], 'Socio');
       expect(bodies[0]['rangos']['mensual']['desde'], 5000);
       expect(bodies[1]['tipo'], 'mensual');
