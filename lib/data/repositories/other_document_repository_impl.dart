@@ -41,4 +41,12 @@ class OtherDocumentRepositoryImpl with TokenGuard implements OtherDocumentReposi
   @override
   Future<Either<Failure, void>> deleteTransfer(int id) =>
       withToken((token) => remoteDataSource.deleteTransfer(token, id));
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> receiveTransferProduct(int id, int productId) =>
+      withToken((token) => remoteDataSource.receiveTransferProduct(token, id, productId));
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> confirmTransferProduct(int id, int productId) =>
+      withToken((token) => remoteDataSource.confirmTransferProduct(token, id, productId));
 }

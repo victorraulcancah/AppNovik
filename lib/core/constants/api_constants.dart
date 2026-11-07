@@ -6,9 +6,8 @@ class ApiConstants {
   /// En producción el backend vive en una subcarpeta (`/7power/public`).
   static const String baseDomain = String.fromEnvironment(
     'API_DOMAIN',
-    // LOCAL (celular en el mismo Wi-Fi que la PC): no commitear.
-    // Emulador Android: 'http://10.0.2.2'. Producción: 'https://novi-k.com/7power/public'.
-    defaultValue: 'http://192.168.18.23',
+    // PRODUCCIÓN. Para probar en local: celular en el mismo Wi-Fi 'http://192.168.18.23', emulador Android 'http://10.0.2.2'.
+    defaultValue: 'https://novi-k.com/7power/public',
   );
 
   static const String baseUrl = "$baseDomain/api";
@@ -17,8 +16,8 @@ class ApiConstants {
   /// emulador Android no resuelve `api.novik.test`, así que se llama a
   /// `http://10.0.2.2` (el equipo anfitrión) indicando el virtual host:
   ///   flutter run --dart-define=API_DOMAIN=http://10.0.2.2 --dart-define=API_HOST=api.novik.test
-  // LOCAL (emulador): en producción va vacío (defaultValue: '').
-  static const String apiHost = String.fromEnvironment('API_HOST', defaultValue: 'api.novik.test');
+  // En producción va vacío. Para la API local de Laragon: --dart-define=API_HOST=api.novik.test
+  static const String apiHost = String.fromEnvironment('API_HOST', defaultValue: '');
 
   // Endpoints (routes/api.php de 7power)
   static const String loginEndpoint = '/login';

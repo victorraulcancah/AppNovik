@@ -68,6 +68,14 @@ class _FakeOtherRepository implements OtherDocumentRepository {
 
   @override
   Future<Either<Failure, void>> deleteTransfer(int id) async => Either.rightVoid();
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> receiveTransferProduct(int id, int productId) async =>
+      Either.left(const ValidationFailure('no se usa en esta prueba'));
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> confirmTransferProduct(int id, int productId) async =>
+      Either.left(const ValidationFailure('no se usa en esta prueba'));
 }
 
 class _Call {
@@ -1107,6 +1115,8 @@ void main() {
       final otherDocuments = OtherDocumentsProvider(
         getDocumentsUseCase: GetOtherDocumentsUseCase(repository: otherRepo),
         deleteTransferUseCase: DeleteTransferUseCase(repository: otherRepo),
+        receiveTransferProductUseCase: ReceiveTransferProductUseCase(repository: otherRepo),
+        confirmTransferProductUseCase: ConfirmTransferProductUseCase(repository: otherRepo),
       )..syncCompany(7);
 
       await tester.pumpWidget(

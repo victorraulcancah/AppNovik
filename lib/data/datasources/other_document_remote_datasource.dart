@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../core/constants/api_constants.dart';
@@ -17,6 +18,13 @@ abstract class OtherDocumentRemoteDataSource {
   });
 
   Future<void> deleteTransfer(String token, int id);
+
+  /// `PATCH /stock-transfer/{id}`: marca un producto como recibido (suma el stock al almacén de
+  /// destino). Devuelve el traslado actualizado.
+  Future<OtherDocumentEntity> receiveTransferProduct(String token, int id, int productId);
+
+  /// `PATCH /stock-transfer/{id}/confirm`: marca un producto como validado. Devuelve el traslado.
+  Future<OtherDocumentEntity> confirmTransferProduct(String token, int id, int productId);
 }
 
 class OtherDocumentRemoteDataSourceImpl implements OtherDocumentRemoteDataSource {
@@ -76,6 +84,25 @@ class OtherDocumentRemoteDataSourceImpl implements OtherDocumentRemoteDataSource
     );
     return otherDocumentPageFromJson(body as Map<String, dynamic>, kind);
   }
+
+  Future<OtherDocumentEntity> _patchTransfer(String token, String path, int productId) async {
+    final body = await sendApiRequest(
+      () => client.patch(
+        Uri.parse('${ApiConstants.baseUrl}$path'),
+        headers: ApiConstants.authHeaders(token),
+        body: json.encode({'product_id': productId}),
+      ),
+    );
+    return otherDocumentFromJson(body as Map<String, dynamic>, OtherDocumentKind.traslado);
+  }
+
+  @override
+  Future<OtherDocumentEntity> receiveTransferProduct(String token, int id, int productId) =>
+      _patchTransfer(token, '/stock-transfer/$id', productId);
+
+  @override
+  Future<OtherDocumentEntity> confirmTransferProduct(String token, int id, int productId) =>
+      _patchTransfer(token, '/stock-transfer/$id/confirm', productId);
 
   @override
   Future<void> deleteTransfer(String token, int id) async {

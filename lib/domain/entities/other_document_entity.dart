@@ -17,6 +17,8 @@ enum OtherDocumentKind {
 
 /// Un producto de un traslado o de una entrada de stock.
 class OtherDocumentLine {
+  /// Solo traslados: el producto, para marcarlo como recibido o validado.
+  final int? productId;
   final double cantidad;
   final String? codigo;
   final String name;
@@ -28,16 +30,47 @@ class OtherDocumentLine {
   /// Solo traslados: si ya se recibió en el almacén de destino.
   final bool aceptado;
 
+  /// Solo traslados: el código de barras del producto (con él se valida) y si ya se validó.
+  final String? codBarra;
+  final bool confirmado;
+
   const OtherDocumentLine({
+    this.productId,
     required this.cantidad,
     required this.name,
     this.codigo,
     this.marca,
     this.costo = 0,
     this.aceptado = false,
+    this.codBarra,
+    this.confirmado = false,
   });
 
   double get total => cantidad * costo;
+
+  OtherDocumentLine copyWith({bool? aceptado, bool? confirmado}) => OtherDocumentLine(
+        productId: productId,
+        cantidad: cantidad,
+        name: name,
+        codigo: codigo,
+        marca: marca,
+        costo: costo,
+        aceptado: aceptado ?? this.aceptado,
+        codBarra: codBarra,
+        confirmado: confirmado ?? this.confirmado,
+      );
+}
+
+/// Lo que se puede hacer con un producto de un traslado (como en la web).
+enum TransferLineAction {
+  /// Nada: ya está recibido, el traslado fue eliminado o no es un traslado.
+  none,
+
+  /// Marcarlo como recibido en el almacén de destino.
+  receive,
+
+  /// Validarlo escribiendo su código de barras.
+  validate,
 }
 
 /// Datos propios de una guía de remisión.
@@ -109,6 +142,9 @@ class OtherDocumentEntity {
   /// Traslados: de qué almacén a cuál.
   final String? desde;
   final String? hacia;
+
+  /// Traslados: el almacén de destino (`to`), para saber quién puede recibir.
+  final int? haciaId;
   final List<OtherDocumentLine> lines;
   final GuideInfo? guia;
   final CreditNoteInfo? nota;
@@ -128,12 +164,50 @@ class OtherDocumentEntity {
     this.almacen,
     this.desde,
     this.hacia,
+    this.haciaId,
     this.lines = const [],
     this.guia,
     this.nota,
     this.comprobanteNumero,
     this.comprobante,
   });
+
+  /// Lo mismo con otras líneas y otro estado (al marcar productos como recibidos o validados).
+  OtherDocumentEntity copyWith({bool? activo, List<OtherDocumentLine>? lines}) => OtherDocumentEntity(
+        kind: kind,
+        id: id,
+        numero: numero,
+        creado: creado,
+        activo: activo ?? this.activo,
+        usuario: usuario,
+        almacen: almacen,
+        desde: desde,
+        hacia: hacia,
+        haciaId: haciaId,
+        lines: lines ?? this.lines,
+        guia: guia,
+        nota: nota,
+        comprobanteNumero: comprobanteNumero,
+        comprobante: comprobante,
+      );
+
+  /// Qué se puede hacer con [line] en este traslado, igual que la web:
+  ///  - Admin Empresa, Ceo Empresa o quien tenga el almacén de destino: **recibir** el producto
+  ///    (si el traslado fue eliminado o el producto ya se recibió, nada).
+  ///  - Los demás: **validar** el producto con su código de barras.
+  ///
+  /// [isAdminOrCeo] y [warehouseIds] (los almacenes del usuario) salen de la sesión.
+  TransferLineAction actionFor(
+    OtherDocumentLine line, {
+    required bool isAdminOrCeo,
+    required Iterable<int> warehouseIds,
+  }) {
+    if (kind != OtherDocumentKind.traslado || line.productId == null) return TransferLineAction.none;
+    final hasDestination = haciaId != null && warehouseIds.contains(haciaId);
+    if (!isAdminOrCeo && !hasDestination) return TransferLineAction.validate;
+    if (!activo || line.aceptado) return TransferLineAction.none;
+    return TransferLineAction.receive;
+  }
 
   /// Falta recibir al menos un producto del traslado.
   bool get pendienteRecepcion =>

@@ -37,6 +37,26 @@ Cada módulo se entrega primero en **solo lectura** y después se agregan las ac
 
 Toda descarga o exportación (Excel de Stock, Productos y Documentos, plantillas, CDR de SUNAT y el PDF del comprobante) **se guarda en el dispositivo** con el "Guardar como" del sistema (`FilePicker.saveFile`: carpeta Descargas, Drive...). Al guardar sale un aviso con "Compartir" por si se prefiere mandarlo por WhatsApp o correo. El PDF tiene además su botón de compartir.
 
+### Documentos: recibir y validar traslados
+
+- **Recibir y validar traslados**: en el detalle de un traslado, cada producto ofrece una acción según el rol, como en la web. Admin Empresa, Ceo Empresa o quien tenga el almacén de destino ven **Recibir**: confirman "¿Desea confirmar que recibió este producto?" y se manda `PATCH /stock-transfer/{id}` con `product_id` (el backend suma el stock al destino). Los demás ven un campo **Código de barras**: si coincide con el del producto se manda `PATCH /stock-transfer/{id}/confirm` y queda Validado. Solo con el permiso `despachos.transferir.update` (el que exige el backend; la web muestra las acciones siempre y el servidor las rechaza). Un producto ya recibido o un traslado eliminado no se recibe de nuevo. Al terminar, el detalle y la tarjeta de la lista se actualizan solos ("Falta recibir" pasa a "Recibido").
+- **Pendiente**: probar con el servidor real (los `PATCH`, y que el producto traiga `cod_barra` en `GET /stock-transfer`, que se supuso del código de la web).
+
+### Stock: agregar, actualizar y transferir
+
+- **Agregar stock** (permiso `stock.store`): en Acciones. Se elige el almacén (el que se estaba viendo), se busca el producto por nombre, código o marca y se toca para agregarlo con 1 unidad y el costo de su última entrada de stock; tocarlo otra vez suma una unidad. Cada línea tiene costo por unidad y cantidad (mínimo 1); abajo sale el **Total costo**. Guardar pide confirmar y manda `POST /stock` (`warehouse_id` y `datos[{product_id, costo, stock}]`; un costo 0 va como nulo). **Plantilla** baja el Excel de `POST /stock/export` y **Subir stocks** sube el Excel al almacén elegido (`POST /stock/import`) y muestra las filas leídas y las que fallaron con su motivo.
+- **Actualizar stock** (permiso `stock.update`): botón de editar en cada tarjeta. Se escribe el stock que debe quedar y la app manda la diferencia por `POST /stock`, con el costo de la web (el costo promedio, o el último costo si el promedio es 0 o ya no hay stock). No se puede actualizar al mismo valor, con un negativo ni con decimales. El costo solo se muestra con `almacenes.show.costo_promedio`.
+- **Transferir stock** (permiso `transferir-stock.store`): en Acciones. Almacén de origen y de destino (el destino no ofrece el origen), buscador y cantidad por producto. Solo se agregan productos con stock en el origen; la cantidad no puede pasar de lo disponible ni bajar de 1; al cambiar el origen, los productos que no están ahí se marcan y no se envían. Confirmar manda `POST /stock-transfer` y muestra el traslado creado (con su PDF); la lista de Traslados de Documentos se actualiza si ya se había abierto.
+- **Filtro Tipo** (Producto/Servicio, `filters[tipo][]`) en el panel de filtros y **búsqueda con varios términos**: al buscar, lo escrito pasa a ser un chip (puede ser una frase) que se quita con su "x"; los chips se suman a lo que se escribe y también acotan el Excel de exportar.
+- **Acceso**: se entra con `stock.show`, `stock.store`, `stock.update` o `almacenes.show`; sin ninguno sale "Sin acceso". Con solo `stock.store` no hay lista y queda la acción de agregar.
+- **Pendiente**: que una búsqueda con un solo resultado lo agregue sola (en la web sirve para el lector de código de barras). Sin probar contra el servidor real: `POST /stock`, `/stock/import`, `/stock/export` y `/stock-transfer` (solo con respuestas simuladas).
+
+### Productos: filtros y contadores
+
+- **Filtro Estado** (Activos/Inactivos, `filters[estado][]`) en el panel de filtros.
+- **Contadores Todos / Productos / Servicios** (`total_productos` y `total_servicios` de la respuesta): son los números del servidor para la búsqueda y los filtros actuales; tocar uno filtra por ese tipo.
+- **Búsqueda con varios términos**: igual que en Stock, con chips que se quitan.
+
 ### Estado de Inicio
 
 Módulo **Inicio**: el Dashboard de la web. Siempre aparece (no depende de un módulo contratado) y es la primera pestaña. Según el rol muestra su resumen: Vendedor → **Ejecutivo** (`/ventas/resumen-ejecutivo`), JEFE COMERCIAL → **Jefe** (`/ventas/resumen-equipo`), Ceo Empresa → **CEO** (`/ventas/resumen-ceo`). Con más de un perfil sale un switch "CEO | Jefe | Ejecutivo" que arranca en el cargo más alto. El Jefe de Almacén (que no ve importes) y los roles sin perfil comercial ven la pantalla de siempre: "Resumen de Ventas MES / AÑO" con el total y el de cada almacén (`/ventas/reporte-almacenes`).
@@ -46,7 +66,10 @@ Módulo **Inicio**: el Dashboard de la web. Siempre aparece (no depende de un m�
 - **Jefe**: ventas del equipo contra la meta de la empresa, evolución, cumplimiento de metas por vendedor, productos más vendidos y departamentos, oportunidades, gestiones del equipo (hechas / programadas por tipo y periodo), clientes y productos con mayor caída, cotizaciones pendientes del equipo (soles y dólares).
 - **CEO**: ventas del periodo con comparativos y proyección de cierre; evolución; indicadores estratégicos YTD (la utilidad arranca oculta); cumplimiento por vendedor; departamentos; ventas por canal (dona); cuentas por cobrar (por vencer y vencido); cobro por vendedor; ingresos por entidad bancaria (soles/dólares y filtro de métodos); productos y clientes con mayor caída; nuevos clientes.
 - **Menú**: con más de cinco módulos la barra inferior del celular muestra los primeros cuatro y un botón **Más** con la lista del resto; en tablet el riel lateral los muestra todos.
-- **Pendiente**: los enlaces que en la web abren otro reporte o la ficha del cliente, y las ayudas (?) de cada tarjeta. "Cotizaciones pendientes" lleva a Documentos (sin filtrar por pendientes) si el usuario tiene el módulo y el permiso.
+- **Cotizaciones pendientes**: al tocar el mosaico del Ejecutivo o del Jefe se abre Documentos en Cotizaciones, solo con las pendientes y en el rango del resumen (como la web). Solo se ofrece con el módulo Documentos y el permiso `documentos.cotizaciones.index`; si el usuario no puede ver cotizaciones, Documentos abre en Ventas.
+- **Ayudas (?)**: cada sección que la tiene en la web (10 en el Ejecutivo, 9 en el Jefe, 10 en el CEO) trae su ayuda en una hoja inferior, con los textos de la web. Se quitaron las filas que hablan de enlaces a pantallas que la app no tiene (el ↗ de otro reporte, la ficha del cliente, Gestión).
+- **Modo oscuro y letra grande**: probado con letra 1.3× y 360 px en las cuatro vistas, en claro y oscuro. Se arreglaron los desbordes de "Gestiones del equipo" (filas de dos que toman la altura del contenido) y de Avance, Participación y Total con variación (se achican). La prueba de contraste de texto de Flutter pasa en claro y oscuro.
+- **Pendiente**: los enlaces que en la web abren otro reporte o la ficha del cliente.
 
 ### Estado de Clientes
 
@@ -140,7 +163,8 @@ Reportes es el reporte **Ventas General** de la web (pestaña con permiso `repor
 - **Descuento por línea**: cada línea de la venta o cotización tiene su descuento en porcentaje o, con el botón de cambio, en monto fijo (máximo 100 % o el subtotal de la línea; si se escribe más, se recorta). El total y el subtotal de la línea van con el descuento; se manda `dto_fijo`, `dto`, `monto_dto`, `subtotal` y `subtotal_con_dto`. El comprobante muestra el descuento total.
 - **Ítem libre**: con el permiso `factura.libre` aparece "Agregar ítem libre" (descripción, código opcional, cantidad y precio). Va como `product_id` nulo con `concepto_libre` y `codigo_libre`, no mueve stock ni se reprecia al cambiar de lista. Si el código ya es un producto del catálogo, se agrega como producto normal (con el mismo aviso de stock de la web). Una cotización no admite ítems libres (el backend exige producto).
 - **Vendedor encargado**: el modal de la cotización lo ofrece (opcional; usuarios Vendedor y Admin Empresa, sin el propio usuario; `GET /usuarios/list`) y viaja como `vendedor_id`; al editar arranca con el que tenía. Al culminar una cotización como venta, la venta lleva ese vendedor (en "Crear venta" no se elige, como en la web). Si una cotización tiene el mismo producto en dos líneas con distinto descuento, al culminarla se juntan en una sola con la suma de lo descontado.
-- **Pendiente**: editar la descripción de un ítem libre ya agregado, el interruptor "monto sin IGV" de la web y el punto de venta con caja.
+- **Editar un ítem libre**: un ítem libre ya agregado tiene un botón de lápiz que abre "Editar ítem libre" (descripción y código; la cantidad, el precio y el descuento se cambian en su línea). Si el código nuevo ya es un producto del catálogo, la línea pasa a ser ese producto con su cantidad y precio (o se suma a la línea del producto si ya estaba); si ese producto no tiene stock en el almacén, no se cambia nada y el formulario da el motivo.
+- **Pendiente**: el interruptor "monto sin IGV" de la web y el punto de venta con caja.
 - La app no repite la venta si falla la red: avisa que se revise Documentos antes de reintentar, porque el servidor pudo haberla registrado.
 
 ## 3. Preguntas abiertas

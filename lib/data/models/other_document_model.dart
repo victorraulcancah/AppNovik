@@ -78,6 +78,7 @@ List<OtherDocumentLine> _lines(dynamic products, {required bool traslado, int? f
   return [
     for (final p in products.whereType<Map>())
       OtherDocumentLine(
+        productId: traslado ? _int(p['id']) : null,
         cantidad: _double(
           (p['pivot'] is Map)
               ? (traslado ? (p['pivot'] as Map)['cantidad'] : (p['pivot'] as Map)['stock'])
@@ -90,6 +91,8 @@ List<OtherDocumentLine> _lines(dynamic products, {required bool traslado, int? f
             ? _costoPromedio(p, fromId)
             : (p['pivot'] is Map ? _double((p['pivot'] as Map)['costo']) : 0),
         aceptado: p['pivot'] is Map && _bool((p['pivot'] as Map)['aceptado']),
+        codBarra: traslado ? _text(p['cod_barra']) : null,
+        confirmado: traslado && p['pivot'] is Map && _bool((p['pivot'] as Map)['confirmado']),
       ),
   ];
 }
@@ -112,6 +115,7 @@ OtherDocumentEntity otherDocumentFromJson(Map<String, dynamic> json, OtherDocume
         usuario: _name(json['user']),
         desde: _name(json['from_warehouse']) ?? _name(json['fromWarehouse']),
         hacia: _name(json['to_warehouse']) ?? _name(json['toWarehouse']),
+        haciaId: _int(json['to']),
         lines: _lines(json['products'], traslado: true, fromId: _int(json['from'])),
       );
     case OtherDocumentKind.entradaStock:

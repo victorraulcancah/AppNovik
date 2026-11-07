@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:app_novik/core/errors/failures.dart';
@@ -10,6 +11,7 @@ import 'package:app_novik/domain/entities/other_document_entity.dart';
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
+import 'package:app_novik/domain/entities/warehouse_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
@@ -28,7 +30,14 @@ import 'package:provider/provider.dart';
 
 // ---------------------------------------------------------------- datos de ejemplo
 
-Map<String, dynamic> _transfer({int id = 1, int nro = 7, bool estado = true, bool aceptado = false}) => {
+Map<String, dynamic> _transfer({
+  int id = 1,
+  int nro = 7,
+  bool estado = true,
+  bool aceptado = false,
+  bool confirmado = false,
+  bool withWarehouses = true,
+}) => {
       'id': id,
       'nro_documento': nro,
       'estado': estado,
@@ -44,11 +53,14 @@ Map<String, dynamic> _transfer({int id = 1, int nro = 7, bool estado = true, boo
           'codigo': 'SUB-12',
           'name': 'SUBWOOFER 12"',
           'brand': {'name': 'PIONEER'},
-          'pivot': {'cantidad': 3, 'aceptado': aceptado, 'confirmado': false},
-          'warehouses': [
-            {'id': 2, 'pivot': {'costo_promedio': '99'}},
-            {'id': 1, 'pivot': {'costo_promedio': '45.5'}},
-          ],
+          'cod_barra': '7750001',
+          'pivot': {'cantidad': 3, 'aceptado': aceptado, 'confirmado': confirmado},
+          // El PATCH devuelve el traslado sin la relación de almacenes (sin costos).
+          if (withWarehouses)
+            'warehouses': [
+              {'id': 2, 'pivot': {'costo_promedio': '99'}},
+              {'id': 1, 'pivot': {'costo_promedio': '45.5'}},
+            ],
         },
       ],
     };
@@ -149,6 +161,15 @@ class _FakeRepo implements OtherDocumentRepository {
   final List<({OtherDocumentKind kind, int companyId, OtherDocumentFilters filters, int? number, int page})>
       calls = [];
   final List<int> deleted = [];
+
+  /// (traslado, producto) de cada PATCH de recibir y de validar.
+  final List<(int, int)> received = [];
+  final List<(int, int)> confirmed = [];
+
+  /// Si no es `null`, el PATCH espera a este completer (para ver el estado "en curso").
+  Completer<void>? hold;
+  Either<Failure, OtherDocumentEntity>? nextReceive;
+  Either<Failure, OtherDocumentEntity>? nextConfirm;
   Either<Failure, OtherDocumentPageEntity>? next;
   Either<Failure, void>? nextDelete;
 
@@ -179,11 +200,40 @@ class _FakeRepo implements OtherDocumentRepository {
     deleted.add(id);
     return nextDelete ?? Either.rightVoid();
   }
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> receiveTransferProduct(int id, int productId) async {
+    received.add((id, productId));
+    await hold?.future;
+    return nextReceive ??
+        Either.right(
+          otherDocumentFromJson(
+            _transfer(id: id, aceptado: true, withWarehouses: false),
+            OtherDocumentKind.traslado,
+          ),
+        );
+  }
+
+  @override
+  Future<Either<Failure, OtherDocumentEntity>> confirmTransferProduct(int id, int productId) async {
+    confirmed.add((id, productId));
+    await hold?.future;
+    return nextConfirm ??
+        Either.right(
+          otherDocumentFromJson(
+            _transfer(id: id, confirmado: true, withWarehouses: false),
+            OtherDocumentKind.traslado,
+          ),
+        );
+  }
 }
 
-OtherDocumentsProvider _provider(_FakeRepo repo) => OtherDocumentsProvider(
+OtherDocumentsProvider _provider(_FakeRepo repo, {VoidCallback? onSessionExpired}) => OtherDocumentsProvider(
       getDocumentsUseCase: GetOtherDocumentsUseCase(repository: repo),
       deleteTransferUseCase: DeleteTransferUseCase(repository: repo),
+      receiveTransferProductUseCase: ReceiveTransferProductUseCase(repository: repo),
+      confirmTransferProductUseCase: ConfirmTransferProductUseCase(repository: repo),
+      onSessionExpired: onSessionExpired,
       now: () => DateTime(2026, 10, 31, 10),
     )..syncCompany(7);
 
@@ -232,14 +282,18 @@ AuthProvider _auth(SessionContextEntity session) {
   )..session = session;
 }
 
-SessionContextEntity _session({Set<String> permissions = const {}, List<String> roles = const []}) =>
+SessionContextEntity _session({
+  Set<String> permissions = const {},
+  List<String> roles = const [],
+  List<WarehouseEntity> warehouses = const [],
+}) =>
     SessionContextEntity(
       user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
       company: const CompanyEntity(id: 7, razonSocial: 'ACME'),
       modules: const [],
       permissions: permissions,
       roles: roles,
-      warehouses: const [],
+      warehouses: warehouses,
     );
 
 void main() {
@@ -259,6 +313,22 @@ void main() {
       expect(d.lines.single.aceptado, isFalse);
       expect(d.pendienteRecepcion, isTrue);
       expect(d.sePuedeEliminar, isTrue);
+    });
+
+    test('un traslado trae el producto, su código de barras, si se validó y el almacén de destino', () {
+      final d = otherDocumentFromJson(_transfer(confirmado: true), OtherDocumentKind.traslado);
+
+      expect(d.haciaId, 2);
+      expect(d.lines.single.productId, 10);
+      expect(d.lines.single.codBarra, '7750001');
+      expect(d.lines.single.confirmado, isTrue);
+      expect(d.lines.single.aceptado, isFalse);
+    });
+
+    test('las entradas de stock no llevan producto ni código de barras', () {
+      final d = otherDocumentFromJson(_stockEntry(), OtherDocumentKind.entradaStock);
+      expect(d.lines.first.productId, isNull);
+      expect(d.lines.first.codBarra, isNull);
     });
 
     test('el valor de un producto trasladado es su costo promedio en el almacén de salida', () {
@@ -448,6 +518,57 @@ void main() {
       expect(requests.last.method, 'DELETE');
       expect(requests.last.url.path, endsWith('/stock-transfer/9'));
     });
+
+    group('recibir y validar productos de un traslado', () {
+      late List<http.Request> patches;
+      late OtherDocumentRemoteDataSourceImpl patchSource;
+      var status = 200;
+      var body = '';
+
+      setUp(() {
+        patches = [];
+        status = 200;
+        body = jsonEncode(_transfer(id: 9, aceptado: true, confirmado: true, withWarehouses: false));
+        patchSource = OtherDocumentRemoteDataSourceImpl(
+          client: MockClient((request) async {
+            patches.add(request);
+            return http.Response(body, status, headers: {'content-type': 'application/json'});
+          }),
+        );
+      });
+
+      test('recibir hace PATCH /stock-transfer/{id} con el product_id y devuelve el traslado', () async {
+        final transfer = await patchSource.receiveTransferProduct('tok', 9, 10);
+
+        final request = patches.single;
+        expect(request.method, 'PATCH');
+        expect(request.url.path, endsWith('/stock-transfer/9'));
+        expect(request.headers['Authorization'], 'Bearer tok');
+        expect(jsonDecode(request.body), {'product_id': 10});
+        expect(transfer.id, 9);
+        expect(transfer.lines.single.aceptado, isTrue);
+      });
+
+      test('validar hace PATCH /stock-transfer/{id}/confirm con el product_id', () async {
+        final transfer = await patchSource.confirmTransferProduct('tok', 9, 10);
+
+        final request = patches.single;
+        expect(request.method, 'PATCH');
+        expect(request.url.path, endsWith('/stock-transfer/9/confirm'));
+        expect(jsonDecode(request.body), {'product_id': 10});
+        expect(transfer.lines.single.confirmado, isTrue);
+      });
+
+      test('un 401 (sin el permiso despachos.transferir.update) falla con el mensaje del backend', () async {
+        status = 401;
+        body = jsonEncode({'message': 'No autorizado'});
+
+        expect(
+          () => patchSource.receiveTransferProduct('tok', 9, 10),
+          throwsA(isA<Object>()),
+        );
+      });
+    });
   });
 
   group('PDF', () {
@@ -523,6 +644,125 @@ void main() {
       }
       // Sin importes el documento es más corto.
       expect(pdfs[2].length, lessThan(pdfs[1].length));
+    });
+  });
+
+  group('qué se puede hacer con un producto del traslado (como la web)', () {
+    final transfer = otherDocumentFromJson(_transfer(), OtherDocumentKind.traslado); // destino: 2
+    final line = transfer.lines.single;
+
+    TransferLineAction action(
+      OtherDocumentEntity t, {
+      bool admin = false,
+      List<int> warehouses = const [],
+      OtherDocumentLine? l,
+    }) =>
+        t.actionFor(l ?? t.lines.first, isAdminOrCeo: admin, warehouseIds: warehouses);
+
+    test('Admin Empresa o Ceo Empresa reciben, tengan o no el almacén de destino', () {
+      expect(action(transfer, admin: true), TransferLineAction.receive);
+      expect(action(transfer, admin: true, warehouses: [1]), TransferLineAction.receive);
+    });
+
+    test('quien tiene el almacén de destino recibe', () {
+      expect(action(transfer, warehouses: [2]), TransferLineAction.receive);
+      expect(action(transfer, warehouses: [1, 2]), TransferLineAction.receive);
+    });
+
+    test('quien no es admin ni CEO ni tiene el destino valida con el código de barras', () {
+      expect(action(transfer), TransferLineAction.validate);
+      expect(action(transfer, warehouses: [1]), TransferLineAction.validate);
+    });
+
+    test('un producto ya recibido o un traslado eliminado no se vuelven a recibir', () {
+      final recibido = otherDocumentFromJson(_transfer(aceptado: true), OtherDocumentKind.traslado);
+      final eliminado = otherDocumentFromJson(_transfer(estado: false), OtherDocumentKind.traslado);
+
+      expect(action(recibido, admin: true), TransferLineAction.none);
+      expect(action(recibido, warehouses: [2]), TransferLineAction.none);
+      expect(action(eliminado, admin: true), TransferLineAction.none);
+    });
+
+    test('la validación sigue disponible aunque el producto ya esté recibido (como la web)', () {
+      final recibido = otherDocumentFromJson(_transfer(aceptado: true), OtherDocumentKind.traslado);
+      expect(action(recibido), TransferLineAction.validate);
+    });
+
+    test('solo los traslados tienen acciones', () {
+      final entrada = otherDocumentFromJson(_stockEntry(), OtherDocumentKind.entradaStock);
+      expect(action(entrada, admin: true), TransferLineAction.none);
+      expect(line.productId, isNotNull);
+    });
+  });
+
+  group('ReceiveTransferProductUseCase y ConfirmTransferProductUseCase', () {
+    final transfer = otherDocumentFromJson(_transfer(), OtherDocumentKind.traslado);
+
+    test('recibir manda el traslado y el producto', () async {
+      final repo = _FakeRepo();
+      final result = await ReceiveTransferProductUseCase(repository: repo)(transfer, transfer.lines.single);
+
+      expect(result.isRight, isTrue);
+      expect(repo.received, [(1, 10)]);
+    });
+
+    test('no se recibe dos veces un producto (el backend sumaría el stock otra vez)', () async {
+      final repo = _FakeRepo();
+      final recibido = otherDocumentFromJson(_transfer(aceptado: true), OtherDocumentKind.traslado);
+
+      final result = await ReceiveTransferProductUseCase(repository: repo)(recibido, recibido.lines.single);
+
+      expect(result.left.message, 'Este producto ya fue recibido');
+      expect(repo.received, isEmpty);
+    });
+
+    test('no se recibe un traslado eliminado ni algo que no es un traslado', () async {
+      final repo = _FakeRepo();
+      final useCase = ReceiveTransferProductUseCase(repository: repo);
+      final eliminado = otherDocumentFromJson(_transfer(estado: false), OtherDocumentKind.traslado);
+      final entrada = otherDocumentFromJson(_stockEntry(), OtherDocumentKind.entradaStock);
+
+      expect((await useCase(eliminado, eliminado.lines.single)).left.message, 'El traslado fue eliminado');
+      expect((await useCase(entrada, entrada.lines.first)).isLeft, isTrue);
+      expect(repo.received, isEmpty);
+    });
+
+    test('validar con el código de barras correcto llama al backend', () async {
+      final repo = _FakeRepo();
+      final result =
+          await ConfirmTransferProductUseCase(repository: repo)(transfer, transfer.lines.single, ' 7750001 ');
+
+      expect(result.isRight, isTrue);
+      expect(repo.confirmed, [(1, 10)]);
+    });
+
+    test('un código de barras distinto se rechaza sin llamar al backend', () async {
+      final repo = _FakeRepo();
+      final result = await ConfirmTransferProductUseCase(repository: repo)(transfer, transfer.lines.single, '123');
+
+      expect(result.left.message, 'El código de barras no coincide');
+      expect(repo.confirmed, isEmpty);
+    });
+
+    test('un producto sin código de barras no se puede validar', () async {
+      final repo = _FakeRepo();
+      final sinCodigo = otherDocumentFromJson(
+        {
+          ..._transfer(),
+          'products': [
+            {
+              ...(_transfer()['products'] as List).first as Map<String, dynamic>,
+              'cod_barra': null,
+            },
+          ],
+        },
+        OtherDocumentKind.traslado,
+      );
+
+      final result = await ConfirmTransferProductUseCase(repository: repo)(sinCodigo, sinCodigo.lines.single, '');
+
+      expect(result.left.message, 'Este producto no tiene código de barras');
+      expect(repo.confirmed, isEmpty);
     });
   });
 
@@ -645,6 +885,100 @@ void main() {
       expect(provider.stateOf(OtherDocumentKind.traslado).items, isEmpty);
     });
 
+    test('recibir un producto deja el traslado recibido en la lista y conserva sus costos', () async {
+      final repo = _FakeRepo();
+      final provider = _provider(repo);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+      expect(transfer.pendienteRecepcion, isTrue);
+
+      final result = await provider.receiveProduct(transfer, transfer.lines.single);
+
+      expect(result.isRight, isTrue);
+      expect(repo.received, [(1, 10)]);
+      final now = provider.stateOf(OtherDocumentKind.traslado).items.single;
+      expect(now.lines.single.aceptado, isTrue);
+      expect(now.pendienteRecepcion, isFalse);
+      expect(now.sePuedeEliminar, isFalse);
+      // La respuesta del PATCH no trae los costos: se conserva el que ya se tenía.
+      expect(now.lines.single.costo, 45.5);
+      expect(provider.currentTransfer(transfer).lines.single.aceptado, isTrue);
+    });
+
+    test('validar un producto lo deja confirmado sin tocar lo recibido', () async {
+      final repo = _FakeRepo();
+      final provider = _provider(repo);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+
+      final result = await provider.confirmProduct(transfer, transfer.lines.single, '7750001');
+
+      expect(result.isRight, isTrue);
+      expect(repo.confirmed, [(1, 10)]);
+      final now = provider.stateOf(OtherDocumentKind.traslado).items.single;
+      expect(now.lines.single.confirmado, isTrue);
+      expect(now.lines.single.aceptado, isFalse);
+      expect(now.lines.single.costo, 45.5);
+    });
+
+    test('un código de barras equivocado no llama al backend y el traslado no cambia', () async {
+      final repo = _FakeRepo();
+      final provider = _provider(repo);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+
+      final result = await provider.confirmProduct(transfer, transfer.lines.single, '000');
+
+      expect(result.left.message, 'El código de barras no coincide');
+      expect(repo.confirmed, isEmpty);
+      expect(provider.stateOf(OtherDocumentKind.traslado).items.single.lines.single.confirmado, isFalse);
+    });
+
+    test('mientras se recibe un producto está ocupado y un segundo toque se rechaza', () async {
+      final repo = _FakeRepo()..hold = Completer<void>();
+      final provider = _provider(repo);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+      final line = transfer.lines.single;
+
+      final first = provider.receiveProduct(transfer, line);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isLineBusy(transfer, line), isTrue);
+
+      final second = await provider.receiveProduct(transfer, line);
+      expect(second.left.message, 'Ya se está procesando este producto');
+      expect(repo.received, hasLength(1));
+
+      repo.hold!.complete();
+      expect((await first).isRight, isTrue);
+      expect(provider.isLineBusy(transfer, line), isFalse);
+    });
+
+    test('si el backend rechaza recibir, el producto sigue pendiente y se muestra el motivo', () async {
+      final repo = _FakeRepo()..nextReceive = Either.left(const ValidationFailure('No autorizado'));
+      final provider = _provider(repo);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+
+      final result = await provider.receiveProduct(transfer, transfer.lines.single);
+
+      expect(result.left.message, 'No autorizado');
+      expect(provider.stateOf(OtherDocumentKind.traslado).items.single.lines.single.aceptado, isFalse);
+      expect(provider.isLineBusy(transfer, transfer.lines.single), isFalse);
+    });
+
+    test('una sesión vencida al recibir avisa para volver a entrar', () async {
+      var expired = 0;
+      final repo = _FakeRepo()..nextReceive = Either.left(const AuthenticationFailure('Sesión expirada'));
+      final provider = _provider(repo, onSessionExpired: () => expired++);
+      await provider.refresh(OtherDocumentKind.traslado);
+      final transfer = provider.stateOf(OtherDocumentKind.traslado).items.single;
+
+      await provider.receiveProduct(transfer, transfer.lines.single);
+
+      expect(expired, 1);
+    });
+
     test('si el servidor rechaza eliminar, el traslado se queda', () async {
       final repo = _FakeRepo()..nextDelete = Either.left(const ValidationFailure('No se puede eliminar'));
       final provider = _provider(repo);
@@ -663,6 +997,7 @@ void main() {
       OtherDocumentKind kind, {
       Set<String> permissions = const {},
       List<String> roles = const [],
+      List<WarehouseEntity> warehouses = const [],
       OtherDocumentPageEntity Function(OtherDocumentKind, int)? build,
     }) async {
       // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
@@ -675,7 +1010,7 @@ void main() {
       });
 
       final repo = _FakeRepo()..build = build;
-      final session = _session(permissions: permissions, roles: roles);
+      final session = _session(permissions: permissions, roles: roles, warehouses: warehouses);
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -787,6 +1122,169 @@ void main() {
 
       expect(repo.deleted, [1]);
       expect(find.text('Transferencia eliminada'), findsOneWidget);
+    });
+
+    group('recibir y validar productos en el detalle del traslado', () {
+      const update = {'despachos.transferir.update'};
+      // La barra de búsqueda de la lista también es un TextField: este es el del código de barras.
+      final barcodeField = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == 'Código de barras',
+      );
+      const destino = WarehouseEntity(id: 2, name: 'AREQUIPA');
+      const origen = WarehouseEntity(id: 1, name: 'LIMA');
+
+      Future<_FakeRepo> openDetail(
+        WidgetTester tester, {
+        Set<String> permissions = update,
+        List<String> roles = const [],
+        List<WarehouseEntity> warehouses = const [],
+      }) async {
+        final repo = await pump(
+          tester,
+          OtherDocumentKind.traslado,
+          permissions: permissions,
+          roles: roles,
+          warehouses: warehouses,
+        );
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+        return repo;
+      }
+
+      testWidgets('un Ceo Empresa ve "Recibir"; confirma y el producto queda Recibido', (tester) async {
+        final repo = await openDetail(tester, roles: const ['Ceo Empresa']);
+
+        expect(find.text('Recibir'), findsOneWidget);
+        expect(barcodeField, findsNothing);
+        expect(find.text('Pendiente'), findsOneWidget);
+
+        await tester.tap(find.text('Recibir'));
+        await tester.pumpAndSettle();
+        expect(find.text('¿Desea confirmar que recibió este producto?'), findsOneWidget);
+        expect(repo.received, isEmpty);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.received, [(1, 10)]);
+        expect(find.text('Se marcó como Recibido'), findsOneWidget);
+        expect(find.text('Recibir'), findsNothing);
+        expect(find.text('Recibido'), findsWidgets);
+        expect(find.text('Pendiente'), findsNothing);
+      });
+
+      testWidgets('cancelar la confirmación no recibe nada', (tester) async {
+        final repo = await openDetail(tester, roles: const ['Admin Empresa']);
+
+        await tester.tap(find.text('Recibir'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.received, isEmpty);
+        expect(find.text('Recibir'), findsOneWidget);
+      });
+
+      testWidgets('quien tiene el almacén de destino también recibe', (tester) async {
+        await openDetail(tester, warehouses: const [destino]);
+
+        expect(find.text('Recibir'), findsOneWidget);
+        expect(barcodeField, findsNothing);
+      });
+
+      testWidgets('quien solo tiene el almacén de origen valida con el código de barras', (tester) async {
+        await openDetail(tester, warehouses: const [origen]);
+
+        expect(find.text('Recibir'), findsNothing);
+        expect(barcodeField, findsOneWidget);
+        expect(find.text('Código de barras'), findsOneWidget);
+      });
+
+      testWidgets('un código de barras equivocado muestra el error y no valida', (tester) async {
+        final repo = await openDetail(tester, warehouses: const [origen]);
+
+        await tester.enterText(barcodeField, '000');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+
+        expect(find.text('El código de barras no coincide'), findsOneWidget);
+        expect(repo.confirmed, isEmpty);
+      });
+
+      testWidgets('el código de barras correcto valida el producto', (tester) async {
+        final repo = await openDetail(tester, warehouses: const [origen]);
+
+        await tester.enterText(barcodeField, '7750001');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+
+        expect(repo.confirmed, [(1, 10)]);
+        expect(find.text('Se marcó como Validado'), findsOneWidget);
+        expect(barcodeField, findsNothing);
+        expect(find.textContaining('Validado'), findsWidgets);
+      });
+
+      testWidgets('el botón de validar (check) también valida', (tester) async {
+        final repo = await openDetail(tester, warehouses: const [origen]);
+
+        await tester.enterText(barcodeField, '7750001');
+        await tester.tap(find.byTooltip('Validar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.confirmed, [(1, 10)]);
+      });
+
+      testWidgets('sin el permiso despachos.transferir.update no hay acciones', (tester) async {
+        await openDetail(tester, permissions: const {}, roles: const ['Ceo Empresa']);
+
+        expect(find.text('Recibir'), findsNothing);
+        expect(barcodeField, findsNothing);
+        expect(find.text('Pendiente'), findsOneWidget);
+      });
+
+      testWidgets('un traslado ya recibido no ofrece recibir', (tester) async {
+        // La lista ya trae el producto recibido.
+        final repo = await pump(
+          tester,
+          OtherDocumentKind.traslado,
+          permissions: update,
+          roles: const ['Ceo Empresa'],
+          build: (kind, page) => one(_transfer(aceptado: true), kind),
+        );
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Recibir'), findsNothing);
+        expect(repo.received, isEmpty);
+      });
+
+      testWidgets('al recibir, la tarjeta de la lista pasa de "Falta recibir" a "Recibido"', (tester) async {
+        await openDetail(tester, roles: const ['Ceo Empresa']);
+
+        await tester.tap(find.text('Recibir'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cerrar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Falta recibir'), findsNothing);
+        expect(find.text('Recibido'), findsOneWidget);
+      });
+
+      testWidgets('si el backend rechaza, se avisa y el producto sigue pendiente', (tester) async {
+        final repo = await openDetail(tester, roles: const ['Ceo Empresa']);
+        repo.nextReceive = Either.left(const ValidationFailure('No autorizado'));
+
+        await tester.tap(find.text('Recibir'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('No autorizado'), findsOneWidget);
+        expect(find.text('Recibir'), findsOneWidget);
+        expect(find.text('Pendiente'), findsOneWidget);
+      });
     });
 
     testWidgets('traslados: sin el permiso de eliminar no sale el botón', (tester) async {

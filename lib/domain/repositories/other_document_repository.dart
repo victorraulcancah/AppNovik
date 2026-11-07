@@ -16,4 +16,10 @@ abstract class OtherDocumentRepository {
 
   /// Elimina un traslado (`DELETE /stock-transfer/{id}`).
   Future<Either<Failure, void>> deleteTransfer(int id);
+
+  /// Marca un producto del traslado como recibido (`PATCH /stock-transfer/{id}`).
+  Future<Either<Failure, OtherDocumentEntity>> receiveTransferProduct(int id, int productId);
+
+  /// Marca un producto del traslado como validado (`PATCH /stock-transfer/{id}/confirm`).
+  Future<Either<Failure, OtherDocumentEntity>> confirmTransferProduct(int id, int productId);
 }

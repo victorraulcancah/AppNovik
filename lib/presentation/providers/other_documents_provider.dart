@@ -37,6 +37,8 @@ class OtherDocumentsProvider extends ChangeNotifier {
 
   final GetOtherDocumentsUseCase _getDocuments;
   final DeleteTransferUseCase _deleteTransfer;
+  final ReceiveTransferProductUseCase _receiveProduct;
+  final ConfirmTransferProductUseCase _confirmProduct;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -47,10 +49,14 @@ class OtherDocumentsProvider extends ChangeNotifier {
   OtherDocumentsProvider({
     required GetOtherDocumentsUseCase getDocumentsUseCase,
     required DeleteTransferUseCase deleteTransferUseCase,
+    required ReceiveTransferProductUseCase receiveTransferProductUseCase,
+    required ConfirmTransferProductUseCase confirmTransferProductUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   })  : _getDocuments = getDocumentsUseCase,
         _deleteTransfer = deleteTransferUseCase,
+        _receiveProduct = receiveTransferProductUseCase,
+        _confirmProduct = confirmTransferProductUseCase,
         _onSessionExpired = onSessionExpired,
         now = now ?? DateTime.now;
 
@@ -154,6 +160,82 @@ class OtherDocumentsProvider extends ChangeNotifier {
       },
     );
     notifyListeners();
+  }
+
+  /// Productos de traslados con una petición en curso (`traslado:producto`), para no repetirla.
+  final Set<String> _busy = {};
+
+  String _key(int transferId, int? productId) => '$transferId:$productId';
+
+  /// Si ya hay una petición en curso para este producto del traslado.
+  bool isLineBusy(OtherDocumentEntity transfer, OtherDocumentLine line) =>
+      _busy.contains(_key(transfer.id, line.productId));
+
+  /// El traslado tal como está ahora en la lista (con lo recibido o validado hasta el momento),
+  /// o [fallback] si ya no está (por ejemplo, si cambió el filtro).
+  OtherDocumentEntity currentTransfer(OtherDocumentEntity fallback) {
+    for (final i in stateOf(OtherDocumentKind.traslado).items) {
+      if (i.id == fallback.id) return i;
+    }
+    return fallback;
+  }
+
+  /// Marca un producto del traslado como **recibido** y deja el traslado actualizado en la lista.
+  Future<Either<Failure, OtherDocumentEntity>> receiveProduct(
+    OtherDocumentEntity transfer,
+    OtherDocumentLine line,
+  ) =>
+      _updateLine(transfer, line, () => _receiveProduct(currentTransfer(transfer), line));
+
+  /// Marca un producto del traslado como **validado** (con su código de barras).
+  Future<Either<Failure, OtherDocumentEntity>> confirmProduct(
+    OtherDocumentEntity transfer,
+    OtherDocumentLine line,
+    String barcode,
+  ) =>
+      _updateLine(transfer, line, () => _confirmProduct(currentTransfer(transfer), line, barcode));
+
+  Future<Either<Failure, OtherDocumentEntity>> _updateLine(
+    OtherDocumentEntity transfer,
+    OtherDocumentLine line,
+    Future<Either<Failure, OtherDocumentEntity>> Function() call,
+  ) async {
+    final key = _key(transfer.id, line.productId);
+    if (!_busy.add(key)) {
+      return Either.left(const ValidationFailure('Ya se está procesando este producto'));
+    }
+    notifyListeners();
+
+    final result = await call();
+    _busy.remove(key);
+
+    if (result.isLeft) {
+      if (result.left is AuthenticationFailure) _onSessionExpired?.call();
+      notifyListeners();
+      return result;
+    }
+
+    // La respuesta no trae los costos de los productos: se conservan los que ya estaban y solo
+    // se toma lo recibido, lo validado y el estado.
+    final fresh = result.right;
+    final s = stateOf(OtherDocumentKind.traslado);
+    final index = s.items.indexWhere((i) => i.id == transfer.id);
+    final old = index >= 0 ? s.items[index] : transfer;
+    final merged = old.copyWith(
+      activo: fresh.activo,
+      lines: [
+        for (final l in old.lines)
+          () {
+            final updated = fresh.lines.where((f) => f.productId == l.productId);
+            return updated.isEmpty
+                ? l
+                : l.copyWith(aceptado: updated.first.aceptado, confirmado: updated.first.confirmado);
+          }(),
+      ],
+    );
+    if (index >= 0) s.items = [...s.items]..[index] = merged;
+    notifyListeners();
+    return Either.right(merged);
   }
 
   /// Elimina un traslado y lo saca de la lista (la web no muestra los eliminados).

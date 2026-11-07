@@ -130,6 +130,8 @@ class DependencyInjection {
           create: (context) => OtherDocumentsProvider(
             getDocumentsUseCase: GetOtherDocumentsUseCase(repository: _otherDocumentRepository),
             deleteTransferUseCase: DeleteTransferUseCase(repository: _otherDocumentRepository),
+            receiveTransferProductUseCase: ReceiveTransferProductUseCase(repository: _otherDocumentRepository),
+            confirmTransferProductUseCase: ConfirmTransferProductUseCase(repository: _otherDocumentRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) =>

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
@@ -9,7 +10,27 @@ import '../components/components.dart';
 import '../pages/other_document_pdf_page.dart';
 import '../pages/receipt_page.dart';
 import '../pdf/other_document_pdf.dart';
+import '../providers/auth_provider.dart';
+import '../providers/other_documents_provider.dart';
+import '../utils/success_snack.dart';
 import 'document_filters.dart';
+
+/// Permiso que el backend exige para recibir y validar productos de un traslado.
+const transferUpdatePermission = 'despachos.transferir.update';
+
+/// Lo que cada rol puede hacer con los productos de un traslado: Admin Empresa y Ceo Empresa
+/// reciben; el resto, si no tiene el almacén de destino, valida con el código de barras.
+const _rolesQueRecibenTraslados = ['Admin Empresa', 'Ceo Empresa'];
+
+/// El proveedor de [T] si está disponible (el detalle también se abre desde pantallas y pruebas
+/// que no lo tienen: entonces no hay acciones sobre los productos).
+T? _maybe<T>(BuildContext context, {bool listen = false}) {
+  try {
+    return Provider.of<T>(context, listen: listen);
+  } on ProviderNotFoundException {
+    return null;
+  }
+}
 
 final _dateTime = DateFormat(AppConstants.dateTimeFormat);
 
@@ -64,7 +85,12 @@ class _DetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final d = document;
+    // Un traslado se actualiza mientras el detalle está abierto (al recibir o validar un
+    // producto), así que se toma su versión actual de la lista.
+    final documents = document.kind == OtherDocumentKind.traslado
+        ? _maybe<OtherDocumentsProvider>(context, listen: true)
+        : null;
+    final d = documents?.currentTransfer(document) ?? document;
     final g = d.guia;
     final n = d.nota;
 
@@ -130,7 +156,8 @@ class _DetailBody extends StatelessWidget {
           const SizedBox(height: 16),
           Text('Productos', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          for (final line in d.lines) _LineTile(kind: d.kind, line: line, showAmounts: showAmounts),
+          for (final line in d.lines)
+            _LineTile(document: d, line: line, showAmounts: showAmounts),
           const Divider(height: 24),
           AppDetailRow(label: 'Nro. de ítems', value: formatQuantity(d.unidades)),
           if (d.kind == OtherDocumentKind.entradaStock && showAmounts)
@@ -149,16 +176,32 @@ class _DetailBody extends StatelessWidget {
 }
 
 class _LineTile extends StatelessWidget {
-  final OtherDocumentKind kind;
+  final OtherDocumentEntity document;
   final OtherDocumentLine line;
   final bool showAmounts;
 
-  const _LineTile({required this.kind, required this.line, required this.showAmounts});
+  const _LineTile({required this.document, required this.line, required this.showAmounts});
+
+  OtherDocumentKind get kind => document.kind;
+
+  /// Recibir o validar este producto, según el rol y los almacenes del usuario (como la web) y
+  /// si tiene el permiso que pide el backend.
+  TransferLineAction _action(BuildContext context) {
+    if (kind != OtherDocumentKind.traslado) return TransferLineAction.none;
+    final session = _maybe<AuthProvider>(context)?.session;
+    if (session == null || !session.can(transferUpdatePermission)) return TransferLineAction.none;
+    return document.actionFor(
+      line,
+      isAdminOrCeo: session.roles.any(_rolesQueRecibenTraslados.contains),
+      warehouseIds: [for (final w in session.warehouses) w.id],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final action = _action(context);
     final detail = [if (line.codigo != null) line.codigo!, if (line.marca != null) line.marca!].join(' · ');
 
     return Padding(
@@ -187,6 +230,17 @@ class _LineTile extends StatelessWidget {
                 Text(line.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 if (detail.isNotEmpty)
                   Text(detail, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                if (action != TransferLineAction.none)
+                  AppEntrance(
+                    duration: const Duration(milliseconds: 250),
+                    offset: 6,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: action == TransferLineAction.receive
+                          ? _ReceiveButton(transfer: document, line: line)
+                          : _ValidateField(transfer: document, line: line),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -210,6 +264,136 @@ class _LineTile extends StatelessWidget {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Recibir": confirma que el producto llegó al almacén de destino (suma el stock allá).
+class _ReceiveButton extends StatelessWidget {
+  final OtherDocumentEntity transfer;
+  final OtherDocumentLine line;
+
+  const _ReceiveButton({required this.transfer, required this.line});
+
+  Future<void> _receive(BuildContext context) async {
+    final confirmed = await showAppConfirm(
+      context,
+      title: 'Confirmar',
+      subtitle: line.name,
+      icon: Icons.local_shipping_outlined,
+      message: '¿Desea confirmar que recibió este producto?',
+      confirmLabel: 'Confirmar',
+      tone: AppModalTone.normal,
+    );
+    if (!confirmed || !context.mounted) return;
+
+    final result = await context.read<OtherDocumentsProvider>().receiveProduct(transfer, line);
+    if (!context.mounted) return;
+    if (result.isLeft) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(result.left.message)));
+    } else {
+      showSuccessSnack(context, 'Se marcó como Recibido');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = context.watch<OtherDocumentsProvider>().isLineBusy(transfer, line);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FilledButton.tonalIcon(
+        onPressed: busy ? null : () => _receive(context),
+        icon: busy
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.local_shipping_outlined, size: 18),
+        label: Text(busy ? 'Recibiendo...' : 'Recibir'),
+      ),
+    );
+  }
+}
+
+/// "Validar": se escribe (o escanea) el código de barras del producto y, si coincide, queda
+/// marcado como validado.
+class _ValidateField extends StatefulWidget {
+  final OtherDocumentEntity transfer;
+  final OtherDocumentLine line;
+
+  const _ValidateField({required this.transfer, required this.line});
+
+  @override
+  State<_ValidateField> createState() => _ValidateFieldState();
+}
+
+class _ValidateFieldState extends State<_ValidateField> {
+  final _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit(String value) async {
+    final provider = context.read<OtherDocumentsProvider>();
+    setState(() => _error = null);
+    final result = await provider.confirmProduct(widget.transfer, widget.line, value);
+    if (!mounted) return;
+    if (result.isLeft) {
+      setState(() => _error = result.left.message);
+    } else {
+      showSuccessSnack(context, 'Se marcó como Validado');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final line = widget.line;
+    final busy = context.watch<OtherDocumentsProvider>().isLineBusy(widget.transfer, line);
+
+    if (line.confirmado) {
+      return Row(
+        children: [
+          Icon(Icons.check_circle, size: 20, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Validado${line.codBarra != null ? ' · ${line.codBarra}' : ''}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return TextField(
+      controller: _controller,
+      enabled: !busy,
+      textInputAction: TextInputAction.done,
+      onSubmitted: _submit,
+      onChanged: (_) {
+        if (_error != null) setState(() => _error = null);
+      },
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Código de barras',
+        hintText: line.codBarra == null ? 'Este producto no tiene código' : null,
+        errorText: _error,
+        prefixIcon: const Icon(Icons.qr_code_scanner_outlined, size: 20),
+        suffixIcon: busy
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            : IconButton(
+                tooltip: 'Validar',
+                icon: const Icon(Icons.check),
+                onPressed: () => _submit(_controller.text),
+              ),
       ),
     );
   }
