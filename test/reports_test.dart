@@ -22,6 +22,7 @@ import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/reports_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/theme/app_theme.dart';
+import 'support/screen_look.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -708,16 +709,22 @@ void main() {
       WidgetTester tester, {
       SessionContextEntity? session,
       SalesReportEntity Function(SalesReportFilters, int)? build,
+      ScreenLook? look,
     }) async {
-      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real). La pantalla es
-      // alta para que la lista de productos, que se arma a medida que se baja, esté toda dibujada.
-      tester.view.physicalSize = const Size(360 * 3, 2400 * 3);
-      tester.view.devicePixelRatio = 3;
-      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
-      addTearDown(() {
-        tester.view.reset();
-        tester.platformDispatcher.clearTextScaleFactorTestValue();
-      });
+      if (look != null) {
+        // Letra real (Roboto), modo claro u oscuro y letra grande del sistema.
+        await prepareLook(tester, look);
+      } else {
+        // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real). La pantalla es
+        // alta para que la lista de productos, que se arma a medida que se baja, esté toda dibujada.
+        tester.view.physicalSize = const Size(360 * 3, 2400 * 3);
+        tester.view.devicePixelRatio = 3;
+        tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+        addTearDown(() {
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+      }
 
       final repo = _FakeRepo()..build = build;
       final s = session ?? _session();
@@ -730,12 +737,98 @@ void main() {
             ChangeNotifierProvider<AuthProvider>.value(value: _auth(s)),
             ChangeNotifierProvider<ReportsProvider>.value(value: _provider(repo, session: s)),
           ],
-          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: ReportsPage())),
+          child: lookApp(look, home: const Scaffold(body: ReportsPage())),
         ),
       );
       await tester.pumpAndSettle();
       return repo;
     }
+
+    group('modo oscuro y letra grande en pantallas completas', () {
+      for (final base in screenLooks) {
+        // Una pantalla alta: la lista de productos se arma a medida que se baja.
+        final look = base.tall();
+
+        testWidgets('Ventas General con importes y margen (Ceo Empresa): ${base.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pump(tester, look: look);
+
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('Ventas General sin importes (jefe de almacén): ${base.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pump(tester, session: _session(roles: const ['jefe de almacén']), look: look);
+
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('Ventas General con el reporte del año anterior comparado: ${base.label}', (tester) async {
+          await pump(tester, look: look);
+          final compare = find.byType(Switch);
+          if (compare.evaluate().isNotEmpty) {
+            await tester.tap(compare.first);
+            await tester.pumpAndSettle();
+          }
+
+          await expectLooksRight(tester, look, contrast: false);
+        });
+      }
+    });
+
+    testWidgets('los filtros avanzados puestos salen como chips y cada "x" recarga el reporte', (tester) async {
+      tester.view.physicalSize = const Size(360 * 3, 2400 * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+      final repo = _FakeRepo();
+      final s = _session();
+      final reports = _provider(repo, session: s);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider(storage: _FakeThemeStorage())),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(s)),
+            ChangeNotifierProvider<ReportsProvider>.value(value: reports),
+          ],
+          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: ReportsPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Sin filtros avanzados no hay chips.
+      expect(find.byKey(const ValueKey('filtro-sucursales')), findsNothing);
+
+      await reports.applyFilters(reports.filters.copyWith(sucursales: ['1'], marcas: ['4', '5']));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sucursal: 1 elegidos'), findsNothing); // una sola sin catálogo: se cuenta
+      expect(find.text('Marcas: 2 elegidos'), findsOneWidget);
+      expect(find.byKey(const ValueKey('filtro-sucursales')), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+
+      await tester.ensureVisible(find.byTooltip('Quitar Marcas: 2 elegidos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Quitar Marcas: 2 elegidos'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.filters.marcas, isEmpty);
+      expect(repo.calls.last.filters.sucursales, ['1']);
+
+      // "Limpiar" solo sale con dos o más; quita todos los avanzados y deja el rango.
+      await reports.applyFilters(reports.filters.copyWith(marcas: ['4']));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+      expect(reports.advancedCount, 0);
+      expect(reports.range, ReportRange.esteMes);
+      expect(find.byKey(const ValueKey('filtros-limpiar')), findsNothing);
+    });
 
     testWidgets('muestra Ventas General: las cinco cifras, la gráfica y los productos', (tester) async {
       await pump(tester);

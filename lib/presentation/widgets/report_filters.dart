@@ -6,6 +6,64 @@ import '../components/components.dart';
 import '../providers/reports_provider.dart';
 import 'document_filters.dart';
 
+/// Los filtros avanzados del reporte que están puestos (sucursales, clientes, vendedores, marcas,
+/// categorías y departamentos), como chips que se quitan uno a uno. El rango de fechas no sale
+/// aquí porque ya se ve y se cambia en la fila de rangos de arriba ("Este mes" es el normal).
+List<AppActiveFilter> reportActiveFilters(ReportsProvider reports) {
+  final f = reports.filters;
+  final c = reports.catalogs;
+
+  String label(String single, String plural, List<String> ids, List<ReportOption> options) {
+    if (ids.length == 1) {
+      for (final o in options) {
+        if (o.id == ids.first) return '$single: ${o.name}';
+      }
+    }
+    return '$plural: ${ids.length} elegidos';
+  }
+
+  void change(SalesReportFilters value) => reports.applyFilters(value);
+
+  return [
+    if (f.sucursales.isNotEmpty)
+      AppActiveFilter(
+        id: 'sucursales',
+        label: label('Sucursal', 'Sucursales', f.sucursales, c.sucursales),
+        onRemove: () => change(f.copyWith(sucursales: const <String>[])),
+      ),
+    if (f.clientes.isNotEmpty)
+      AppActiveFilter(
+        id: 'clientes',
+        label: label('Cliente', 'Clientes', f.clientes, c.clientes),
+        onRemove: () => change(f.copyWith(clientes: const <String>[])),
+      ),
+    if (f.vendedores.isNotEmpty)
+      AppActiveFilter(
+        id: 'vendedores',
+        label: label('Vendedor', 'Vendedores', f.vendedores, c.vendedores),
+        onRemove: () => change(f.copyWith(vendedores: const <String>[])),
+      ),
+    if (f.marcas.isNotEmpty)
+      AppActiveFilter(
+        id: 'marcas',
+        label: label('Marca', 'Marcas', f.marcas, c.marcas),
+        onRemove: () => change(f.copyWith(marcas: const <String>[])),
+      ),
+    if (f.categorias.isNotEmpty)
+      AppActiveFilter(
+        id: 'categorias',
+        label: label('Categoría', 'Categorías', f.categorias, c.categorias),
+        onRemove: () => change(f.copyWith(categorias: const <String>[])),
+      ),
+    if (f.departamentos.isNotEmpty)
+      AppActiveFilter(
+        id: 'departamentos',
+        label: label('Departamento', 'Departamentos', f.departamentos, c.departamentos),
+        onRemove: () => change(f.copyWith(departamentos: const <String>[])),
+      ),
+  ];
+}
+
 /// Abre los filtros avanzados del reporte (fechas, sucursales, clientes, vendedores, marcas,
 /// categoría y departamentos) y los aplica al pulsar "Aplicar filtros".
 Future<void> showReportFilters(BuildContext context) async {

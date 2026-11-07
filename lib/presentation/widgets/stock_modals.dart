@@ -27,11 +27,14 @@ Future<bool?> showStockDetail(
   required String currencySymbol,
   bool canSeeCost = false,
   bool canSeePrice = false,
+  AppPaneController? pane,
 }) {
   final brightness = Theme.of(context).brightness;
 
   return showAppModal(
     context,
+    pane: pane,
+    paneId: s.productId,
     title: s.name,
     subtitle: 'Almacén: $warehouseName',
     icon: Icons.inventory_2_outlined,

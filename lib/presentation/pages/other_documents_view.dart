@@ -29,6 +29,9 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
   Timer? _debounce;
   late final TextEditingController _search;
 
+  /// Panel de detalle (tablet).
+  final _pane = AppPaneController();
+
   OtherDocumentKind get _kind => widget.kind;
 
   @override
@@ -44,6 +47,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
   void dispose() {
     _debounce?.cancel();
     _search.dispose();
+    _pane.dispose();
     super.dispose();
   }
 
@@ -93,6 +97,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
 
     final result = await context.read<OtherDocumentsProvider>().deleteTransfer(d);
     if (!mounted) return;
+    if (result.isRight && _pane.selectedId == d.id) _pane.close();
     _snack(result.isLeft ? result.left.message : 'Transferencia eliminada');
   }
 
@@ -115,6 +120,17 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
     final provider = context.watch<OtherDocumentsProvider>();
     final state = provider.stateOf(_kind);
 
+    // En tablet, la lista a la izquierda y el detalle a la derecha.
+    return AppMasterDetail(
+      controller: _pane,
+      emptyIcon: Icons.description_outlined,
+      emptyTitle: 'Selecciona un documento',
+      emptyMessage: 'Toca un documento para ver su detalle.',
+      listBuilder: (context) => _listPane(provider, state),
+    );
+  }
+
+  Widget _listPane(OtherDocumentsProvider provider, OtherDocumentsState state) {
     return Column(
       children: [
         AppSearchBar(
@@ -122,8 +138,9 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
           controller: _search,
           onChanged: _onSearchChanged,
           onFilter: _openFilters,
-          filterActive: provider.filtersActive(_kind),
+          filterCount: otherDocumentActiveFilters(provider, _kind).length,
         ),
+        AppActiveFilters(filters: otherDocumentActiveFilters(provider, _kind)),
         if (state.total > 0)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -169,6 +186,9 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
       itemBuilder: (context, d, number) => _card(context, d, number),
     );
   }
+
+  Future<void> _showDetail(OtherDocumentEntity d, bool amounts) =>
+      showOtherDocumentDetail(context, d, showAmounts: amounts, pane: _pane);
 
   Widget _card(BuildContext context, OtherDocumentEntity d, int number) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -216,11 +236,12 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
       trailingTitle: trailingTitle,
       trailingCaption: trailingCaption,
       trailingCaptionColor: trailingColor,
-      onTap: () => showOtherDocumentDetail(context, d, showAmounts: amounts),
+      selected: _pane.selectedId == d.id,
+      onTap: () => _showDetail(d, amounts),
       actions: [
         AppActionButton(
           type: AppActionType.view,
-          onPressed: () => showOtherDocumentDetail(context, d, showAmounts: amounts),
+          onPressed: () => _showDetail(d, amounts),
         ),
         if (d.comprobante != null)
           AppActionButton(

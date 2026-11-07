@@ -132,6 +132,9 @@ void main() {
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Más')));
     await tester.pumpAndSettle();
 
+    // Los módulos restantes salen como cuadrícula de íconos.
+    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byIcon(Icons.description_outlined), findsOneWidget);
     expect(find.text('Documentos'), findsOneWidget);
     expect(find.text('Productos'), findsOneWidget);
     expect(find.text('Clientes'), findsNothing);

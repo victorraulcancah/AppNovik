@@ -24,6 +24,9 @@ class ClientsPage extends StatefulWidget {
 class _ClientsPageState extends State<ClientsPage> {
   Timer? _debounce;
 
+  /// Panel de detalle (tablet).
+  final _pane = AppPaneController();
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +38,7 @@ class _ClientsPageState extends State<ClientsPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _pane.dispose();
     super.dispose();
   }
 
@@ -63,6 +67,71 @@ class _ClientsPageState extends State<ClientsPage> {
       loadCatalogs: provider.loadFilterCatalogs,
     );
     if (result != null) provider.setFilters(result);
+  }
+
+  /// Los filtros del panel que están puestos (sin contar la búsqueda), como chips que se quitan.
+  List<AppActiveFilter> _activeFilters(ClientListProvider provider) {
+    final f = provider.filters;
+    final catalogs = provider.filterCatalogs;
+
+    String chosen(String title, Set<String> ids, List<ClientFilterOption> options, {String? none, String? any}) {
+      if (ids.length == 1) {
+        final id = ids.first;
+        if (id == clientFilterNone && none != null) return none;
+        if (id == clientFilterAny && any != null) return any;
+        for (final o in options) {
+          if (o.id == id) return '$title: ${o.name}';
+        }
+      }
+      return '$title: ${ids.length} elegidos';
+    }
+
+    void change(ClientFiltersEntity value) => provider.setFilters(value);
+
+    return [
+      if (f.tipo != null)
+        AppActiveFilter(
+          id: 'tipo',
+          label: 'Tipo: ${f.tipo == 'e' ? 'Empresas' : 'Personas'}',
+          onRemove: () => change(f.copyWith(clearTipo: true)),
+        ),
+      if (f.estado != null)
+        AppActiveFilter(
+          id: 'estado',
+          label: 'Estado: ${f.estado! ? 'Activos' : 'Inactivos'}',
+          onRemove: () => change(f.copyWith(clearEstado: true)),
+        ),
+      if (f.categorias.isNotEmpty)
+        AppActiveFilter(
+          id: 'categorias',
+          label: chosen(
+            'Categoría',
+            f.categorias,
+            catalogs?.categorias ?? const [],
+            none: 'Sin categoría',
+            any: 'Con categoría',
+          ),
+          onRemove: () => change(f.copyWith(categorias: const {})),
+        ),
+      if (f.ejecutivos.isNotEmpty)
+        AppActiveFilter(
+          id: 'ejecutivos',
+          label: chosen(
+            'Ejecutivo',
+            f.ejecutivos,
+            catalogs?.ejecutivos ?? const [],
+            none: 'Sin ejecutivo',
+            any: 'Con ejecutivo',
+          ),
+          onRemove: () => change(f.copyWith(ejecutivos: const {})),
+        ),
+      if (f.departamentos.isNotEmpty)
+        AppActiveFilter(
+          id: 'departamentos',
+          label: chosen('Departamento', f.departamentos, catalogs?.departamentos ?? const []),
+          onRemove: () => change(f.copyWith(departamentos: const {})),
+        ),
+    ];
   }
 
   /// Qué pestañas del formulario puede usar el usuario (los mismos permisos de la web).
@@ -116,6 +185,7 @@ class _ClientsPageState extends State<ClientsPage> {
       client,
       canEdit: _canEdit,
       canSeePhone: _can('clientes.show-telefono'),
+      pane: _pane,
     );
     if (edit == true && mounted) _edit(client);
   }
@@ -199,21 +269,50 @@ class _ClientsPageState extends State<ClientsPage> {
     }
 
     final actions = _actions(provider);
+    return Column(
+      children: [
+        const AppPageHeader(
+          icon: Icons.people_alt_outlined,
+          title: 'Clientes',
+          subtitle: 'Personas y empresas a las que les vendes.',
+          trailing: AppAccountMenu(),
+        ),
+        // En tablet, la lista a la izquierda y el detalle del cliente a la derecha.
+        Expanded(
+          child: AppMasterDetail(
+            controller: _pane,
+            emptyIcon: Icons.people_alt_outlined,
+            emptyTitle: 'Selecciona un cliente',
+            emptyMessage: 'Toca un cliente para ver su detalle.',
+            listBuilder: (context) => _listPane(provider, actions),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _listPane(ClientListProvider provider, List<AppSpeedDialAction> actions) {
     return Stack(
       children: [
         Column(
           children: [
-            const AppPageHeader(
-              icon: Icons.people_alt_outlined,
-              title: 'Clientes',
-              subtitle: 'Personas y empresas a las que les vendes.',
-              trailing: AppAccountMenu(),
-            ),
             AppSearchBar(
               hint: 'Buscar por nombre, DNI/RUC, teléfono…',
               onChanged: _onSearchChanged,
               onFilter: _openFilters,
-              filterActive: provider.filters.panelActive,
+              filterCount: _activeFilters(provider).length,
+            ),
+            AppActiveFilters(
+              filters: _activeFilters(provider),
+              onClear: () => provider.setFilters(
+                provider.filters.copyWith(
+                  clearTipo: true,
+                  clearEstado: true,
+                  categorias: const {},
+                  ejecutivos: const {},
+                  departamentos: const {},
+                ),
+              ),
             ),
             _TypeCounters(provider: provider),
             Expanded(child: _body(provider)),
@@ -290,6 +389,7 @@ class _ClientsPageState extends State<ClientsPage> {
           ),
         ],
       ),
+      selected: _pane.selectedId == c.id,
       onTap: () => _detail(c),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => _detail(c)),

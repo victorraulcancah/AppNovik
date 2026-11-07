@@ -35,6 +35,9 @@ class DocumentsPage extends StatefulWidget {
 class _DocumentsPageState extends State<DocumentsPage> {
   Timer? _debounce;
 
+  /// Panel de detalle de las listas de ventas y cotizaciones (tablet).
+  final _pane = AppPaneController();
+
   /// La lista elegida: `venta`, `cotizacion` o el nombre de una [OtherDocumentKind].
   String? _selected;
 
@@ -74,6 +77,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _pane.dispose();
     super.dispose();
   }
 
@@ -103,6 +107,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   void _select(String id) {
+    _pane.close();
     setState(() => _selected = id);
     final kind = _documentKindOf(id);
     if (kind != null) context.read<DocumentsProvider>().selectKind(kind);
@@ -149,6 +154,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
 
     final result = await context.read<DocumentsProvider>().deleteDocument(d);
     if (!mounted) return;
+    if (result.isRight && _pane.selectedId == d.id) _pane.close();
     _snack(
       result.isLeft
           ? result.left.message
@@ -176,6 +182,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       context,
       d,
       primaryLabel: continuar ? 'Culminar venta o editar' : null,
+      pane: _pane,
     );
     if (result == true && mounted) _continueQuote(d);
   }
@@ -219,67 +226,84 @@ class _DocumentsPageState extends State<DocumentsPage> {
         : (options.isEmpty ? null : options.first.id);
     final otherKind = _otherKindOf(selected);
 
+    return Column(
+      children: [
+        const AppPageHeader(
+          icon: Icons.description_outlined,
+          title: 'Documentos',
+          subtitle: 'Ventas, cotizaciones y demás documentos de tu empresa.',
+          trailing: AppAccountMenu(),
+        ),
+        // Como en la web: un selector con todas las listas a las que se tiene acceso.
+        if (options.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: AppDropdownField<String>(
+              key: ValueKey('lista-$selected'),
+              label: 'Documentos',
+              value: selected,
+              items: [
+                for (final o in options)
+                  DropdownMenuItem(value: o.id, child: Text(o.label)),
+              ],
+              onChanged: (id) {
+                if (id != null) _select(id);
+              },
+            ),
+          ),
+        if (otherKind != null)
+          Expanded(
+            child: OtherDocumentsView(key: ValueKey(otherKind), kind: otherKind),
+          )
+        else
+          // Ventas y cotizaciones: en tablet, la lista a la izquierda y el detalle a la derecha.
+          Expanded(
+            child: AppMasterDetail(
+              controller: _pane,
+              emptyIcon: Icons.description_outlined,
+              emptyTitle: 'Selecciona un documento',
+              emptyMessage: 'Toca una venta o cotización para ver su detalle.',
+              listBuilder: (context) => _listPane(documents, options.isEmpty),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// La lista de ventas o cotizaciones: búsqueda, filtros, total, tarjetas y el botón "Acciones"
+  /// (abajo a la derecha de la lista, como en Productos).
+  Widget _listPane(DocumentsProvider documents, bool noAccess) {
     return Stack(
       children: [
         Column(
           children: [
-            const AppPageHeader(
-              icon: Icons.description_outlined,
-              title: 'Documentos',
-              subtitle:
-                  'Ventas, cotizaciones y demás documentos de tu empresa.',
-              trailing: AppAccountMenu(),
+            AppSearchBar(
+              hint: 'Buscar por número de documento',
+              onChanged: _onSearchChanged,
+              onFilter: () => showDocumentFilters(context),
+              filterCount: documentActiveFilters(documents).length,
             ),
-            // Como en la web: un selector con todas las listas a las que se tiene acceso.
-            if (options.length > 1)
+            AppActiveFilters(
+              filters: documentActiveFilters(documents),
+              onClear: documents.resetFilters,
+            ),
+            if (documents.total > 0)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: AppDropdownField<String>(
-                  key: ValueKey('lista-$selected'),
-                  label: 'Documentos',
-                  value: selected,
-                  items: [
-                    for (final o in options)
-                      DropdownMenuItem(value: o.id, child: Text(o.label)),
-                  ],
-                  onChanged: (id) {
-                    if (id != null) _select(id);
-                  },
-                ),
-              ),
-            if (otherKind != null)
-              Expanded(
-                child: OtherDocumentsView(
-                  key: ValueKey(otherKind),
-                  kind: otherKind,
-                ),
-              )
-            else ...[
-              AppSearchBar(
-                hint: 'Buscar por número de documento',
-                onChanged: _onSearchChanged,
-                onFilter: () => showDocumentFilters(context),
-                filterActive: documents.filtersActive,
-              ),
-              if (documents.total > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${documents.total} ${documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones'}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${documents.total} ${documents.kind == DocumentKind.venta ? 'ventas' : 'cotizaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-              Expanded(child: _body(documents, options.isEmpty)),
-            ],
+              ),
+            Expanded(child: _body(documents, noAccess)),
           ],
         ),
-        // Botón "Acciones": abajo a la derecha, sobre la lista, como en Productos.
-        if (otherKind == null && options.isNotEmpty)
+        if (!noAccess)
           Positioned(
             right: 16,
             bottom: 16,
@@ -358,6 +382,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       trailingTitle: formatMoney(d.monto, symbol: d.simboloMoneda),
       trailingCaption: status.label,
       trailingCaptionColor: statusColor,
+      selected: _pane.selectedId == d.id,
       onTap: () => _showDetail(d),
       actions: [
         AppActionButton(

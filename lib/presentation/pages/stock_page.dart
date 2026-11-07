@@ -28,6 +28,9 @@ class _StockPageState extends State<StockPage> {
   Timer? _debounce;
   final _searchController = TextEditingController();
 
+  /// Panel de detalle (tablet).
+  final _pane = AppPaneController();
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +43,7 @@ class _StockPageState extends State<StockPage> {
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _pane.dispose();
     super.dispose();
   }
 
@@ -94,6 +98,23 @@ class _StockPageState extends State<StockPage> {
       stock.setFilters(includeZero: result['productos'] != null, tipo: result['tipo']);
     }
   }
+
+  /// Los filtros del panel que están puestos, para mostrarlos como chips. "Solo con stock" es el
+  /// estado normal de la lista (como en la web), así que no cuenta como filtro.
+  List<AppActiveFilter> _activeFilters(StockProvider stock) => [
+        if (stock.tipo != null)
+          AppActiveFilter(
+            id: 'tipo',
+            label: 'Tipo: ${stock.tipo == 's' ? 'Servicios' : 'Productos'}',
+            onRemove: () => stock.setTipo(null),
+          ),
+        if (stock.includeZero)
+          AppActiveFilter(
+            id: 'sin-stock',
+            label: 'Incluye sin stock',
+            onRemove: () => stock.setIncludeZero(false),
+          ),
+      ];
 
   bool _can(String permission) =>
       context.read<AuthProvider>().session?.can(permission) ?? false;
@@ -212,16 +233,34 @@ class _StockPageState extends State<StockPage> {
       );
     }
 
+    return Column(
+      children: [
+        const AppPageHeader(
+          icon: Icons.inventory_2_outlined,
+          title: 'Stock',
+          subtitle: 'Existencias de cada producto por almacén.',
+          trailing: AppAccountMenu(),
+        ),
+        // En tablet, la lista a la izquierda y el detalle de existencias a la derecha.
+        Expanded(
+          child: AppMasterDetail(
+            controller: _pane,
+            emptyIcon: Icons.inventory_2_outlined,
+            emptyTitle: 'Selecciona un producto',
+            emptyMessage: 'Toca un producto para ver sus existencias.',
+            listBuilder: (context) => _listPane(stock, canListPrices, canSeeTotals, symbol),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// El selector de almacén, la búsqueda, las tarjetas y el botón "Acciones".
+  Widget _listPane(StockProvider stock, bool canListPrices, bool canSeeTotals, String symbol) {
     return Stack(
       children: [
         Column(
           children: [
-            const AppPageHeader(
-              icon: Icons.inventory_2_outlined,
-              title: 'Stock',
-              subtitle: 'Existencias de cada producto por almacén.',
-              trailing: AppAccountMenu(),
-            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Row(
@@ -237,7 +276,10 @@ class _StockPageState extends State<StockPage> {
                             child: Text(w.name, overflow: TextOverflow.ellipsis),
                           ),
                       ],
-                      onChanged: (id) => stock.selectWarehouse(id),
+                      onChanged: (id) {
+                        _pane.close();
+                        stock.selectWarehouse(id);
+                      },
                     ),
                   ),
                   if (canListPrices && stock.priceLists.isNotEmpty) ...[
@@ -253,7 +295,10 @@ class _StockPageState extends State<StockPage> {
                               child: Text(p.name, overflow: TextOverflow.ellipsis),
                             ),
                         ],
-                        onChanged: (id) => stock.selectPriceList(id),
+                        onChanged: (id) {
+                          _pane.close();
+                          stock.selectPriceList(id);
+                        },
                       ),
                     ),
                   ],
@@ -267,7 +312,11 @@ class _StockPageState extends State<StockPage> {
                 onChanged: _onSearchChanged,
                 onSubmitted: _onSearchSubmitted,
                 onFilter: _openFilters,
-                filterActive: stock.filtersActive,
+                filterCount: _activeFilters(stock).length,
+              ),
+              AppActiveFilters(
+                filters: _activeFilters(stock),
+                onClear: () => stock.setFilters(includeZero: false, tipo: null),
               ),
               AppSearchChips(
                 terms: stock.searchTerms,
@@ -365,6 +414,7 @@ class _StockPageState extends State<StockPage> {
       trailingTitle: stockLabel(s),
       trailingTitleColor: stockColor(s, brightness),
       trailingCaption: 'Total ${formatQuantity(s.stockTotal)}',
+      selected: _pane.selectedId == s.productId,
       onTap: () => _verDetalle(s, symbol),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => _verDetalle(s, symbol)),
@@ -407,6 +457,7 @@ class _StockPageState extends State<StockPage> {
       currencySymbol: symbol,
       canSeeCost: _can('almacenes.show.costo_promedio'),
       canSeePrice: _can('almacenes.show.precio'),
+      pane: _pane,
     );
   }
 }

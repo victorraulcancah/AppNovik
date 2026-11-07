@@ -15,6 +15,83 @@ String documentFilterRange(DocumentFilters f) => f.desde == null || f.hasta == n
     ? 'Todas las fechas'
     : '${documentFilterDate(f.desde!)} - ${documentFilterDate(f.hasta!)}';
 
+/// Los filtros avanzados que están puestos, como chips que se quitan uno a uno. "Los de hoy" es
+/// cómo se entra a la lista, así que no cuenta como filtro: la fecha sale como chip solo si es
+/// distinta de hoy (y quitarla vuelve a hoy). Cada lista muestra solo los filtros que su panel
+/// ofrece (las ventas, tipo y estado; las cotizaciones, su estado y su reserva).
+List<AppActiveFilter> documentActiveFilters(DocumentsProvider documents) {
+  final f = documents.filters;
+  final base = DocumentFilters.hoy(documents.now);
+  final isSale = documents.kind == DocumentKind.venta;
+  final catalogs = documents.catalogs;
+
+  String names(String single, String plural, List<int> ids, List<({int id, String name})> options) {
+    if (ids.length == 1) {
+      for (final o in options) {
+        if (o.id == ids.first) return '$single: ${o.name}';
+      }
+    }
+    return '$plural: ${ids.length} elegidos';
+  }
+
+  void change(DocumentFilters value) => documents.applyFilters(value);
+
+  return [
+    if (f.desde != base.desde || f.hasta != base.hasta)
+      AppActiveFilter(
+        id: 'fechas',
+        label: f.desde == null || f.hasta == null ? 'Todas las fechas' : documentFilterRange(f),
+        onRemove: () => change(f.copyWith(desde: base.desde, hasta: base.hasta)),
+      ),
+    if (f.sucursales.isNotEmpty)
+      AppActiveFilter(
+        id: 'sucursales',
+        label: names('Sucursal', 'Sucursales', f.sucursales, catalogs.sucursales),
+        onRemove: () => change(f.copyWith(sucursales: const <int>[])),
+      ),
+    if (f.vendedores.isNotEmpty)
+      AppActiveFilter(
+        id: 'vendedores',
+        label: names('Ejecutivo', 'Ejecutivos', f.vendedores, catalogs.vendedores),
+        onRemove: () => change(f.copyWith(vendedores: const <int>[])),
+      ),
+    if (f.clientes.isNotEmpty)
+      AppActiveFilter(
+        id: 'clientes',
+        label: names('Cliente', 'Clientes', f.clientes, catalogs.clientes),
+        onRemove: () => change(f.copyWith(clientes: const <int>[])),
+      ),
+    if (isSale && f.tipo != null)
+      AppActiveFilter(
+        id: 'tipo',
+        label: 'Tipo: ${switch (f.tipo!) {
+          DocumentTipo.boleta => 'Boleta',
+          DocumentTipo.factura => 'Factura',
+          DocumentTipo.notaVenta => 'Nota de venta',
+        }}',
+        onRemove: () => change(f.copyWith(tipo: null)),
+      ),
+    if (isSale && f.estado != null)
+      AppActiveFilter(
+        id: 'estado',
+        label: 'Estado: ${f.estado == DocumentEstado.activos ? 'Activos' : 'Eliminados'}',
+        onRemove: () => change(f.copyWith(estado: null)),
+      ),
+    if (!isSale && f.estadoCotizacion != DocumentQuoteState.todas)
+      AppActiveFilter(
+        id: 'estado-cotizacion',
+        label: 'Cotización: ${f.estadoCotizacion == DocumentQuoteState.pendientes ? 'Pendientes' : 'Procesadas'}',
+        onRemove: () => change(f.copyWith(estadoCotizacion: DocumentQuoteState.todas)),
+      ),
+    if (!isSale && f.reserva != DocumentReserve.todas)
+      AppActiveFilter(
+        id: 'reserva',
+        label: 'Stock: ${f.reserva == DocumentReserve.reservadas ? 'Reservadas' : 'No reservadas'}',
+        onRemove: () => change(f.copyWith(reserva: DocumentReserve.todas)),
+      ),
+  ];
+}
+
 /// Abre el panel de filtros avanzados y aplica lo elegido al pulsar "Aplicar filtros".
 Future<void> showDocumentFilters(BuildContext context) async {
   final documents = context.read<DocumentsProvider>();

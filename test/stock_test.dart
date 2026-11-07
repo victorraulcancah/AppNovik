@@ -18,6 +18,8 @@ import 'package:app_novik/domain/entities/user_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/presentation/pages/stock_add_page.dart';
+import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/stock_page.dart';
 import 'package:app_novik/presentation/pages/stock_transfer_page.dart';
 import 'package:app_novik/presentation/utils/import_file.dart';
@@ -1171,15 +1173,22 @@ void main() {
     void Function(_FakeStockRepository repo)? setUpRepo,
     StockProvider? provider,
     bool preload = true,
+    Size size = const Size(360, 780),
+    ScreenLook? look,
   }) async {
-    // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
-    tester.view.physicalSize = const Size(360 * 3, 780 * 3);
-    tester.view.devicePixelRatio = 3;
-    tester.platformDispatcher.textScaleFactorTestValue = 0.55;
-    addTearDown(() {
-      tester.view.reset();
-      tester.platformDispatcher.clearTextScaleFactorTestValue();
-    });
+    if (look != null) {
+      // Letra real (Roboto), modo claro u oscuro y letra grande del sistema.
+      await prepareLook(tester, look);
+    } else {
+      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+      tester.view.physicalSize = Size(size.width * 3, size.height * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+    }
 
     final repo = _FakeStockRepository();
     setUpRepo?.call(repo);
@@ -1198,10 +1207,7 @@ void main() {
           ),
           ChangeNotifierProvider<StockProvider>.value(value: stock),
         ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: page is StockPage ? Scaffold(body: page) : page,
-        ),
+        child: lookApp(look, home: page is StockPage ? Scaffold(body: page) : page),
       ),
     );
     await tester.pumpAndSettle();
@@ -1302,9 +1308,219 @@ void main() {
       expect(repo.calls.last.search, isEmpty);
     });
 
+    testWidgets('los filtros del panel salen como chips; "solo con stock" es lo normal y no cuenta', (tester) async {
+      final repo = await pumpPage(tester, const StockPage());
+      // Sin filtros no hay chips ni insignia con número.
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+      expect(find.byKey(const ValueKey('filtro-sin-stock')), findsNothing);
+
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Servicios').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Productos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Incluir los que no tienen stock').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver resultados'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
+      expect(find.text('Incluye sin stock'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+
+      // Quitar "Incluye sin stock" recarga solo con stock y deja el tipo.
+      await tester.ensureVisible(find.byTooltip('Quitar Incluye sin stock'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Quitar Incluye sin stock'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.includeZero, isFalse);
+      expect(repo.tipos.last, 's');
+      expect(find.text('Incluye sin stock'), findsNothing);
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
+
+      // Quitar el tipo recarga sin tipo y ya no queda ningún chip.
+      await tester.tap(find.byTooltip('Quitar Tipo: Servicios'));
+      await tester.pumpAndSettle();
+      expect(repo.tipos.last, isNull);
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+    });
+
+    testWidgets('"Limpiar" quita el tipo y el "incluye sin stock" con un solo pedido', (tester) async {
+      final repo = await pumpPage(tester, const StockPage());
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Servicios').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Productos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Incluir los que no tienen stock').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver resultados'));
+      await tester.pumpAndSettle();
+      final calls = repo.calls.length;
+
+      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls.length, calls + 1);
+      expect(repo.calls.last.includeZero, isFalse);
+      expect(repo.tipos.last, isNull);
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+    });
+
     testWidgets('la tarjeta ofrece Actualizar stock solo con stock.update', (tester) async {
       await pumpPage(tester, const StockPage(), permissions: const {'stock.show'});
       expect(find.byTooltip('Actualizar stock'), findsNothing);
+    });
+
+    group('modo oscuro y letra grande en pantallas completas', () {
+      void withItems(_FakeStockRepository repo) => repo.itemsOverride = const [
+            StockItemEntity(
+              productId: 5,
+              codigo: 'SUB-5',
+              name: 'SUBWOOFER DE 12 PULGADAS CON BOBINA DOBLE Y CAJA SELLADA',
+              marca: 'PIONEER PROFESSIONAL AUDIO',
+              disponible: 10,
+              costoPromedio: 8,
+              ultimoCosto: 9,
+              porDespachar: 2,
+              porRecibir: 3,
+            ),
+            StockItemEntity(
+              productId: 6,
+              codigo: 'TW-1',
+              name: 'TWEETER',
+              disponible: -2,
+            ),
+          ];
+
+      for (final look in screenLooks) {
+        testWidgets('lista de Stock con todas las acciones: ${look.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pumpPage(tester, const StockPage(), setUpRepo: withItems, look: look);
+
+          expect(find.byType(AppListCard), findsWidgets);
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('Stock sin acceso: ${look.label}', (tester) async {
+          await pumpPage(tester, const StockPage(), permissions: const {}, look: look);
+
+          expect(find.text('Sin acceso'), findsOneWidget);
+          await expectLooksRight(tester, look, contrast: false);
+        });
+
+        testWidgets('Agregar stock: ${look.label}', (tester) async {
+          await pumpPage(tester, const StockAddPage(), look: look);
+
+          await expectLooksRight(tester, look, contrast: false);
+        });
+
+        testWidgets('Transferir stock: ${look.label}', (tester) async {
+          await pumpPage(tester, const StockTransferPage(), look: look);
+
+          await expectLooksRight(tester, look, contrast: false);
+        });
+      }
+
+      testWidgets('el detalle de existencias se lee en modo oscuro con letra grande', (tester) async {
+        final handle = tester.ensureSemantics();
+        const look = ScreenLook(dark: true);
+        await pumpPage(tester, const StockPage(), setUpRepo: withItems, look: look);
+
+        await tester.tap(find.byTooltip('Ver detalle').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Stock total'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+    });
+
+    group('en tablet: lista a la izquierda y detalle a la derecha', () {
+      const tablet = Size(1100, 800);
+      void withItem(_FakeStockRepository repo) => repo.itemsOverride = const [
+            StockItemEntity(
+              productId: 5,
+              codigo: 'SUB-5',
+              name: 'SUBWOOFER 12',
+              disponible: 10,
+              costoPromedio: 8,
+              ultimoCosto: 9,
+            ),
+          ];
+
+      testWidgets('sin selección el panel pide elegir un producto', (tester) async {
+        await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+        expect(find.text('Selecciona un producto'), findsOneWidget);
+      });
+
+      testWidgets('tocar un producto muestra sus existencias a la derecha, sin modal', (tester) async {
+        await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+
+        await tester.tap(find.text('SUBWOOFER 12').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(find.text('Stock total'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(
+          tester.getTopLeft(find.text('Stock total')).dx,
+          greaterThan(tester.getTopLeft(find.text('SUBWOOFER 12').first).dx + 300),
+        );
+        expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
+      });
+
+      testWidgets('"Cerrar" vacía el panel', (tester) async {
+        await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+        await tester.tap(find.text('SUBWOOFER 12').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Cerrar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Stock total'), findsNothing);
+        expect(find.text('Selecciona un producto'), findsOneWidget);
+      });
+
+      testWidgets('actualizar el stock desde la tarjeta sigue funcionando', (tester) async {
+        final repo = await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+
+        await tester.tap(find.byTooltip('Actualizar stock'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const ValueKey('stock-nuevo')), '14');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Actualizar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.adds.single.items.single, (productId: 5, costo: 8.0, stock: 4));
+      });
+
+      testWidgets('el botón "Acciones" queda en la columna de la lista', (tester) async {
+        await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+        await tester.tap(find.text('SUBWOOFER 12').first);
+        await tester.pumpAndSettle();
+
+        expect(tester.getTopLeft(find.text('Acciones')).dx, lessThan(420));
+      });
+
+      testWidgets('en celular nada cambia: el detalle abre como modal', (tester) async {
+        await pumpPage(tester, const StockPage(), setUpRepo: withItem);
+
+        await tester.tap(find.text('SUBWOOFER 12'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+      });
     });
 
     group('Actualizar stock', () {

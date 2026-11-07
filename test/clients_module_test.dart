@@ -21,6 +21,7 @@ import 'package:app_novik/domain/repositories/client_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/client_record_usecases.dart';
 import 'package:app_novik/domain/usecases/client_usecases.dart';
+import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
 import 'package:app_novik/presentation/pages/clients_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/client_list_provider.dart';
@@ -652,6 +653,65 @@ void main() {
     });
   });
 
+  group('Pantalla de clientes: filtros activos', () {
+    testWidgets('el tipo y el estado salen como chips, el botón los cuenta y cada "x" recarga', (tester) async {
+      _tall(tester);
+      final env = await _pumpWithProvider(tester, {'clientes.index'});
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+
+      await env.provider.setFilters(
+        env.provider.filters.copyWith(tipo: 'e', estado: false),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tipo: Empresas'), findsOneWidget);
+      expect(find.text('Estado: Inactivos'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Quitar Estado: Inactivos'));
+      await tester.pumpAndSettle();
+      expect(env.provider.filters.estado, isNull);
+      expect(env.provider.filters.tipo, 'e');
+      expect(find.text('Estado: Inactivos'), findsNothing);
+    });
+
+    testWidgets('la búsqueda no cuenta como filtro y "Limpiar" la deja', (tester) async {
+      _tall(tester);
+      final env = await _pumpWithProvider(tester, {'clientes.index'});
+      await env.provider.setFilters(
+        env.provider.filters.copyWith(search: ['perez'], tipo: 'p', estado: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+
+      expect(env.provider.filters.tipo, isNull);
+      expect(env.provider.filters.estado, isNull);
+      expect(env.provider.filters.search, ['perez']);
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+    });
+
+    testWidgets('"sin" y "con" categoría se nombran sin necesitar el catálogo', (tester) async {
+      _tall(tester);
+      final env = await _pumpWithProvider(tester, {'clientes.index'});
+      await env.provider.setFilters(
+        env.provider.filters.copyWith(categorias: {clientFilterNone}, ejecutivos: {clientFilterAny}),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sin categoría'), findsOneWidget);
+      expect(find.text('Con ejecutivo'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Quitar Sin categoría'));
+      await tester.pumpAndSettle();
+      expect(env.provider.filters.categorias, isEmpty);
+      expect(env.provider.filters.ejecutivos, {clientFilterAny});
+    });
+  });
+
   group('Pantalla de clientes', () {
     testWidgets('lista los clientes con su categoría, estado y ejecutivo', (tester) async {
       await _pump(tester, const {'clientes.index', 'clientes.update'});
@@ -710,6 +770,86 @@ void main() {
       await tester.tap(find.textContaining('Contactos'));
       await tester.pumpAndSettle();
       expect(find.text('Luis Soto'), findsOneWidget);
+    });
+
+    group('en tablet: lista a la izquierda y detalle a la derecha', () {
+      void tablet(WidgetTester tester) {
+        tester.view.physicalSize = const Size(1100, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+      }
+
+      testWidgets('sin selección el panel pide elegir un cliente', (tester) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index'});
+        expect(find.text('Selecciona un cliente'), findsOneWidget);
+      });
+
+      testWidgets('tocar un cliente muestra su detalle a la derecha, sin modal', (tester) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index', 'clientes.update'});
+
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un cliente'), findsNothing);
+        expect(find.text('Línea de crédito'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(
+          tester.getTopLeft(find.text('Línea de crédito')).dx,
+          greaterThan(tester.getTopLeft(find.text('Ana Pérez').first).dx + 300),
+        );
+        expect(tester.widget<AppListCard>(find.byType(AppListCard).first).selected, isTrue);
+      });
+
+      testWidgets('las pestañas del detalle funcionan en el panel', (tester) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index', 'clientes.show-telefono'});
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Direcciones'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('AV. DOS 456'), findsOneWidget);
+      });
+
+      testWidgets('"Editar" del panel abre el formulario de edición', (tester) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index', 'clientes.update', 'clientes.update.contactos'});
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Editar cliente'), findsOneWidget);
+        expect(find.text('Línea de crédito'), findsNothing, reason: 'el panel se vació');
+      });
+
+      testWidgets('sin el permiso de editar no hay "Editar" en el panel', (tester) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index'});
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Línea de crédito'), findsOneWidget);
+        expect(find.widgetWithText(FilledButton, 'Editar'), findsNothing);
+      });
+
+      testWidgets('en celular nada cambia: el detalle abre como modal', (tester) async {
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await _pump(tester, const {'clientes.index'});
+
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un cliente'), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+      });
     });
 
     testWidgets('crear: las pestañas dependen de los permisos', (tester) async {
@@ -1129,12 +1269,18 @@ AuthProvider _auth(SessionContextEntity session) {
 
 /// Pantalla alta: el formulario es largo y las pruebas no desplazan.
 void _tall(WidgetTester tester) {
-  tester.view.physicalSize = const Size(900, 3000);
+  tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 }
 
 Future<_FakeRecordRepository> _pump(
+  WidgetTester tester,
+  Set<String> permissions, {
+  List<String> roles = const [],
+}) async => (await _pumpWithProvider(tester, permissions, roles: roles)).repo;
+
+Future<({_FakeRecordRepository repo, ClientListProvider provider})> _pumpWithProvider(
   WidgetTester tester,
   Set<String> permissions, {
   List<String> roles = const [],
@@ -1165,5 +1311,5 @@ Future<_FakeRecordRepository> _pump(
     ),
   );
   await tester.pumpAndSettle();
-  return repo;
+  return (repo: repo, provider: provider);
 }

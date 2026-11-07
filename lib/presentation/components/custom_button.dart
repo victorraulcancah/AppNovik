@@ -40,7 +40,16 @@ class AppButton extends StatelessWidget {
                     Icon(icon, size: 20),
                     const SizedBox(width: 8),
                   ],
-                  Text(label),
+                  // En un espacio angosto o con letra grande el texto baja a otra línea (y,
+                  // si aun así no cabe, se corta con "…") en vez de desbordar el botón.
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
       ),

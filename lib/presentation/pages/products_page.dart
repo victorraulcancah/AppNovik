@@ -36,6 +36,9 @@ class _ProductsPageState extends State<ProductsPage> {
   Timer? _debounce;
   final _searchController = TextEditingController();
 
+  /// Panel de detalle (tablet).
+  final _pane = AppPaneController();
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +51,7 @@ class _ProductsPageState extends State<ProductsPage> {
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _pane.dispose();
     super.dispose();
   }
 
@@ -138,6 +142,7 @@ class _ProductsPageState extends State<ProductsPage> {
       context,
       p,
       canEdit: _can('productos.update'),
+      pane: _pane,
     );
     if (editar == true && mounted) _editar(p);
   }
@@ -258,23 +263,46 @@ class _ProductsPageState extends State<ProductsPage> {
     final products = context.watch<ProductsProvider>();
     final actions = _actions();
 
+    return Column(
+      children: [
+        const AppPageHeader(
+          icon: Icons.category_outlined,
+          title: 'Productos',
+          subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
+          trailing: AppAccountMenu(),
+        ),
+        // En tablet, la lista a la izquierda y el detalle del producto a la derecha.
+        Expanded(
+          child: AppMasterDetail(
+            controller: _pane,
+            emptyIcon: Icons.category_outlined,
+            emptyTitle: 'Selecciona un producto',
+            emptyMessage: 'Toca un producto para ver su detalle.',
+            listBuilder: (context) => _listPane(products, actions),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// La lista: búsqueda, filtros, contadores, tarjetas y el botón "Acciones" abajo a la derecha
+  /// (sin acciones, no se muestra).
+  Widget _listPane(ProductsProvider products, List<AppSpeedDialAction> actions) {
     return Stack(
       children: [
         Column(
           children: [
-            const AppPageHeader(
-              icon: Icons.category_outlined,
-              title: 'Productos',
-              subtitle: 'Qué se compra y se vende, y en qué presentaciones.',
-              trailing: AppAccountMenu(),
-            ),
             AppSearchBar(
               hint: 'Buscar por nombre, código…',
               controller: _searchController,
               onChanged: _onSearchChanged,
               onSubmitted: _onSearchSubmitted,
               onFilter: _openFilters,
-              filterActive: products.filtersActive,
+              filterCount: _activeFilters(products).length,
+            ),
+            AppActiveFilters(
+              filters: _activeFilters(products),
+              onClear: () => products.setFilters(tipo: null, activo: null),
             ),
             AppSearchChips(
               terms: products.searchTerms,
@@ -285,7 +313,6 @@ class _ProductsPageState extends State<ProductsPage> {
             Expanded(child: _body(products)),
           ],
         ),
-        // Botón "Acciones": abajo a la derecha, sobre la lista (sin acciones, no se muestra).
         if (actions.isNotEmpty)
           Positioned(
             right: 16,
@@ -295,6 +322,22 @@ class _ProductsPageState extends State<ProductsPage> {
       ],
     );
   }
+
+  /// Los filtros del panel que están puestos (el tipo y el estado), para mostrarlos como chips.
+  List<AppActiveFilter> _activeFilters(ProductsProvider products) => [
+        if (products.tipo != null)
+          AppActiveFilter(
+            id: 'tipo',
+            label: 'Tipo: ${products.tipo == 's' ? 'Servicios' : 'Productos'}',
+            onRemove: () => products.setTipo(null),
+          ),
+        if (products.activo != null)
+          AppActiveFilter(
+            id: 'estado',
+            label: 'Estado: ${products.activo! ? 'Activos' : 'Inactivos'}',
+            onRemove: () => products.setActivo(null),
+          ),
+      ];
 
   /// Todos / Productos / Servicios: como en la web, son los números del servidor y tocarlos
   /// filtra por tipo.
@@ -381,6 +424,7 @@ class _ProductsPageState extends State<ProductsPage> {
       trailingCaptionColor: p.activo
           ? (dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
           : scheme.onSurfaceVariant,
+      selected: _pane.selectedId == p.id,
       onTap: () => _verDetalle(p),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => _verDetalle(p)),

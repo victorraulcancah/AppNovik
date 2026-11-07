@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../domain/entities/inicio_entity.dart';
+import '../../theme/app_theme.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inicio_provider.dart';
@@ -217,19 +218,22 @@ class _InicioPageState extends State<InicioPage> {
             loading: inicio.loading,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         body,
       ],
     );
   }
 }
 
-/// La pantalla de siempre: "Resumen de Ventas MES / AÑO" con el total y el de cada almacén.
+/// La pantalla de siempre: "Resumen de Ventas MES / AÑO" con el total y el de cada almacén. El total
+/// va grande en una cabecera con los colores de la marca y cada almacén con su parte del total.
 class _GeneralView extends StatelessWidget {
   final List<WarehouseSalesEntity> warehouses;
   final DateTime now;
 
   const _GeneralView({required this.warehouses, required this.now});
+
+  static String _money(double v) => 'S/. ${NumberFormat('#,##0.00', 'en_US').format(v)}';
 
   @override
   Widget build(BuildContext context) {
@@ -237,63 +241,118 @@ class _GeneralView extends StatelessWidget {
     final scheme = theme.colorScheme;
     final total = warehouses.fold<double>(0, (s, w) => s + w.total);
 
-    return AppEntrance(
-      child: InicioPanel(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final hero = ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppTheme.brandDark, AppTheme.brandDarkAlt],
+          ),
+        ),
+        child: Stack(
           children: [
-            Text(
-              'Resumen de Ventas ${monthsLong[now.month - 1].toUpperCase()} / ${now.year}',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Center(
-              child: AppCountUp(
-                value: total,
-                format: (v) => 'S/. ${NumberFormat('#,##0.00', 'en_US').format(v)}',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: scheme.onSurfaceVariant,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+            Positioned(
+              right: -34,
+              top: -46,
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.primary.withValues(alpha: 0.38)),
               ),
             ),
-            const SizedBox(height: 16),
-            if (warehouses.isEmpty)
-              const InicioEmpty(text: 'Sin almacenes para mostrar')
-            else
-              for (final w in warehouses)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.storefront, size: 18, color: Color(0xFF84CC16)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Almacén ${w.nombre}',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'S/. ${NumberFormat('#,##0.00', 'en_US').format(w.total)}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
+            Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Resumen de Ventas ${monthsLong[now.month - 1].toUpperCase()} / ${now.year}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: AppCountUp(
+                      value: total,
+                      format: _money,
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
+    );
+
+    Widget warehouseRow(WarehouseSalesEntity w) {
+      final share = total > 0 ? w.total / total * 100 : 0.0;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF84CC16).withValues(alpha: 0.16),
+                  ),
+                  child: const Icon(Icons.storefront, size: 18, color: Color(0xFF84CC16)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Almacén ${w.nombre}',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  _money(w.total),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            InicioProgressBar(percent: share, color: scheme.primary, height: 6),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppEntrance(child: hero),
+        const SizedBox(height: 16),
+        AppEntrance(
+          delay: const Duration(milliseconds: 80),
+          offset: 12,
+          child: InicioPanel(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),
+            child: warehouses.isEmpty
+                ? const InicioEmpty(text: 'Sin almacenes para mostrar')
+                : Column(children: [for (final w in warehouses) warehouseRow(w)]),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/inicio_entity.dart';
-import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
 import 'inicio_help.dart';
@@ -208,7 +207,7 @@ class _Indicators extends StatelessWidget {
   Widget build(BuildContext context) {
     final ind = data.indicadores;
     final prevYear = data.desdeAnterior.year;
-    return AppSection(
+    return InicioSection(
       title: 'Indicadores estratégicos (YTD)',
       icon: Icons.insights_outlined,
       trailing: Row(
@@ -293,7 +292,7 @@ class _Channels extends StatelessWidget {
     final scheme = theme.colorScheme;
     final total = channels.fold<int>(0, (s, c) => s + c.clientes);
 
-    return AppSection(
+    return InicioSection(
       title: 'Ventas por canal',
       icon: Icons.donut_large,
       trailing: InicioHelpButton(help: inicioChannelsHelp()),
@@ -408,7 +407,7 @@ class _Receivables extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppSection(
+    return InicioSection(
       title: 'Cuentas por cobrar',
       icon: Icons.request_quote_outlined,
       trailing: InicioHelpButton(help: inicioReceivablesHelp()),
@@ -451,7 +450,7 @@ class _Collections extends StatelessWidget {
     final totalSoles = sellers.fold<double>(0, (s, c) => s + c.soles);
     final totalDolares = sellers.fold<double>(0, (s, c) => s + c.dolares);
 
-    return AppSection(
+    return InicioSection(
       title: 'Cobro por vendedor',
       icon: Icons.payments_outlined,
       trailing: InicioHelpButton(help: inicioCollectionsHelp()),
@@ -590,7 +589,7 @@ class _IncomesState extends State<_Incomes> {
     final hasta = incomes.hastaAnterior;
     final compared = desde != null && hasta != null ? 'vs. ${shortRange(desde, hasta)}' : '';
 
-    return AppSection(
+    return InicioSection(
       title: 'Ingresos por entidad bancaria',
       icon: Icons.account_balance_outlined,
       trailing: Row(
@@ -612,7 +611,7 @@ class _IncomesState extends State<_Incomes> {
           if (incomes.metodos.isNotEmpty) ...[
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              style: inicioSegmentedStyle(context),
               segments: const [
                 ButtonSegment(value: false, label: Text('Soles')),
                 ButtonSegment(value: true, label: Text('Dólares')),
@@ -630,23 +629,28 @@ class _IncomesState extends State<_Incomes> {
                 [
                   InicioCell(m.metodo),
                   InicioCell(money(pick(m))),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 28,
-                        child: InicioProgressBar(
-                          percent: total > 0 ? pick(m) / total * 100 : 0,
-                          color: const Color(0xFF2563EB),
-                          height: 6,
+                  // Si la celda no alcanza (letra grande, pantalla angosta) se achica en vez de desbordar.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 28,
+                          child: InicioProgressBar(
+                            percent: total > 0 ? pick(m) / total * 100 : 0,
+                            color: const Color(0xFF2563EB),
+                            height: 6,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${(total > 0 ? pick(m) / total * 100 : 0).toStringAsFixed(1)}%',
-                        style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          '${(total > 0 ? pick(m) / total * 100 : 0).toStringAsFixed(1)}%',
+                          style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
             ],
@@ -727,7 +731,7 @@ class _NewClients extends StatelessWidget {
       ],
     );
 
-    return AppSection(
+    return InicioSection(
       title: 'Nuevos clientes',
       icon: Icons.person_add_alt_1_outlined,
       trailing: InicioHelpButton(help: inicioNewClientsHelp()),

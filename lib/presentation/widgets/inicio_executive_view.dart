@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/inicio_entity.dart';
-import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
 import 'inicio_help.dart';
@@ -94,19 +93,19 @@ class InicioExecutiveView extends StatelessWidget {
         evolution: data.evolucion,
         help: inicioExecutiveEvolutionHelp(),
       ),
-      AppSection(
+      InicioSection(
         title: 'Ventas por cliente',
         icon: Icons.group_outlined,
         trailing: InicioHelpButton(help: inicioTopHelp('Ventas por cliente', 'clientes')),
         child: InicioTopBars(items: data.topClientes),
       ),
-      AppSection(
+      InicioSection(
         title: 'Productos más vendidos',
         icon: Icons.inventory_2_outlined,
         trailing: InicioHelpButton(help: inicioTopHelp('Productos más vendidos', 'productos')),
         child: InicioTopBars(items: data.topProductos),
       ),
-      AppSection(
+      InicioSection(
         title: 'Venta por departamento',
         icon: Icons.map_outlined,
         trailing: InicioHelpButton(help: inicioTopHelp('Venta por departamento', 'departamentos (del cliente)')),
@@ -145,7 +144,7 @@ class _Opportunities extends StatelessWidget {
     String detail(StatusCountsEntity s) =>
         '${s.critico} críticos · ${s.riesgo} en riesgo · ${s.seguimiento} en seguimiento';
 
-    return AppSection(
+    return InicioSection(
       title: 'Oportunidades comerciales',
       icon: Icons.track_changes,
       trailing: InicioHelpButton(help: inicioExecutiveOpportunitiesHelp()),
@@ -220,7 +219,7 @@ class _TasksSectionState extends State<_TasksSection> {
       TaskPeriod.mes => 'para el mes',
     };
 
-    return AppSection(
+    return InicioSection(
       title: 'Mis tareas (${tasks.length})',
       icon: Icons.assignment_outlined,
       trailing: InicioHelpButton(help: inicioTasksHelp()),
@@ -229,7 +228,7 @@ class _TasksSectionState extends State<_TasksSection> {
         children: [
           SegmentedButton<TaskPeriod>(
             showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            style: inicioSegmentedStyle(context),
             segments: [for (final p in TaskPeriod.values) ButtonSegment(value: p, label: Text(p.label))],
             selected: {_period},
             onSelectionChanged: (s) => setState(() => _period = s.first),
@@ -245,6 +244,7 @@ class _TasksSectionState extends State<_TasksSection> {
                 label: Text('${typeLabel(_types[i])} (${count(_types[i])})'),
                 selected: _type == _types[i],
                 showCheckmark: false,
+                labelStyle: TextStyle(color: scheme.onSurface),
                 onSelected: (_) => setState(() => _type = _types[i]),
               ),
             ),
@@ -325,7 +325,7 @@ class _Birthdays extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return AppSection(
+    return InicioSection(
       title: oneMonth ? 'Cumpleaños de ${monthsLong[month - 1]}' : 'Cumpleaños del periodo',
       icon: Icons.cake_outlined,
       trailing: InicioHelpButton(help: inicioBirthdaysHelp()),

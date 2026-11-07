@@ -196,6 +196,10 @@ class ClientListProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Lo que ya se trajo para el panel de filtros (para ponerle nombre a los chips de filtros activos);
+  /// `null` hasta que se abre el panel por primera vez.
+  ClientFilterCatalogsEntity? get filterCatalogs => _filterCatalogs;
+
   /// Categorías, ejecutivos y departamentos que ofrece el filtro. Se piden una vez por empresa;
   /// si fallan, el filtro se abre con lo que haya (solo los filtros fijos: tipo y estado).
   Future<ClientFilterCatalogsEntity> loadFilterCatalogs() async {

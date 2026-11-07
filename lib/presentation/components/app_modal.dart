@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../theme/app_theme.dart';
+import 'app_master_detail.dart';
 import 'app_tabs.dart';
 import 'error_banner.dart';
 
@@ -60,6 +61,10 @@ extension on AppModalTone {
 ///   validar formularios por pestaña (`AppTabsController.validate`).
 /// - [error]: mensaje de error que se muestra fijo sobre el cuerpo (por
 ///   ejemplo, la respuesta del servidor al guardar).
+/// - [pane]: en pantallas con dos paneles (tablet) el modal no se abre: se dibuja en el panel
+///   de detalle (`AppMasterDetail`), con el mismo contenido y la misma respuesta. [paneId]
+///   identifica al elemento para resaltarlo en la lista. Sin panel o con poco ancho, se abre
+///   como siempre.
 Future<bool?> showAppModal(
   BuildContext context, {
   required String title,
@@ -75,12 +80,19 @@ Future<bool?> showAppModal(
   GlobalKey<FormState>? formKey,
   ValueListenable<bool>? primaryEnabled,
   ValueListenable<String?>? error,
+  AppPaneController? pane,
+  Object? paneId,
 }) {
   assert(child != null || (tabs != null && tabs.isNotEmpty), 'Pasa child o tabs');
   final isTablet =
       MediaQuery.sizeOf(context).width >= AppConstants.tabletBreakpoint;
 
-  Widget build(BuildContext ctx, {required bool handle}) => _AppModalContent(
+  Widget build(
+    BuildContext ctx, {
+    required bool handle,
+    bool fill = false,
+    void Function([bool? result])? onClose,
+  }) => _AppModalContent(
         title: title,
         subtitle: subtitle,
         icon: icon,
@@ -94,8 +106,20 @@ Future<bool?> showAppModal(
         tabs: tabs,
         tabsController: tabsController,
         showHandle: handle,
+        fill: fill,
+        onClose: onClose,
         child: child,
       );
+
+  // Dos paneles: el detalle va a la derecha, sin abrir nada encima.
+  if (pane != null && pane.isWide) {
+    return pane.present(
+      id: paneId,
+      builder: (close) => Builder(
+        builder: (ctx) => build(ctx, handle: false, fill: true, onClose: close),
+      ),
+    );
+  }
 
   if (isTablet) {
     return showDialog<bool>(
@@ -164,6 +188,12 @@ class _AppModalContent extends StatefulWidget {
   final List<AppTabItem>? tabs;
   final AppTabsController? tabsController;
   final bool showHandle;
+
+  /// En el panel de detalle ocupa todo el alto (el pie queda abajo).
+  final bool fill;
+
+  /// Cierra el contenido; sin él (modal normal) se cierra la ruta.
+  final void Function([bool? result])? onClose;
   final Widget? child;
 
   const _AppModalContent({
@@ -180,6 +210,8 @@ class _AppModalContent extends StatefulWidget {
     required this.tabs,
     required this.tabsController,
     required this.showHandle,
+    required this.fill,
+    required this.onClose,
     required this.child,
   });
 
@@ -209,10 +241,19 @@ class _AppModalContentState extends State<_AppModalContent> {
     setState(() => _busy = true);
     try {
       await widget.onPrimary?.call();
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) _close(true);
     } catch (_) {
       // El modal sigue abierto; quien llama muestra el error.
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _close([bool? result]) {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose(result);
+    } else {
+      Navigator.of(context).pop(result);
     }
   }
 
@@ -251,7 +292,7 @@ class _AppModalContentState extends State<_AppModalContent> {
     return Material(
       color: scheme.surfaceContainerLowest,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: widget.fill ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Cabecera con fondo: asa, ícono, título, subtítulo y cierre.
@@ -338,6 +379,7 @@ class _AppModalContentState extends State<_AppModalContent> {
                     ),
             ),
           Flexible(
+            fit: widget.fill ? FlexFit.tight : FlexFit.loose,
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: body,
@@ -361,7 +403,7 @@ class _AppModalContentState extends State<_AppModalContent> {
                           borderRadius: BorderRadius.circular(AppTheme.radius),
                         ),
                       ),
-                      onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                      onPressed: _busy ? null : () => _close(),
                       child: Text(widget.secondaryLabel),
                     ),
                   ),

@@ -16,7 +16,10 @@ import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/other_document_usecases.dart';
+import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/other_documents_view.dart';
+import 'package:app_novik/presentation/widgets/other_document_modals.dart' show otherDocumentActiveFilters;
 import 'package:app_novik/presentation/pdf/other_document_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/other_documents_provider.dart';
@@ -991,6 +994,81 @@ void main() {
     });
   });
 
+  group('filtros activos (chips) de las otras listas', () {
+    test('"hoy" es como se entra y no cuenta como filtro', () {
+      final provider = _provider(_FakeRepo());
+      expect(otherDocumentActiveFilters(provider, OtherDocumentKind.guia), isEmpty);
+    });
+
+    test('otro rango sale como chip y quitarlo vuelve a hoy', () async {
+      final repo = _FakeRepo();
+      final provider = _provider(repo);
+      await provider.applyFilters(
+        OtherDocumentKind.guia,
+        OtherDocumentFilters(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31)),
+      );
+
+      final chips = otherDocumentActiveFilters(provider, OtherDocumentKind.guia);
+      expect(chips, hasLength(1));
+      expect(chips.single.label, '01 oct. 2026 - 31 oct. 2026');
+      // Cada lista tiene los suyos: los de las guías no son los de los traslados.
+      expect(otherDocumentActiveFilters(provider, OtherDocumentKind.traslado), isEmpty);
+
+      chips.single.onRemove();
+      await Future<void>.delayed(Duration.zero);
+      final today = OtherDocumentFilters.hoy(provider.now());
+      expect(provider.stateOf(OtherDocumentKind.guia).filters.desde, today.desde);
+      expect(provider.stateOf(OtherDocumentKind.guia).filters.hasta, today.hasta);
+      expect(otherDocumentActiveFilters(provider, OtherDocumentKind.guia), isEmpty);
+    });
+
+    test('sin fechas se llama "Todas las fechas"', () async {
+      final provider = _provider(_FakeRepo());
+      await provider.applyFilters(OtherDocumentKind.traslado, const OtherDocumentFilters());
+      expect(otherDocumentActiveFilters(provider, OtherDocumentKind.traslado).single.label, 'Todas las fechas');
+    });
+
+    testWidgets('la lista muestra el chip y el botón cuenta el filtro', (tester) async {
+      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+      final repo = _FakeRepo();
+      final provider = _provider(repo);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider(storage: _FakeThemeStorage())),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(_session())),
+            ChangeNotifierProvider<OtherDocumentsProvider>.value(value: provider),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const Scaffold(body: OtherDocumentsView(kind: OtherDocumentKind.guia)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+
+      await provider.applyFilters(
+        OtherDocumentKind.guia,
+        OtherDocumentFilters(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('01 oct. 2026 - 31 oct. 2026'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Quitar 01 oct. 2026 - 31 oct. 2026'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('filtro-fechas')), findsNothing);
+      expect(repo.calls.last.filters.desde, OtherDocumentFilters.hoy(provider.now()).desde);
+    });
+  });
+
   group('OtherDocumentsView', () {
     Future<_FakeRepo> pump(
       WidgetTester tester,
@@ -999,15 +1077,22 @@ void main() {
       List<String> roles = const [],
       List<WarehouseEntity> warehouses = const [],
       OtherDocumentPageEntity Function(OtherDocumentKind, int)? build,
+      Size size = const Size(360, 780),
+      ScreenLook? look,
     }) async {
-      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
-      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
-      tester.view.devicePixelRatio = 3;
-      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
-      addTearDown(() {
-        tester.view.reset();
-        tester.platformDispatcher.clearTextScaleFactorTestValue();
-      });
+      if (look != null) {
+        // Letra real (Roboto), modo claro u oscuro y letra grande del sistema.
+        await prepareLook(tester, look);
+      } else {
+        // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+        tester.view.physicalSize = Size(size.width * 3, size.height * 3);
+        tester.view.devicePixelRatio = 3;
+        tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+        addTearDown(() {
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+      }
 
       final repo = _FakeRepo()..build = build;
       final session = _session(permissions: permissions, roles: roles, warehouses: warehouses);
@@ -1020,10 +1105,7 @@ void main() {
             ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
             ChangeNotifierProvider<OtherDocumentsProvider>.value(value: _provider(repo)),
           ],
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: Scaffold(body: OtherDocumentsView(kind: kind)),
-          ),
+          child: lookApp(look, home: Scaffold(body: OtherDocumentsView(kind: kind))),
         ),
       );
       await tester.pumpAndSettle();
@@ -1416,6 +1498,161 @@ void main() {
 
       expect(repo.calls.last.filters.desde, DateTime(2026, 10));
       expect(repo.calls.last.filters.hasta, DateTime(2026, 10, 31));
+    });
+
+    group('modo oscuro y letra grande en pantallas completas', () {
+      OtherDocumentPageEntity Function(OtherDocumentKind, int) withData(OtherDocumentKind kind) {
+        return switch (kind) {
+          OtherDocumentKind.guia => (k, p) => one(_guide(), k),
+          OtherDocumentKind.notaCredito => (k, p) => one(_creditNote(), k),
+          _ => (k, p) => OtherDocumentPageEntity(
+              items: [otherDocumentFromJson(_transfer(), k)],
+              currentPage: 1,
+              lastPage: 1,
+              total: 1,
+            ),
+        };
+      }
+
+      for (final kind in OtherDocumentKind.values) {
+        for (final look in screenLooks) {
+          testWidgets('${kind.label}: ${look.label}', (tester) async {
+            final handle = tester.ensureSemantics();
+            await pump(tester, kind, build: withData(kind), look: look);
+
+            expect(find.byType(AppListCard), findsWidgets);
+            await expectLooksRight(tester, look);
+            handle.dispose();
+          });
+        }
+      }
+
+      testWidgets('el detalle de un traslado se lee en modo oscuro con letra grande', (tester) async {
+        final handle = tester.ensureSemantics();
+        const look = ScreenLook(dark: true);
+        await pump(
+          tester,
+          OtherDocumentKind.traslado,
+          permissions: const {'despachos.transferir.update'},
+          roles: const ['Ceo Empresa'],
+          look: look,
+        );
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Desde'), findsOneWidget);
+        expect(find.text('Recibir'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+    });
+
+    group('en tablet: lista a la izquierda y detalle a la derecha', () {
+      const tablet = Size(1100, 800);
+
+      for (final kind in OtherDocumentKind.values) {
+        testWidgets('${kind.label}: sin selección el panel pide elegir un documento', (tester) async {
+          await pump(tester, kind, size: tablet);
+          expect(find.text('Selecciona un documento'), findsOneWidget);
+        });
+      }
+
+      testWidgets('traslados: el detalle sale a la derecha, sin modal, con cada producto', (tester) async {
+        await pump(tester, OtherDocumentKind.traslado, size: tablet);
+
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un documento'), findsNothing);
+        expect(find.text('Desde'), findsOneWidget);
+        expect(find.text('SUBWOOFER 12"'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(
+          tester.getTopLeft(find.text('Desde')).dx,
+          greaterThan(tester.getTopLeft(find.text('T001-0007').first).dx + 300),
+        );
+      });
+
+      testWidgets('la tarjeta elegida se resalta y el panel ofrece "Ver PDF"', (tester) async {
+        await pump(tester, OtherDocumentKind.traslado, size: tablet);
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<AppListCard>(find.byType(AppListCard).first).selected, isTrue);
+        expect(find.text('Ver PDF'), findsOneWidget);
+        expect(find.text('Cerrar'), findsOneWidget);
+      });
+
+      testWidgets('traslados: recibir un producto desde el panel lo marca Recibido y el panel sigue abierto', (tester) async {
+        final repo = await pump(
+          tester,
+          OtherDocumentKind.traslado,
+          permissions: const {'despachos.transferir.update'},
+          roles: const ['Ceo Empresa'],
+          size: tablet,
+        );
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Recibir'));
+        await tester.pumpAndSettle();
+        // La confirmación sí es un diálogo, encima del panel.
+        expect(find.text('¿Desea confirmar que recibió este producto?'), findsOneWidget);
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.received, [(1, 10)]);
+        expect(find.text('Recibir'), findsNothing);
+        expect(find.text('Desde'), findsOneWidget, reason: 'el detalle sigue a la vista');
+      });
+
+      testWidgets('guías: el panel ofrece el PDF de la guía y el de su comprobante', (tester) async {
+        await pump(
+          tester,
+          OtherDocumentKind.guia,
+          build: (kind, page) => one(_guide(), kind),
+          size: tablet,
+        );
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ver PDF'), findsOneWidget);
+        expect(find.byTooltip('Ver comprobante PDF'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+      });
+
+      testWidgets('eliminar un traslado abierto en el panel lo vacía', (tester) async {
+        final repo = await pump(
+          tester,
+          OtherDocumentKind.traslado,
+          permissions: const {'transferir-stock.destroy'},
+          size: tablet,
+        );
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+        expect(find.text('Desde'), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Eliminar'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Eliminar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.deleted, [1]);
+        expect(find.text('Desde'), findsNothing);
+        expect(find.text('Selecciona un documento'), findsOneWidget);
+      });
+
+      testWidgets('en celular nada cambia: el detalle abre como modal', (tester) async {
+        await pump(tester, OtherDocumentKind.traslado);
+
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un documento'), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+      });
     });
   });
 }

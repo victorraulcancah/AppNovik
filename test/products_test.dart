@@ -19,6 +19,8 @@ import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/product_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/product_usecases.dart';
+import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/products_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/products_provider.dart';
@@ -643,15 +645,22 @@ void main() {
       Future<PickedImportFile?> Function()? pickFile,
       Future<PickedPhoto?> Function()? pickPhoto,
       ProductEntity? existing,
+      Size size = const Size(360, 780),
+      ScreenLook? look,
     }) async {
-      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
-      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
-      tester.view.devicePixelRatio = 3;
-      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
-      addTearDown(() {
-        tester.view.reset();
-        tester.platformDispatcher.clearTextScaleFactorTestValue();
-      });
+      if (look != null) {
+        // Letra real (Roboto), modo claro u oscuro y letra grande del sistema.
+        await prepareLook(tester, look);
+      } else {
+        // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+        tester.view.physicalSize = Size(size.width * 3, size.height * 3);
+        tester.view.devicePixelRatio = 3;
+        tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+        addTearDown(() {
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+      }
 
       final repo = _FakeProductRepository();
       if (existing != null) {
@@ -685,8 +694,8 @@ void main() {
             ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
             ChangeNotifierProvider<ProductsProvider>.value(value: products),
           ],
-          child: MaterialApp(
-            theme: AppTheme.light,
+          child: lookApp(
+            look,
             home: Scaffold(
               body: ProductsPage(
                 pickFile: pickFile ?? pickImportFile,
@@ -1044,6 +1053,144 @@ void main() {
       );
       expect(repo.imports, isEmpty);
     });
+
+    group('modo oscuro y letra grande en pantallas completas', () {
+      const largo = ProductEntity(
+        id: 1,
+        codigo: 'P-0001-LARGO',
+        name: 'TUBO DE PVC PARA DESAGÜE DE 4 PULGADAS CON EMPAQUE DE JEBE Y ANILLO',
+        marca: 'MARCA INTERNACIONAL DE TUBERÍAS',
+        categoria: 'TUBERÍAS Y ACCESORIOS DE PLOMERÍA',
+        unidad: 'UNIDAD',
+        sku: 'SKU-1',
+        marcaId: 1,
+        categoriaId: 1,
+        proveedorId: 1,
+        canalId: 1,
+        giroNegocioId: 1,
+      );
+
+      for (final look in screenLooks) {
+        testWidgets('lista de Productos con todas las acciones: ${look.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pump(tester, todo, existing: largo, look: look);
+
+          expect(find.byType(AppListCard), findsOneWidget);
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('Productos con el menú de acciones abierto: ${look.label}', (tester) async {
+          await pump(tester, todo, existing: largo, look: look);
+
+          await tester.tap(find.text('Acciones'));
+          await tester.pumpAndSettle();
+
+          await expectLooksRight(tester, look, contrast: false);
+        });
+
+        testWidgets('formulario de crear producto: ${look.label}', (tester) async {
+          await pump(tester, todo, existing: largo, look: look);
+          await tester.tap(find.text('Acciones'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Crear'));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(Form), findsWidgets);
+          await expectLooksRight(tester, look, contrast: false);
+        });
+      }
+
+      testWidgets('el detalle del producto se lee en modo oscuro con letra grande', (tester) async {
+        final handle = tester.ensureSemantics();
+        const look = ScreenLook(dark: true);
+        await pump(tester, todo, existing: largo, look: look);
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('U. de medida'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+    });
+
+    group('en tablet: lista a la izquierda y detalle a la derecha', () {
+      const tablet = Size(1100, 800);
+      const producto = ProductEntity(
+        id: 1,
+        codigo: 'P1',
+        name: 'Producto 1',
+        sku: 'SKU-1',
+        marcaId: 1,
+        categoriaId: 1,
+        proveedorId: 1,
+        canalId: 1,
+        giroNegocioId: 1,
+      );
+
+      testWidgets('sin selección el panel pide elegir un producto', (tester) async {
+        await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+        expect(find.text('Selecciona un producto'), findsOneWidget);
+      });
+
+      testWidgets('tocar un producto muestra su detalle a la derecha, sin modal', (tester) async {
+        await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(find.text('U. de medida'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(
+          tester.getTopLeft(find.text('U. de medida')).dx,
+          greaterThan(tester.getTopLeft(find.text('Producto 1').first).dx + 300),
+        );
+        expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
+      });
+
+      testWidgets('"Editar" del panel abre el formulario y deja el panel vacío', (tester) async {
+        await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        expect(find.widgetWithText(FilledButton, 'Guardar cambios'), findsOneWidget);
+        expect(find.text('U. de medida'), findsNothing);
+      });
+
+      testWidgets('sin el permiso de editar el panel no ofrece "Editar"', (tester) async {
+        await pump(tester, const {}, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('U. de medida'), findsOneWidget);
+        expect(find.widgetWithText(FilledButton, 'Editar'), findsNothing);
+      });
+
+      testWidgets('el botón "Acciones" queda en la lista y no tapa el detalle', (tester) async {
+        await pump(tester, todo, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+
+        final dial = tester.getTopLeft(find.text('Acciones'));
+        expect(dial.dx, lessThan(420), reason: 'dentro de la columna de la lista');
+      });
+
+      testWidgets('en celular nada cambia: el detalle abre como modal', (tester) async {
+        await pump(tester, const {'productos.update'}, existing: producto);
+
+        await tester.tap(find.text('Producto 1'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+      });
+    });
   });
   group('Productos: estado, contadores y términos de búsqueda', () {
     late _FakeProductRepository repo;
@@ -1332,6 +1479,59 @@ void main() {
 
       expect(find.byKey(const ValueKey('chip-tubo pvc')), findsNothing);
       expect(env.repo.calls.last.$3, isEmpty);
+    });
+
+    testWidgets('los filtros puestos salen como chips, el botón los cuenta y cada "x" recarga', (tester) async {
+      final env = await pump(tester);
+      // Sin filtros no hay chips ni cuenta.
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+      expect(find.byKey(const ValueKey('filtro-estado')), findsNothing);
+
+      await env.products.setFilters(tipo: 's', activo: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
+      expect(find.text('Estado: Inactivos'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('filtros-limpiar')), findsOneWidget);
+
+      // Quitar el estado recarga sin él y deja el tipo.
+      // La fila de chips se desplaza hacia el lado: con la fuente ancha de las pruebas el chip queda fuera de vista.
+      await tester.ensureVisible(find.byTooltip('Quitar Estado: Inactivos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Quitar Estado: Inactivos'));
+      await tester.pumpAndSettle();
+      expect(env.repo.activos.last, isNull);
+      expect(env.products.tipo, 's');
+      expect(find.text('Estado: Inactivos'), findsNothing);
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget);
+      // Con un solo filtro ya no sale "Limpiar".
+      expect(find.byKey(const ValueKey('filtros-limpiar')), findsNothing);
+    });
+
+    testWidgets('"Limpiar" quita todos los filtros con un solo pedido', (tester) async {
+      final env = await pump(tester);
+      await env.products.setFilters(tipo: 'p', activo: true);
+      await tester.pumpAndSettle();
+      final calls = env.repo.calls.length;
+
+      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.calls.length, calls + 1);
+      expect(env.repo.calls.last.$4, isNull);
+      expect(env.repo.activos.last, isNull);
+      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
+      expect(find.byType(Badge), findsOneWidget);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+    });
+
+    testWidgets('tocar un contador también pone el chip de tipo', (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Servicios: 3'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
     });
   });
 

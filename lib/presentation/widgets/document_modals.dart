@@ -27,11 +27,18 @@ String _dateTime(DateTime? d) =>
 }
 
 /// Modal "ver detalle" de una venta o cotización: general, productos y pagos.
-Future<bool?> showDocumentDetail(BuildContext context, DocumentEntity d, {String? primaryLabel}) {
+Future<bool?> showDocumentDetail(
+  BuildContext context,
+  DocumentEntity d, {
+  String? primaryLabel,
+  AppPaneController? pane,
+}) {
   final status = documentStatus(d);
 
   return showAppModal(
     context,
+    pane: pane,
+    paneId: d.id,
     title: d.numero,
     subtitle: d.cliente,
     icon: d.kind == DocumentKind.cotizacion

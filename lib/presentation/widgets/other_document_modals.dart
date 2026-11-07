@@ -38,6 +38,25 @@ String _date(DateTime? d) => d == null ? '—' : _dateTime.format(d);
 
 String _day(DateTime? d) => d == null ? '—' : documentFilterDate(d);
 
+/// El filtro de fechas de guías, notas de crédito, traslados y entradas de stock como chip. "Hoy"
+/// es cómo se entra a la lista, así que no cuenta; cualquier otro rango (o todas las fechas) sí,
+/// y quitarlo vuelve a hoy.
+List<AppActiveFilter> otherDocumentActiveFilters(
+  OtherDocumentsProvider provider,
+  OtherDocumentKind kind,
+) {
+  final f = provider.stateOf(kind).filters;
+  final today = OtherDocumentFilters.hoy(provider.now());
+  if (f.desde == today.desde && f.hasta == today.hasta) return const [];
+  return [
+    AppActiveFilter(
+      id: 'fechas',
+      label: f.hasRange ? '${documentFilterDate(f.desde!)} - ${documentFilterDate(f.hasta!)}' : 'Todas las fechas',
+      onRemove: () => provider.applyFilters(kind, today),
+    ),
+  ];
+}
+
 String _kg(double v) => '${formatQuantity(v)} KG.';
 
 /// El detalle de un traslado, guía, nota de crédito o entrada de stock, con lo mismo que
@@ -47,12 +66,15 @@ Future<void> showOtherDocumentDetail(
   BuildContext context,
   OtherDocumentEntity d, {
   bool showAmounts = true,
+  AppPaneController? pane,
 }) async {
   final canOpenReceipt = d.comprobante != null;
   final canOpenPdf = otherDocumentPdfAvailable(d);
 
   final abrir = await showAppModal(
     context,
+    pane: pane,
+    paneId: d.id,
     title: d.numero,
     subtitle: d.kind.label,
     icon: switch (d.kind) {

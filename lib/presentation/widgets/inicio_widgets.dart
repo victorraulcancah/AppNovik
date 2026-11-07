@@ -12,7 +12,8 @@ import 'inicio_help.dart';
 const _blue = Color(0xFF3B82F6);
 const _tabular = [FontFeature.tabularFigures()];
 
-/// Saludo según la hora y el texto del rol.
+/// Saludo según la hora y el texto del rol: la cabecera de Inicio, con el degradado de la marca
+/// (azul marino con destellos naranjas), legible en claro y oscuro.
 class InicioGreeting extends StatelessWidget {
   final ({String icon, String title, String text}) greeting;
   final String? subtitle;
@@ -23,29 +24,69 @@ class InicioGreeting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(greeting.icon, style: const TextStyle(fontSize: 28)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(greeting.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-              Text(
-                subtitle == null ? greeting.text : '${greeting.text} · $subtitle',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ],
+    Widget blob(double size, double alpha) => Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.primary.withValues(alpha: alpha)),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppTheme.brandDark, AppTheme.brandDarkAlt],
           ),
         ),
-        if (loading)
-          const Padding(
-            padding: EdgeInsets.only(top: 6, left: 8),
-            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.4)),
-          ),
-      ],
+        child: Stack(
+          children: [
+            Positioned(right: -34, top: -46, child: blob(130, 0.38)),
+            Positioned(right: 46, bottom: -56, child: blob(96, 0.16)),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.12)),
+                    child: Text(greeting.icon, style: const TextStyle(fontSize: 26)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting.title,
+                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: Colors.white),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle == null ? greeting.text : '${greeting.text} · $subtitle',
+                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.78)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (loading)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -62,12 +103,31 @@ class InicioViewSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     return SegmentedButton<InicioView>(
       showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      style: inicioSegmentedStyle(context),
       segments: [for (final v in views) ButtonSegment(value: v, label: Text(v.label))],
       selected: {selected},
       onSelectionChanged: (s) => onChanged(s.first),
     );
   }
+}
+
+/// Estilo de los segmentos de Inicio: compactos, con el segmento elegido bien marcado (azul marino de
+/// la marca, o pizarra en oscuro, con texto blanco) y los demás en gris suave.
+ButtonStyle inicioSegmentedStyle(BuildContext context) {
+  final scheme = Theme.of(context).colorScheme;
+  final dark = scheme.brightness == Brightness.dark;
+  final selectedBackground = dark ? AppTheme.navIndicator : AppTheme.brandDark;
+  const selectedForeground = Colors.white;
+  return ButtonStyle(
+    visualDensity: VisualDensity.compact,
+    backgroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.selected) ? selectedBackground : scheme.surfaceContainerHigh,
+    ),
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.selected) ? selectedForeground : scheme.onSurface,
+    ),
+    side: WidgetStatePropertyAll(BorderSide(color: scheme.outlineVariant)),
+  );
 }
 
 /// Tarjeta sin título (para lo que lleva su propio encabezado).
@@ -76,7 +136,7 @@ class InicioPanel extends StatelessWidget {
   final Color? color;
   final EdgeInsetsGeometry padding;
 
-  const InicioPanel({super.key, required this.child, this.color, this.padding = const EdgeInsets.all(14)});
+  const InicioPanel({super.key, required this.child, this.color, this.padding = const EdgeInsets.all(16)});
 
   @override
   Widget build(BuildContext context) {
@@ -85,10 +145,56 @@ class InicioPanel extends StatelessWidget {
       color: color ?? scheme.surfaceContainerLowest,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+/// Bloque de un resumen: título con su ícono en un círculo de color y el contenido en una tarjeta
+/// aireada. Es el `AppSection` de siempre con el aire y los colores de Inicio.
+class InicioSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  /// Algo a la derecha del título (una leyenda, la ayuda, un contador).
+  final Widget? trailing;
+
+  const InicioSection({super.key, required this.title, required this.icon, required this.child, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 16, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              ),
+              ?trailing,
+            ],
+          ),
+        ),
+        InicioPanel(child: child),
+      ],
     );
   }
 }
@@ -123,8 +229,9 @@ class InicioProgressBar extends StatelessWidget {
   }
 }
 
-/// Ventas del rango contra la meta: el monto y el % grandes, la barra, el mensaje motivador y,
-/// debajo, lo que cada resumen quiera agregar ([footer]).
+/// Ventas del rango contra la meta: el anillo de avance como protagonista (con el color del
+/// semáforo), el monto grande, cuánto falta, el mensaje motivador y, debajo, lo que cada resumen
+/// quiera agregar ([footer]).
 class InicioGoalCard extends StatelessWidget {
   final InicioView view;
   final String title;
@@ -166,89 +273,85 @@ class InicioGoalCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final light = goalColor(meta.semaforo);
     final avance = meta.avance;
-    final message = meta.hasGoal && avance != null ? goalMessage(view, avance, name) : null;
+    final hasGoal = meta.hasGoal && avance != null;
+    final message = hasGoal ? goalMessage(view, avance, name) : null;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+
+    final amount = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: AppCountUp(
+        value: total,
+        format: (v) => soles(v, decimals),
+        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, fontFeatures: _tabular),
+      ),
+    );
+
+    final figures = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        amount,
+        if (comparison != null) ...[const SizedBox(height: 2), Text(comparison!, style: muted)],
+        const SizedBox(height: 6),
+        if (meta.hasGoal) ...[
+          Text('Meta: ${soles(meta.monto)}', style: muted),
+          Text(
+            meta.falta > 0 ? 'Faltan ${soles(meta.falta, decimals)}' : '¡Meta cumplida!',
+            style: muted?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ] else
+          Text(noGoalText, style: muted),
+      ],
+    );
 
     return InicioPanel(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(color: _blue, shape: BoxShape.circle),
-                child: const Icon(Icons.track_changes, color: Colors.white, size: 22),
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFFB7832), Color(0xFFD64A06)],
+                  ),
+                ),
+                child: const Icon(Icons.track_changes, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
-                  style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               if (help != null) InicioHelpButton(help: help!),
               if (showVariation) AppVariationBadge(value: variation),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: AppCountUp(
-                    value: total,
-                    format: (v) => soles(v, decimals),
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: _tabular,
-                    ),
-                  ),
-                ),
-              ),
-              if (meta.hasGoal && avance != null) ...[
-                const SizedBox(width: 12),
-                Text(
-                  '${avance.toStringAsFixed(1)}%',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: light,
-                    fontFeatures: _tabular,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (comparison != null)
-            Text(comparison!, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          if (meta.hasGoal)
+          const SizedBox(height: 16),
+          if (hasGoal)
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    'Meta: ${soles(meta.monto)}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-                Text(
-                  meta.falta > 0 ? 'Faltan ${soles(meta.falta, decimals)}' : '¡Meta cumplida!',
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
+                InicioGoalRing(percent: avance, color: light),
+                const SizedBox(width: 18),
+                Expanded(child: figures),
               ],
             )
           else
-            Text(noGoalText, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-          if (meta.hasGoal) ...[
-            const SizedBox(height: 8),
-            InicioProgressBar(percent: avance ?? 0, color: light),
-          ],
+            figures,
           if (message != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _GoalMessage(view: view, message: message, avance: avance ?? 0, name: name),
           ],
           ...footer,
@@ -256,6 +359,77 @@ class InicioGoalCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Anillo de avance de la meta: el arco se dibuja al aparecer, con el color del semáforo, y el
+/// porcentaje va al centro. Con "quitar animaciones" sale completo de entrada.
+class InicioGoalRing extends StatelessWidget {
+  final double percent;
+  final Color color;
+  final double size;
+
+  const InicioGoalRing({super.key, required this.percent, required this.color, this.size = 116});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final target = (percent / 100).clamp(0.0, 1.0);
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final label = Padding(
+      padding: EdgeInsets.all(size * 0.2),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          '${percent.toStringAsFixed(1)}%',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: color,
+            fontFeatures: _tabular,
+          ),
+        ),
+      ),
+    );
+    return SizedBox(
+      width: size,
+      height: size,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: reduce ? target : 0, end: target),
+        duration: reduce ? Duration.zero : const Duration(milliseconds: 900),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) => CustomPaint(
+          painter: _RingPainter(progress: value, color: color, track: theme.colorScheme.surfaceContainerHigh),
+          child: child,
+        ),
+        child: Center(child: label),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color track;
+
+  _RingPainter({required this.progress, required this.color, required this.track});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = size.width * 0.11;
+    final rect = Offset(stroke / 2, stroke / 2) & Size(size.width - stroke, size.height - stroke);
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, 0, 6.283185307179586, false, base..color = track);
+    if (progress > 0) {
+      canvas.drawArc(rect, -1.5707963267948966, 6.283185307179586 * progress, false, base..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress || old.color != color || old.track != track;
 }
 
 class _GoalMessage extends StatelessWidget {
@@ -419,7 +593,7 @@ class InicioKpi extends StatelessWidget {
   }
 }
 
-/// Dos datos lado a lado, separados de lo de arriba por una línea.
+/// Dos datos lado a lado, cada uno en su ficha de color suave.
 class InicioKpiRow extends StatelessWidget {
   final List<Widget> children;
 
@@ -428,18 +602,27 @@ class InicioKpiRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.only(top: 12),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant))),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) const SizedBox(width: 12),
-            Expanded(child: children[i]),
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: children[i],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -468,7 +651,7 @@ class InicioEvolution extends StatelessWidget {
       ],
     );
 
-    return AppSection(
+    return InicioSection(
       title: title,
       icon: Icons.bar_chart,
       trailing: Row(
@@ -494,7 +677,8 @@ class InicioEvolution extends StatelessWidget {
 }
 
 /// Tabla compacta: encabezado y filas; la primera columna a la izquierda y el resto a la derecha.
-class InicioTable extends StatelessWidget {
+/// Con más de [collapsedRows] filas muestra las primeras y un botón "Ver más".
+class InicioTable extends StatefulWidget {
   final List<String> columns;
   final List<List<Widget>> rows;
   final String emptyText;
@@ -505,6 +689,9 @@ class InicioTable extends StatelessWidget {
   /// Al tocar una fila (con su posición); `null`: filas sin acción.
   final ValueChanged<int>? onTap;
 
+  /// Cuántas filas se ven antes de "Ver más".
+  final int collapsedRows;
+
   const InicioTable({
     super.key,
     required this.columns,
@@ -512,27 +699,36 @@ class InicioTable extends StatelessWidget {
     required this.emptyText,
     this.firstFlex = 4,
     this.onTap,
+    this.collapsedRows = 6,
   });
+
+  @override
+  State<InicioTable> createState() => _InicioTableState();
+}
+
+class _InicioTableState extends State<InicioTable> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    if (rows.isEmpty) return InicioEmpty(text: emptyText);
+    final rows = widget.rows;
+    if (rows.isEmpty) return InicioEmpty(text: widget.emptyText);
 
     Widget line(List<Widget> cells, {int? index}) {
       final row = Row(
         children: [
           for (var i = 0; i < cells.length; i++)
             Expanded(
-              flex: i == 0 ? firstFlex : 3,
+              flex: i == 0 ? widget.firstFlex : 3,
               child: Align(alignment: i == 0 ? Alignment.centerLeft : Alignment.centerRight, child: cells[i]),
             ),
         ],
       );
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: index != null && onTap != null ? InkWell(onTap: () => onTap!(index), child: row) : row,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: index != null && widget.onTap != null ? InkWell(onTap: () => widget.onTap!(index), child: row) : row,
       );
     }
 
@@ -541,14 +737,31 @@ class InicioTable extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
 
-    return Column(
-      children: [
-        line([for (final c in columns) Text(c, style: headStyle, maxLines: 1, overflow: TextOverflow.ellipsis)]),
-        for (var i = 0; i < rows.length; i++) ...[
-          Divider(height: 1, color: scheme.outlineVariant),
-          line(rows[i], index: i),
+    final collapsible = rows.length > widget.collapsedRows;
+    final visible = collapsible && !_expanded ? widget.collapsedRows : rows.length;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: Column(
+        children: [
+          line([for (final c in widget.columns) Text(c, style: headStyle, maxLines: 1, overflow: TextOverflow.ellipsis)]),
+          for (var i = 0; i < visible; i++) ...[
+            Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.7)),
+            line(rows[i], index: i),
+          ],
+          if (collapsible)
+            Align(
+              alignment: Alignment.center,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18),
+                label: Text(_expanded ? 'Ver menos' : 'Ver más (${rows.length - widget.collapsedRows})'),
+              ),
+            ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -679,7 +892,12 @@ class InicioOpportunity extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              Icon(icon, size: 34, color: color),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: dark ? 0.26 : 0.16)),
+                child: Icon(icon, size: 28, color: color),
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -769,7 +987,7 @@ class InicioSellerGoals extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppSection(
+    return InicioSection(
       title: title,
       icon: Icons.track_changes,
       trailing: help == null ? null : InicioHelpButton(help: help!),
@@ -803,7 +1021,7 @@ class InicioDepartments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AppSection(
+    return InicioSection(
       title: 'Ventas por departamento',
       icon: Icons.map_outlined,
       trailing: help == null ? null : InicioHelpButton(help: help!),
@@ -851,7 +1069,7 @@ class InicioFallClients extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppSection(
+    return InicioSection(
       title: 'Clientes con mayor caída',
       icon: Icons.group_outlined,
       trailing: help == null ? null : InicioHelpButton(help: help!),
@@ -909,7 +1127,7 @@ class InicioFallProducts extends StatelessWidget {
       before += p.anterior;
       now += p.actual;
     }
-    return AppSection(
+    return InicioSection(
       title: 'Productos con mayor caída',
       icon: Icons.inventory_2_outlined,
       trailing: help == null ? null : InicioHelpButton(help: help!),
@@ -965,7 +1183,7 @@ class InicioPendingQuotes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppSection(
+    return InicioSection(
       title: title,
       icon: Icons.description_outlined,
       trailing: help == null ? null : InicioHelpButton(help: help!),
@@ -1043,7 +1261,7 @@ Widget inicioSections(List<Widget> sections) => Column(
   crossAxisAlignment: CrossAxisAlignment.stretch,
   children: [
     for (var i = 0; i < sections.length; i++) ...[
-      if (i > 0) const SizedBox(height: 14),
+      if (i > 0) const SizedBox(height: 18),
       AppEntrance(delay: Duration(milliseconds: 50 * (i < 8 ? i : 8)), offset: 12, child: sections[i]),
     ],
   ],

@@ -26,6 +26,9 @@ class AppListCard extends StatelessWidget {
   /// Fila opcional bajo las líneas de detalle (por ejemplo, insignias de categoría y estado).
   final Widget? footer;
 
+  /// El elemento que se está viendo en el panel de detalle (tablet): borde y fondo de la marca.
+  final bool selected;
+
   const AppListCard({
     super.key,
     this.number,
@@ -38,6 +41,7 @@ class AppListCard extends StatelessWidget {
     this.actions = const [],
     this.onTap,
     this.footer,
+    this.selected = false,
   });
 
   @override
@@ -52,11 +56,19 @@ class AppListCard extends StatelessWidget {
       enabled: onTap != null,
       scale: 0.985,
       child: Material(
-        color: scheme.surfaceContainerLowest,
+        color: selected
+            ? Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.08),
+                scheme.surfaceContainerLowest,
+              )
+            : scheme.surfaceContainerLowest,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: scheme.outlineVariant),
+          side: BorderSide(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
         ),
         child: InkWell(
           onTap: onTap,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/inicio_entity.dart';
-import '../components/components.dart';
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
 import 'inicio_help.dart';
@@ -68,7 +67,7 @@ class InicioTeamView extends StatelessWidget {
         sellers: data.vendedores,
         help: inicioSellerGoalsHelp(),
       ),
-      AppSection(
+      InicioSection(
         title: 'Productos más vendidos del equipo',
         icon: Icons.inventory_2_outlined,
         trailing: InicioHelpButton(help: inicioTeamTopProductsHelp()),
@@ -142,7 +141,7 @@ class _TeamOpportunities extends StatelessWidget {
     String detail(StatusCountsEntity s) =>
         '${s.critico} críticos · ${s.riesgo} en riesgo · ${s.seguimiento} en seguimiento';
 
-    return AppSection(
+    return InicioSection(
       title: 'Oportunidades comerciales del equipo',
       icon: Icons.track_changes,
       trailing: InicioHelpButton(help: inicioTeamOpportunitiesHelp()),
@@ -206,7 +205,7 @@ class _TeamManagementsState extends State<_TeamManagements> {
     final items = [...?widget.data.gestiones[_period]]
       ..sort((a, b) => managementOrder.indexOf(a.tipo).compareTo(managementOrder.indexOf(b.tipo)));
 
-    return AppSection(
+    return InicioSection(
       title: 'Gestiones del equipo (${_period.label.toLowerCase()})',
       icon: Icons.assignment_outlined,
       trailing: InicioHelpButton(help: inicioManagementsHelp()),
@@ -215,7 +214,7 @@ class _TeamManagementsState extends State<_TeamManagements> {
         children: [
           SegmentedButton<TaskPeriod>(
             showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            style: inicioSegmentedStyle(context),
             segments: [for (final p in TaskPeriod.values) ButtonSegment(value: p, label: Text(p.label))],
             selected: {_period},
             onSelectionChanged: (s) => setState(() => _period = s.first),

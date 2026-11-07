@@ -21,9 +21,12 @@ Future<bool?> showProductDetail(
   BuildContext context,
   ProductEntity p, {
   bool canEdit = true,
+  AppPaneController? pane,
 }) {
   return showAppModal(
     context,
+    pane: pane,
+    paneId: p.id,
     title: p.name,
     subtitle: p.codigo.isEmpty ? null : p.codigo,
     icon: Icons.category_outlined,

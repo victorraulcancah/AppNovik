@@ -191,6 +191,10 @@ class _ReportsPageState extends State<ReportsPage> {
             ],
           ),
         ),
+        AppActiveFilters(
+          filters: reportActiveFilters(reports),
+          onClear: reports.clearAdvancedFilters,
+        ),
       ],
     );
   }

@@ -10,6 +10,10 @@ class AppSearchBar extends StatelessWidget {
   final VoidCallback? onFilter;
   final bool filterActive;
 
+  /// Cuántos filtros hay puestos: el botón muestra ese número en una insignia. Con 0 se usa
+  /// [filterActive] (un punto) para quien no cuenta sus filtros.
+  final int filterCount;
+
   /// Otros botones junto al de filtros (por ejemplo, descargar el Excel).
   final List<Widget> actions;
 
@@ -21,6 +25,7 @@ class AppSearchBar extends StatelessWidget {
     this.onSubmitted,
     this.onFilter,
     this.filterActive = false,
+    this.filterCount = 0,
     this.actions = const [],
   });
 
@@ -50,8 +55,9 @@ class AppSearchBar extends StatelessWidget {
               onPressed: onFilter,
               style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
               icon: Badge(
-                isLabelVisible: filterActive,
+                isLabelVisible: filterActive || filterCount > 0,
                 smallSize: 8,
+                label: filterCount > 0 ? Text('$filterCount') : null,
                 child: const Icon(Icons.filter_list),
               ),
             ),

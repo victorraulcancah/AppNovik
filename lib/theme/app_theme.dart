@@ -7,6 +7,11 @@ class AppTheme {
   /// Naranja de acción (el del botón del login). Provisional hasta definir la marca.
   static const Color primary = Color(0xFFEA580C);
 
+  /// Fondo de los botones rellenos ("Ingresar", "Reintentar"...): el mismo naranja, un poco más
+  /// profundo, para que el texto blanco se lea. Con [primary] el contraste era de 3.6:1 y con este
+  /// es de 5.2:1 (el mínimo para texto de ese tamaño es 4.5:1).
+  static const Color primaryButton = Color(0xFFC2410C);
+
   /// Azul pizarra de la cabecera del login (igual en claro y oscuro).
   static const Color brandDark = Color(0xFF0F172A);
   static const Color brandDarkAlt = Color(0xFF1E293B);
@@ -117,6 +122,7 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: primaryButton,
           minimumSize: const Size.fromHeight(54),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius),

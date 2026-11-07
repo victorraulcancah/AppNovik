@@ -19,14 +19,17 @@ import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/document_usecases.dart';
 import 'package:app_novik/domain/usecases/other_document_usecases.dart';
+import 'package:app_novik/presentation/components/app_active_filters.dart' show AppActiveFilters;
+import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/documents_page.dart';
 import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/documents_provider.dart';
 import 'package:app_novik/presentation/providers/other_documents_provider.dart';
+import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/shell_navigation.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
-import 'package:app_novik/theme/app_theme.dart';
 import 'package:app_novik/presentation/widgets/document_filters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1093,15 +1096,23 @@ void main() {
       _FakeOtherRepository? other,
       DocumentEntity? serving,
       ShellNavigation? shell,
+      SalesProvider? sales,
+      Size? size,
+      ScreenLook? look,
     }) async {
-      // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
-      tester.view.physicalSize = const Size(360 * 3, 780 * 3);
-      tester.view.devicePixelRatio = 3;
-      tester.platformDispatcher.textScaleFactorTestValue = 0.55;
-      addTearDown(() {
-        tester.view.reset();
-        tester.platformDispatcher.clearTextScaleFactorTestValue();
-      });
+      if (look != null) {
+        // Letra real (Roboto), modo claro u oscuro y letra grande del sistema.
+        await prepareLook(tester, look);
+      } else {
+        // Las pruebas dibujan con la fuente Ahem (casi el doble de ancha que una real).
+        tester.view.physicalSize = const Size(360 * 3, 780 * 3);
+        tester.view.devicePixelRatio = 3;
+        tester.platformDispatcher.textScaleFactorTestValue = 0.55;
+        addTearDown(() {
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+      }
 
       final repo = _FakeDocumentRepository();
       if (serving != null) {
@@ -1119,6 +1130,7 @@ void main() {
         confirmTransferProductUseCase: ConfirmTransferProductUseCase(repository: otherRepo),
       )..syncCompany(7);
 
+      if (size != null) tester.view.physicalSize = Size(size.width * 3, size.height * 3);
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -1129,8 +1141,9 @@ void main() {
             ChangeNotifierProvider<DocumentsProvider>.value(value: documents),
             ChangeNotifierProvider<OtherDocumentsProvider>.value(value: otherDocuments),
             ChangeNotifierProvider<ShellNavigation>.value(value: shell ?? ShellNavigation()),
+            if (sales != null) ChangeNotifierProvider<SalesProvider>.value(value: sales),
           ],
-          child: MaterialApp(theme: AppTheme.light, home: const Scaffold(body: DocumentsPage())),
+          child: lookApp(look, home: const Scaffold(body: DocumentsPage())),
         ),
       );
       await tester.pumpAndSettle();
@@ -1170,6 +1183,105 @@ void main() {
       expect(documents.kind, DocumentKind.venta);
       expect(repo.calls.last.kind, DocumentKind.venta);
       expect(shell.pendingQuotes, isNull);
+    });
+
+    testWidgets('los filtros de ventas salen como chips; "hoy" es lo normal y no cuenta', (tester) async {
+      final (repo, documents) = await pump(tester);
+      expect(find.byKey(const ValueKey('filtro-fechas')), findsNothing);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+
+      await documents.applyFilters(
+        documents.filters.copyWith(tipo: DocumentTipo.factura, estado: DocumentEstado.eliminados),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tipo: Factura'), findsOneWidget);
+      expect(find.text('Estado: Eliminados'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
+
+      await tester.ensureVisible(find.byTooltip('Quitar Tipo: Factura'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Quitar Tipo: Factura'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.filters.tipo, isNull);
+      expect(repo.calls.last.filters.estado, DocumentEstado.eliminados);
+      expect(find.text('Tipo: Factura'), findsNothing);
+    });
+
+    testWidgets('un rango de fechas distinto de hoy sale como chip y al quitarlo vuelve a hoy', (tester) async {
+      final (repo, documents) = await pump(tester);
+      await documents.applyFilters(
+        documents.filters.copyWith(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('01 oct. 2026 - 31 oct. 2026'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Quitar 01 oct. 2026 - 31 oct. 2026'));
+      await tester.pumpAndSettle();
+      final today = DocumentFilters.hoy(documents.now);
+      expect(repo.calls.last.filters.desde, today.desde);
+      expect(repo.calls.last.filters.hasta, today.hasta);
+      expect(find.byKey(const ValueKey('filtro-fechas')), findsNothing);
+    });
+
+    testWidgets('sin fechas se muestra "Todas las fechas" y también se puede quitar', (tester) async {
+      final (repo, documents) = await pump(tester);
+      await documents.applyFilters(documents.filters.copyWith(desde: null, hasta: null));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Todas las fechas'), findsOneWidget);
+      await tester.tap(find.byTooltip('Quitar Todas las fechas'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.filters.desde, isNotNull);
+    });
+
+    testWidgets('llegar desde las cotizaciones pendientes muestra sus chips; "Limpiar" vuelve a hoy', (tester) async {
+      final shell = ShellNavigation()..goToPendingQuotes(desde: DateTime(2026, 10, 1), hasta: DateTime(2026, 10, 31));
+      final (repo, documents) = await pump(
+        tester,
+        permissions: const {'documentos.ventas.index', 'documentos.cotizaciones.index'},
+        shell: shell,
+      );
+
+      expect(find.text('01 oct. 2026 - 31 oct. 2026'), findsOneWidget);
+      // La fila de chips se desplaza hacia el lado: con la fuente ancha de las pruebas el segundo queda fuera de vista.
+      await tester.scrollUntilVisible(
+        find.text('Cotización: Pendientes'),
+        100,
+        scrollable: find.descendant(of: find.byType(AppActiveFilters), matching: find.byType(Scrollable)),
+      );
+      expect(find.text('Cotización: Pendientes'), findsOneWidget);
+      // En cotizaciones no salen los filtros de ventas (tipo y estado del documento).
+      expect(find.textContaining('Tipo:'), findsNothing);
+
+      await tester.ensureVisible(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
+      await tester.pumpAndSettle();
+
+      final today = DocumentFilters.hoy(documents.now);
+      expect(repo.calls.last.kind, DocumentKind.cotizacion);
+      expect(repo.calls.last.filters.estadoCotizacion, DocumentQuoteState.todas);
+      expect(repo.calls.last.filters.desde, today.desde);
+      expect(find.byKey(const ValueKey('filtros-limpiar')), findsNothing);
+    });
+
+    testWidgets('sucursal, ejecutivo y cliente se nombran con el catálogo y se quitan de a uno', (tester) async {
+      final (repo, documents) = await pump(tester);
+      await documents.ensureCatalogs();
+      await documents.applyFilters(documents.filters.copyWith(vendedores: [3], clientes: [5, 6]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Clientes: 2 elegidos'), findsOneWidget);
+      expect(find.textContaining('Ejecutivo'), findsOneWidget);
+
+      await tester.ensureVisible(find.byTooltip('Quitar Clientes: 2 elegidos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Quitar Clientes: 2 elegidos'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.filters.clientes, isEmpty);
+      expect(repo.calls.last.filters.vendedores, [3]);
     });
 
     testWidgets('no muestra etiquetas de filtros ni totales sueltos; descargar y totales van en Acciones', (tester) async {
@@ -1372,5 +1484,179 @@ void main() {
 
       expect(repo.actions, contains('export:venta'));
     });
+
+    group('modo oscuro y letra grande en pantallas completas', () {
+      const permisos = {
+        'documentos.ventas.index',
+        'documentos.cotizaciones.index',
+        'documentos.ventas.destroy',
+        'documentos.cotizaciones.destroy',
+        'ventas.store',
+      };
+
+      for (final look in screenLooks) {
+        testWidgets('lista de Ventas con todas las acciones: ${look.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pump(tester, permissions: permisos, look: look);
+
+          expect(find.byType(AppListCard), findsWidgets);
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('lista de Cotizaciones pendientes: ${look.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          await pump(tester, permissions: permisos, serving: pendingQuote(), look: look);
+
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Cotizaciones').last);
+          await tester.pumpAndSettle();
+
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
+        testWidgets('Documentos sin acceso: ${look.label}', (tester) async {
+          await pump(tester, permissions: const {}, look: look);
+
+          expect(find.text('Sin acceso'), findsOneWidget);
+          await expectLooksRight(tester, look, contrast: false);
+        });
+      }
+
+      testWidgets('el detalle de una venta se lee en modo oscuro con letra grande', (tester) async {
+        final handle = tester.ensureSemantics();
+        const look = ScreenLook(dark: true);
+        await pump(tester, permissions: permisos, look: look);
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Comprobante'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+    });
+
+    group('en tablet: lista a la izquierda y detalle a la derecha', () {
+      const tablet = Size(1100, 800);
+
+      testWidgets('sin selección el panel derecho pide elegir un documento', (tester) async {
+        await pump(tester, size: tablet);
+
+        expect(find.text('Selecciona un documento'), findsOneWidget);
+        expect(find.text('V001-0001'), findsOneWidget);
+      });
+
+      testWidgets('tocar una venta muestra su detalle a la derecha, sin modal', (tester) async {
+        await pump(tester, size: tablet);
+
+        await tester.tap(find.text('V001-0001'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un documento'), findsNothing);
+        expect(find.text('Comprobante'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        // Está a la derecha de la lista.
+        expect(
+          tester.getTopLeft(find.text('Comprobante')).dx,
+          greaterThan(tester.getTopLeft(find.text('V001-0001').first).dx + 300),
+        );
+      });
+
+      testWidgets('el botón "Ver detalle" de la tarjeta también lo muestra en el panel', (tester) async {
+        await pump(tester, size: tablet);
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Comprobante'), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+      });
+
+      testWidgets('la tarjeta elegida se resalta', (tester) async {
+        await pump(tester, size: tablet);
+        await tester.tap(find.text('V001-0001'));
+        await tester.pumpAndSettle();
+
+        final card = tester.widget<AppListCard>(find.byType(AppListCard));
+        expect(card.selected, isTrue);
+      });
+
+      testWidgets('culminar una cotización desde el panel pasa a Ventas con esa cotización', (tester) async {
+        final sales = _FakeSalesProvider();
+        final shell = ShellNavigation();
+        await pump(
+          tester,
+          permissions: quotePermissions,
+          serving: pendingQuote(),
+          sales: sales,
+          shell: shell,
+          size: tablet,
+        );
+
+        await tester.tap(find.text('C001-0002'));
+        await tester.pumpAndSettle();
+        expect(find.text('Culminar venta o editar'), findsOneWidget);
+
+        await tester.tap(find.text('Culminar venta o editar'));
+        await tester.pumpAndSettle();
+
+        expect(sales.loaded.map((d) => d.numero), ['C001-0002']);
+        expect(shell.requested, 'ventas');
+        // El panel quedó vacío.
+        expect(find.text('Selecciona un documento'), findsOneWidget);
+      });
+
+      testWidgets('las acciones de la tarjeta (comprobante PDF) siguen funcionando', (tester) async {
+        await pump(tester, size: tablet);
+        expect(find.byTooltip('Ver comprobante PDF'), findsOneWidget);
+      });
+
+      testWidgets('en celular nada cambia: el detalle sigue abriéndose como modal', (tester) async {
+        await pump(tester);
+
+        await tester.tap(find.text('V001-0001'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un documento'), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+      });
+
+      testWidgets('cambiar de lista vacía el panel', (tester) async {
+        await pump(
+          tester,
+          permissions: const {'documentos.ventas.index', 'documentos.cotizaciones.index'},
+          size: tablet,
+        );
+        await tester.tap(find.text('V001-0001'));
+        await tester.pumpAndSettle();
+        expect(find.text('Comprobante'), findsOneWidget);
+
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cotizaciones').last);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Comprobante'), findsNothing);
+        expect(find.text('Selecciona un documento'), findsOneWidget);
+      });
+    });
   });
+}
+
+/// Un SalesProvider que solo anota las cotizaciones que se piden culminar.
+class _FakeSalesProvider extends ChangeNotifier implements SalesProvider {
+  final loaded = <DocumentEntity>[];
+
+  @override
+  Future<String?> loadFromQuote(DocumentEntity quote) async {
+    loaded.add(quote);
+    return null;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

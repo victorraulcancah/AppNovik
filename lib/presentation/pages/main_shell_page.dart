@@ -213,36 +213,70 @@ class _MasModulos extends StatelessWidget {
           trailing: AppAccountMenu(),
         ),
         Expanded(
-          child: ListView.separated(
+          child: GridView.builder(
             padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.15,
+            ),
             itemCount: modulos.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) {
               final m = modulos[i];
               final activo = m.slug == actual?.slug;
               return AppEntrance(
                 delay: Duration(milliseconds: 40 * i),
                 offset: 12,
-                child: Material(
-                  color: scheme.surfaceContainerLowest,
-                  clipBehavior: Clip.antiAlias,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: activo ? scheme.primary : scheme.outlineVariant,
+                child: AppPressScale(
+                  scale: 0.96,
+                  child: Material(
+                    color: activo
+                        ? scheme.primary.withValues(alpha: 0.08)
+                        : scheme.surfaceContainerLowest,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: activo ? scheme.primary : scheme.outlineVariant,
+                      ),
                     ),
-                  ),
-                  child: ListTile(
-                    leading: Icon(
-                      activo ? m.iconoActivo : m.icono,
-                      color: activo ? scheme.primary : null,
+                    child: InkWell(
+                      onTap: () => onSelect(m),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: scheme.primary.withValues(
+                                  alpha: activo ? 0.18 : 0.10,
+                                ),
+                              ),
+                              child: Icon(
+                                activo ? m.iconoActivo : m.icono,
+                                size: 26,
+                                color: scheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              m.titulo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    title: Text(
-                      m.titulo,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => onSelect(m),
                   ),
                 ),
               );
