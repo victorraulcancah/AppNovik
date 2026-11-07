@@ -12,6 +12,11 @@ import '../../domain/entities/stock_manage_entity.dart';
 /// [search] hace la consulta (el texto ya viene sin espacios sobrantes); [detail] arma la línea
 /// pequeña de cada resultado (por ejemplo, lo que tiene en el almacén); [onPick] recibe el
 /// producto tocado.
+///
+/// Como en la web, cuando una búsqueda devuelve **exactamente un** producto se agrega solo (sirve
+/// con el lector de código de barras, que escribe el código y pulsa Enter). Solo ocurre cuando la
+/// búsqueda termina y el texto sigue siendo el mismo que se buscó: si se siguió escribiendo, no
+/// se agrega nada a medias. Se puede apagar con [autoPickSingle].
 class StockProductSearch extends StatefulWidget {
   final Future<Either<Failure, List<StockProductEntity>>> Function(String text)
   search;
@@ -19,6 +24,9 @@ class StockProductSearch extends StatefulWidget {
   final ValueChanged<StockProductEntity> onPick;
   final String hint;
   final bool enabled;
+
+  /// Agrega solo el producto cuando la búsqueda devuelve exactamente uno.
+  final bool autoPickSingle;
 
   /// Cuánto espera a que termine de escribir antes de buscar.
   final Duration delay;
@@ -30,6 +38,7 @@ class StockProductSearch extends StatefulWidget {
     required this.onPick,
     this.hint = 'Buscar producto por nombre, código, marca…',
     this.enabled = true,
+    this.autoPickSingle = true,
     this.delay = const Duration(milliseconds: 400),
   });
 
@@ -88,6 +97,14 @@ class _StockProductSearchState extends State<StockProductSearch> {
         _results = result.right;
       }
     });
+    // Un solo resultado: se agrega solo, pero únicamente si no se siguió escribiendo.
+    if (widget.autoPickSingle &&
+        widget.enabled &&
+        result.isRight &&
+        result.right.length == 1 &&
+        _controller.text.trim() == query) {
+      widget.onPick(result.right.single);
+    }
   }
 
   void _pick(StockProductEntity product) {

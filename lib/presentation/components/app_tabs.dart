@@ -195,7 +195,8 @@ class _AppTabsViewState extends State<AppTabsView> with SingleTickerProviderStat
   );
   late final Animation<double> _curved = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
 
-  late int _shown = widget.controller.index;
+  // La pestaña que se está mostrando (se fija al crearse, antes de que nadie la cambie).
+  late int _shown;
 
   /// 1 si se avanzó hacia una pestaña de la derecha, -1 hacia la izquierda.
   int _dir = 1;
@@ -203,6 +204,7 @@ class _AppTabsViewState extends State<AppTabsView> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
+    _shown = widget.controller.index;
     widget.controller.addListener(_onChange);
   }
 

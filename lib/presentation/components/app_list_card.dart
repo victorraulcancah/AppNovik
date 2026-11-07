@@ -23,6 +23,9 @@ class AppListCard extends StatelessWidget {
   final List<Widget> actions;
   final VoidCallback? onTap;
 
+  /// Un widget a la izquierda del título (por ejemplo la miniatura de un producto).
+  final Widget? leading;
+
   /// Fila opcional bajo las líneas de detalle (por ejemplo, insignias de categoría y estado).
   final Widget? footer;
 
@@ -40,6 +43,7 @@ class AppListCard extends StatelessWidget {
     this.trailingCaptionColor,
     this.actions = const [],
     this.onTap,
+    this.leading,
     this.footer,
     this.selected = false,
   });
@@ -84,6 +88,7 @@ class AppListCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (leading != null) ...[leading!, const SizedBox(width: 12)],
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(top: 2),

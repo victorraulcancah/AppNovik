@@ -10,6 +10,7 @@ import '../providers/products_provider.dart';
 import '../utils/import_file.dart';
 import '../utils/download_file.dart';
 import '../utils/success_snack.dart';
+import '../widgets/product_image.dart';
 import '../widgets/product_modals.dart';
 
 /// Módulo Productos: lista paginada con búsqueda y filtro de tipo, detalle, crear y editar, y
@@ -430,6 +431,8 @@ class _ProductsPageState extends State<ProductsPage> {
 
     return AppListCard(
       number: number,
+      // La miniatura solo sale si el producto tiene imagen.
+      leading: p.imagen == null ? null : ProductImage(path: p.imagen!),
       title: p.name,
       lines: [
         [p.esServicio ? 'Servicio' : 'Producto', if (p.codigo.isNotEmpty) p.codigo]

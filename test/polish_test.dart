@@ -100,7 +100,7 @@ void main() {
   });
 
   group('estados vacíos y de error', () {
-    testWidgets('un error usa los colores de error y uno vacío los de la marca', (tester) async {
+    testWidgets('un error dibuja la ilustración de error y uno vacío la de sin resultados', (tester) async {
       await tester.pumpWidget(
         _app(
           const Column(
@@ -114,10 +114,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final scheme = Theme.of(tester.element(find.text('Sin resultados'))).colorScheme;
-      Color iconColor(IconData icon) => tester.widget<Icon>(find.byIcon(icon)).color!;
-      expect(iconColor(Icons.cloud_off_outlined), scheme.error);
-      expect(iconColor(Icons.inbox_outlined), scheme.primary);
+      AppIllustrationKind kindNear(String title) => tester
+          .widget<AppIllustration>(
+            find.descendant(
+              of: find.ancestor(of: find.text(title), matching: find.byType(AppEmptyState)).first,
+              matching: find.byType(AppIllustration),
+            ),
+          )
+          .kind;
+      expect(kindNear('No se pudo cargar'), AppIllustrationKind.error);
+      expect(kindNear('Sin resultados'), AppIllustrationKind.empty);
     });
 
     testWidgets('se ve bien en modo oscuro y con letra grande, sin desbordes', (tester) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -19,6 +20,7 @@ import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/presentation/pages/stock_add_page.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'package:app_novik/presentation/components/app_detail.dart' show AppDetailRow;
 import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/stock_page.dart';
 import 'package:app_novik/presentation/pages/stock_transfer_page.dart';
@@ -47,6 +49,9 @@ class _FakeStockRepository implements StockManagementRepository {
   // Operaciones que cambian el stock.
   List<StockProductEntity> products = const [];
   final List<String> searches = [];
+
+  /// Si se pone, la búsqueda de productos no responde hasta que se complete.
+  Completer<void>? searchGate;
   final List<({int warehouseId, List<({int productId, double? costo, int stock})> items})> adds = [];
   Either<Failure, void>? nextAdd;
   int templates = 0;
@@ -119,6 +124,8 @@ class _FakeStockRepository implements StockManagementRepository {
     required String search,
   }) async {
     searches.add(search);
+    final gate = searchGate;
+    if (gate != null) await gate.future;
     return Either.right(products);
   }
 
@@ -1730,6 +1737,98 @@ void main() {
       expect(find.text('S/. 10.50'), findsOneWidget);
     });
 
+    testWidgets('una búsqueda con un solo resultado lo agrega sola, como en la web', (tester) async {
+      await pumpPage(
+        tester,
+        StockAddPage(pickFile: pickImportFile),
+        setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
+      );
+
+      await searchFor(tester, 'SUB-1');
+
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-stock'))).controller!.text, '1');
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-costo'))).controller!.text, '10.5');
+    });
+
+    testWidgets('con el lector de código de barras: escribir y pulsar Enter agrega el producto al instante', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        StockAddPage(pickFile: pickImportFile),
+        setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
+      );
+
+      await tester.enterText(find.byType(SearchBar), 'SUB-1');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
+    });
+
+    testWidgets('buscar el mismo código otra vez suma una unidad y no duplica la línea', (tester) async {
+      await pumpPage(
+        tester,
+        StockAddPage(pickFile: pickImportFile),
+        setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
+      );
+
+      await tester.enterText(find.byType(SearchBar), 'SUB-1');
+      for (var i = 0; i < 2; i++) {
+        await tester.showKeyboard(find.descendant(of: find.byType(SearchBar), matching: find.byType(TextField)));
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-stock'))).controller!.text, '2');
+    });
+
+    testWidgets('con varios resultados no agrega nada hasta tocar uno', (tester) async {
+      await openAdd(tester);
+
+      await searchFor(tester, 'sub');
+
+      expect(find.byKey(const ValueKey('resultado-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('resultado-2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('linea-1')), findsNothing);
+      expect(find.byKey(const ValueKey('linea-2')), findsNothing);
+      expect(find.text('Aún no hay productos'), findsOneWidget);
+    });
+
+    testWidgets('una búsqueda sin resultados no agrega nada', (tester) async {
+      await pumpPage(tester, StockAddPage(pickFile: pickImportFile), setUpRepo: (repo) => repo.products = []);
+
+      await searchFor(tester, 'nada');
+
+      expect(find.text('No se encontraron productos'), findsOneWidget);
+      expect(find.text('Aún no hay productos'), findsOneWidget);
+    });
+
+    testWidgets('si se siguió escribiendo mientras llegaba la respuesta no se agrega a medias', (tester) async {
+      final gate = Completer<void>();
+      await pumpPage(
+        tester,
+        StockAddPage(pickFile: pickImportFile),
+        setUpRepo: (repo) {
+          repo.products = [product(1, name: 'SUBWOOFER 12')];
+          repo.searchGate = gate;
+        },
+      );
+
+      await tester.enterText(find.byType(SearchBar), 'SU');
+      await tester.pump(const Duration(milliseconds: 500));
+      // La búsqueda de "SU" sigue en curso y ya se escribió una letra más.
+      await tester.enterText(find.byType(SearchBar), 'SUB');
+      gate.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(find.byKey(const ValueKey('linea-1')), findsNothing, reason: 'el texto ya no es el que se buscó');
+      expect(find.text('Aún no hay productos'), findsOneWidget);
+    });
+
     testWidgets('tocar el mismo producto otra vez suma una unidad', (tester) async {
       await openAdd(tester);
       await searchFor(tester, 'sub');
@@ -2000,6 +2099,54 @@ void main() {
       expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-cantidad'))).controller!.text, '1');
       expect(find.text('Disponible: 8'), findsOneWidget);
+    });
+
+    testWidgets('una búsqueda con un solo resultado con stock en el origen se agrega sola', (tester) async {
+      await pumpPage(
+        tester,
+        const StockTransferPage(),
+        setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
+      );
+
+      await searchFor(tester, 'SUB-1');
+
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-cantidad'))).controller!.text, '1');
+    });
+
+    testWidgets('si el único resultado no tiene stock en el origen no se agrega y se avisa', (tester) async {
+      await pumpPage(
+        tester,
+        const StockTransferPage(),
+        setUpRepo: (repo) => repo.products = [product(2, name: 'PARLANTE 6', levels: const {})],
+      );
+
+      await searchFor(tester, 'SUB-2');
+
+      expect(find.byKey(const ValueKey('linea-2')), findsNothing);
+      expect(find.text('No hay stock disponible en LIMA'), findsOneWidget);
+    });
+
+    testWidgets('con Enter el único resultado se suma hasta lo que hay, sin pasarse', (tester) async {
+      await pumpPage(
+        tester,
+        const StockTransferPage(),
+        setUpRepo: (repo) => repo.products = [
+          product(1, name: 'SUBWOOFER 12', levels: const {1: StockWarehouseLevel(stock: 2, costoPromedio: 9)}),
+        ],
+      );
+
+      await tester.enterText(find.byType(SearchBar), 'SUB-1');
+      for (var i = 0; i < 3; i++) {
+        await tester.showKeyboard(find.descendant(of: find.byType(SearchBar), matching: find.byType(TextField)));
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+      }
+
+      // 1 al agregarse, 2 con la segunda lectura; la tercera avisa que no alcanza.
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-cantidad'))).controller!.text, '2');
+      expect(find.text('Stock insuficiente'), findsOneWidget);
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
     });
 
     testWidgets('un producto sin stock en el origen no se agrega y se avisa', (tester) async {

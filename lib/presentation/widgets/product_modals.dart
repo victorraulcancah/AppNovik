@@ -7,6 +7,7 @@ import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../components/components.dart';
 import '../utils/import_file.dart';
+import 'product_image.dart';
 
 AppStatusBadge _siNo(bool value) => AppStatusBadge(
       label: value ? 'Sí' : 'No',
@@ -40,6 +41,14 @@ Future<bool?> showProductDetail(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // La imagen del producto (si tiene): crece desde la miniatura de la lista.
+            if (p.imagen != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Center(
+                  child: ProductImageGrow(path: p.imagen!, semanticLabel: 'Imagen de ${p.name}'),
+                ),
+              ),
             AppDetailRow(label: 'Tipo', value: p.esServicio ? 'Servicio' : 'Producto'),
             AppDetailRow(label: 'Código', value: p.codigo),
             AppDetailRow(label: 'Descripción', value: p.name),

@@ -20,6 +20,8 @@ import 'package:app_novik/domain/repositories/product_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/product_usecases.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'package:app_novik/presentation/widgets/product_image.dart';
+import 'package:app_novik/core/constants/api_constants.dart';
 import 'package:app_novik/presentation/components/app_summary.dart' show AppMetricCard;
 import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/products_page.dart';
@@ -1113,6 +1115,96 @@ void main() {
         expect(find.text('U. de medida'), findsOneWidget);
         await expectLooksRight(tester, look);
         handle.dispose();
+      });
+    });
+
+    group('imagen del producto: miniatura en la lista y grande en el detalle', () {
+      const conImagen = ProductEntity(
+        id: 1,
+        codigo: 'P1',
+        name: 'Producto 1',
+        imagen: '/storage/images/products/a.jpg',
+      );
+      const sinImagen = ProductEntity(id: 2, codigo: 'P2', name: 'Producto 2');
+
+      testWidgets('un producto con imagen muestra su miniatura en la tarjeta', (tester) async {
+        await pump(tester, const {}, existing: conImagen);
+
+        expect(find.descendant(of: find.byType(AppListCard), matching: find.byType(ProductImage)), findsOneWidget);
+        // Va a la izquierda del título.
+        expect(
+          tester.getTopLeft(find.byType(ProductImage)).dx,
+          lessThan(tester.getTopLeft(find.text('Producto 1')).dx),
+        );
+      });
+
+      testWidgets('un producto sin imagen no cambia: la tarjeta no lleva miniatura', (tester) async {
+        await pump(tester, const {}, existing: sinImagen);
+
+        expect(find.byType(ProductImage), findsNothing);
+        expect(find.text('Producto 2'), findsOneWidget);
+      });
+
+      testWidgets('el detalle muestra la imagen grande, que crece y aparece con un fundido', (tester) async {
+        await pump(tester, const {}, existing: conImagen);
+
+        await tester.tap(find.text('Producto 1'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        Finder grow() => find.byType(ProductImageGrow);
+        expect(grow(), findsOneWidget);
+        // Al empezar todavía no se ve completa...
+        final start = tester.widget<Opacity>(find.descendant(of: find.byType(ProductImageGrow), matching: find.byType(Opacity)).first).opacity;
+        expect(start, lessThan(1));
+
+        await tester.pumpAndSettle();
+        // ...y al terminar sí.
+        final end = tester.widget<Opacity>(find.descendant(of: find.byType(ProductImageGrow), matching: find.byType(Opacity)).first).opacity;
+        expect(end, 1);
+        expect(find.bySemanticsLabel('Imagen de Producto 1'), findsOneWidget);
+      });
+
+      testWidgets('el detalle de un producto sin imagen no trae el bloque de imagen', (tester) async {
+        await pump(tester, const {}, existing: sinImagen);
+
+        await tester.tap(find.text('Producto 2'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ProductImageGrow), findsNothing);
+        expect(find.text('U. de medida'), findsOneWidget);
+      });
+
+      testWidgets('con "quitar animaciones" la imagen sale directa', (tester) async {
+        tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+          disableAnimations: true,
+        );
+        addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+        await pump(tester, const {}, existing: conImagen);
+
+        await tester.tap(find.text('Producto 1'));
+        await tester.pump();
+
+        expect(find.byType(ProductImageGrow), findsOneWidget);
+        expect(find.descendant(of: find.byType(ProductImageGrow), matching: find.byType(Transform)), findsNothing);
+      });
+
+      testWidgets('en tablet la imagen grande sale en el panel de detalle', (tester) async {
+        await pump(tester, const {}, existing: conImagen, size: const Size(1100, 800));
+
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ProductImageGrow), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+      });
+
+      test('la dirección de la imagen: la ruta del servidor o la URL completa', () {
+        expect(
+          ProductImage.urlOf('/storage/images/products/a.jpg'),
+          '${ApiConstants.baseDomain}/storage/images/products/a.jpg',
+        );
+        expect(ProductImage.urlOf('https://cdn.test/a.jpg'), 'https://cdn.test/a.jpg');
       });
     });
 

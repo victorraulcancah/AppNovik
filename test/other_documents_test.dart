@@ -17,6 +17,7 @@ import 'package:app_novik/domain/repositories/other_document_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/other_document_usecases.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'package:app_novik/presentation/pages/other_document_pdf_page.dart' show OtherDocumentPdfPage;
 import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/other_documents_view.dart';
 import 'package:app_novik/presentation/widgets/other_document_modals.dart' show otherDocumentActiveFilters;
@@ -1583,6 +1584,27 @@ void main() {
         expect(tester.widget<AppListCard>(find.byType(AppListCard).first).selected, isTrue);
         expect(find.text('Ver PDF'), findsOneWidget);
         expect(find.text('Cerrar'), findsOneWidget);
+      });
+
+      testWidgets('"Ver PDF" abre el PDF y al volver el detalle sigue a la vista en el panel', (tester) async {
+        await pump(tester, OtherDocumentKind.traslado, size: tablet);
+        await tester.tap(find.text('T001-0007'));
+        await tester.pumpAndSettle();
+        expect(find.text('Desde'), findsOneWidget);
+
+        await tester.tap(find.text('Ver PDF'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        // Se abrió otra pantalla encima.
+        expect(find.byType(OtherDocumentPdfPage), findsOneWidget);
+
+        Navigator.of(tester.element(find.byType(OtherDocumentPdfPage))).pop();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OtherDocumentPdfPage), findsNothing);
+        expect(find.text('Desde'), findsOneWidget, reason: 'el panel no se vació');
+        expect(find.text('Selecciona un documento'), findsNothing);
+        expect(tester.widget<AppListCard>(find.byType(AppListCard).first).selected, isTrue);
       });
 
       testWidgets('traslados: recibir un producto desde el panel lo marca Recibido y el panel sigue abierto', (tester) async {

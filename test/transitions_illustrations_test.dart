@@ -24,8 +24,10 @@ Widget _app(
 
 /// Desplazamiento horizontal y opacidad con que se está dibujando el contenido de una pestaña.
 ({double dx, double opacity}) _tabPose(WidgetTester tester, Finder content) {
-  // Cada pestaña va en un Visibility; lo primero que hay debajo es su Opacity con un Transform.
-  final tab = find.ancestor(of: content, matching: find.byType(Visibility)).first;
+  // Cada pestaña va dentro de una envoltura `_TabSlide` (privada): su Opacity y su Transform.
+  final tab = find
+      .ancestor(of: content, matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_TabSlide'))
+      .first;
   final wrapper = find.descendant(of: tab, matching: find.byType(Opacity)).first;
   final opacity = tester.widget<Opacity>(wrapper);
   final translate = tester.widget<Transform>(

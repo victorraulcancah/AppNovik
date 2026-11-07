@@ -247,5 +247,134 @@ void main() {
       expect(pane.hasContent, isFalse);
       pane.dispose();
     });
+
+    test('keepOnPrimary: la acción principal responde true pero deja el detalle a la vista', () async {
+      final pane = AppPaneController();
+      late void Function([bool? result]) close;
+      final future = pane.present(
+        id: 7,
+        keepOnPrimary: true,
+        builder: (c) {
+          close = c;
+          return const SizedBox();
+        },
+      );
+
+      close(true);
+
+      expect(await future, isTrue);
+      expect(pane.selectedId, 7, reason: 'la tarjeta sigue resaltada');
+      expect(pane.hasContent, isTrue);
+      pane.dispose();
+    });
+
+    test('keepOnPrimary: "Cerrar" sí vacía el panel', () async {
+      final pane = AppPaneController();
+      late void Function([bool? result]) close;
+      final future = pane.present(
+        id: 7,
+        keepOnPrimary: true,
+        builder: (c) {
+          close = c;
+          return const SizedBox();
+        },
+      );
+
+      close();
+
+      expect(await future, isNull);
+      expect(pane.hasContent, isFalse);
+      pane.dispose();
+    });
+
+    test('volver a presentar el mismo elemento reemplaza el detalle', () async {
+      final pane = AppPaneController();
+      pane.present(id: 7, keepOnPrimary: true, builder: (_) => const Text('viejo'));
+      final generation = pane.generation;
+
+      pane.present(id: 7, builder: (_) => const Text('nuevo'));
+
+      expect(pane.generation, generation + 1);
+      expect((pane.content! as Text).data, 'nuevo');
+      expect(pane.selectedId, 7);
+      pane.dispose();
+    });
+  });
+
+  group('whenIdle', () {
+    test('sin trabajo en curso vuelve enseguida', () async {
+      final source = ValueNotifier<int>(0);
+      await whenIdle(source, () => false);
+      source.dispose();
+    });
+
+    test('espera a que termine y vuelve al avisar el cambio', () async {
+      final source = ValueNotifier<int>(0);
+      var busy = true;
+      var done = false;
+      final future = whenIdle(source, () => busy).then((_) => done = true);
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(done, isFalse, reason: 'sigue ocupado');
+
+      busy = false;
+      source.value++;
+      await future;
+      expect(done, isTrue);
+      source.dispose();
+    });
+
+    test('sale pasado el tiempo máximo aunque nunca termine', () async {
+      final source = ValueNotifier<int>(0);
+      await whenIdle(source, () => true, timeout: const Duration(milliseconds: 30));
+      source.dispose();
+    });
+  });
+
+  group('showAppModal con keepPaneOpen en tablet', () {
+    testWidgets('la acción principal no vacía el panel y el botón sigue disponible', (tester) async {
+      final pane = AppPaneController();
+      addTearDown(pane.dispose);
+      final results = <bool?>[];
+      tester.view.physicalSize = const Size(1100, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => AppMasterDetail(
+                controller: pane,
+                listBuilder: (context) => TextButton(
+                  onPressed: () async => results.add(
+                    await showAppModal(
+                      context,
+                      pane: pane,
+                      paneId: 1,
+                      keepPaneOpen: true,
+                      title: 'Detalle',
+                      primaryLabel: 'Editar',
+                      child: const Text('Contenido'),
+                    ),
+                  ),
+                  child: const Text('Abrir'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Abrir'));
+      await tester.pumpAndSettle();
+      expect(find.text('Contenido'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+      await tester.pumpAndSettle();
+
+      expect(results, [true]);
+      expect(find.text('Contenido'), findsOneWidget, reason: 'el detalle sigue a la vista');
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Editar')).onPressed, isNotNull);
+    });
   });
 }
