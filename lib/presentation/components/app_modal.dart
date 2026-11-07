@@ -65,6 +65,8 @@ extension on AppModalTone {
 ///   de detalle (`AppMasterDetail`), con el mismo contenido y la misma respuesta. [paneId]
 ///   identifica al elemento para resaltarlo en la lista. Sin panel o con poco ancho, se abre
 ///   como siempre.
+/// - [keepPaneOpen]: en el panel, la acción principal (por ejemplo "Editar") no vacía el panel:
+///   responde `true` y el detalle sigue a la vista mientras se abre el formulario encima.
 Future<bool?> showAppModal(
   BuildContext context, {
   required String title,
@@ -82,6 +84,7 @@ Future<bool?> showAppModal(
   ValueListenable<String?>? error,
   AppPaneController? pane,
   Object? paneId,
+  bool keepPaneOpen = false,
 }) {
   assert(child != null || (tabs != null && tabs.isNotEmpty), 'Pasa child o tabs');
   final isTablet =
@@ -115,6 +118,7 @@ Future<bool?> showAppModal(
   if (pane != null && pane.isWide) {
     return pane.present(
       id: paneId,
+      keepOnPrimary: keepPaneOpen,
       builder: (close) => Builder(
         builder: (ctx) => build(ctx, handle: false, fill: true, onClose: close),
       ),
@@ -241,7 +245,11 @@ class _AppModalContentState extends State<_AppModalContent> {
     setState(() => _busy = true);
     try {
       await widget.onPrimary?.call();
-      if (mounted) _close(true);
+      if (mounted) {
+        _close(true);
+        // En un panel que se queda abierto el botón vuelve a estar disponible.
+        if (mounted && widget.onClose != null) setState(() => _busy = false);
+      }
     } catch (_) {
       // El modal sigue abierto; quien llama muestra el error.
       if (mounted) setState(() => _busy = false);

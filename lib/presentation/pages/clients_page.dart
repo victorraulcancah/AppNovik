@@ -162,9 +162,9 @@ class _ClientsPageState extends State<ClientsPage> {
     );
   }
 
-  Future<void> _edit(ClientRecordEntity client) {
+  Future<void> _edit(ClientRecordEntity client) async {
     final provider = context.read<ClientListProvider>();
-    return showClientForm(
+    final saved = await showClientForm(
       context,
       client: client,
       access: _access(editing: true),
@@ -175,6 +175,15 @@ class _ClientsPageState extends State<ClientsPage> {
         return error;
       },
     );
+    // En tablet el detalle seguía a la vista: si se guardó, vuelve con los datos nuevos (si se
+    // canceló, queda como estaba).
+    if (saved != true || !mounted || !_pane.isWide || _pane.selectedId != client.id) return;
+    final updated = provider.items.where((c) => c.id == client.id).firstOrNull;
+    if (updated == null) {
+      _pane.close();
+    } else {
+      unawaited(_detail(updated));
+    }
   }
 
   bool get _canEdit => _can('clientes.update');

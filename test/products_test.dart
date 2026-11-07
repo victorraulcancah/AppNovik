@@ -20,6 +20,7 @@ import 'package:app_novik/domain/repositories/product_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/product_usecases.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
+import 'package:app_novik/presentation/components/app_summary.dart' show AppMetricCard;
 import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/products_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
@@ -1151,7 +1152,7 @@ void main() {
         expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
       });
 
-      testWidgets('"Editar" del panel abre el formulario y deja el panel vacío', (tester) async {
+      testWidgets('"Editar" del panel abre el formulario y el detalle sigue a la vista', (tester) async {
         await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
         await tester.tap(find.text('Producto 1').first);
         await tester.pumpAndSettle();
@@ -1160,6 +1161,89 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.widgetWithText(FilledButton, 'Guardar cambios'), findsOneWidget);
+        // El detalle no se vació: está debajo del formulario.
+        expect(find.text('U. de medida'), findsOneWidget);
+        expect(find.text('Selecciona un producto'), findsNothing);
+      });
+
+      testWidgets('si se cancela la edición el panel conserva el detalle y "Editar" sigue disponible', (
+        tester,
+      ) async {
+        await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.widgetWithText(FilledButton, 'Guardar cambios'), findsNothing);
+        expect(find.text('U. de medida'), findsOneWidget);
+        expect(find.text('Selecciona un producto'), findsNothing);
+        final edit = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Editar'));
+        expect(edit.onPressed, isNotNull, reason: 'el botón no se queda cargando');
+        expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
+      });
+
+      testWidgets('al guardar la edición el panel vuelve con el detalle actualizado', (tester) async {
+        final repo = await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        // Lo que devuelve el servidor al recargar la lista después de guardar.
+        repo.next = Either.right(
+          ProductPageEntity(
+            items: [
+              ProductEntity(
+                id: 1,
+                codigo: 'P1',
+                name: 'Producto editado',
+                sku: 'SKU-1',
+                marcaId: 1,
+                categoriaId: 1,
+                proveedorId: 1,
+                canalId: 1,
+                giroNegocioId: 1,
+              ),
+            ],
+            currentPage: 1,
+            lastPage: 1,
+            total: 1,
+          ),
+        );
+        await tester.ensureVisible(find.widgetWithText(FilledButton, 'Guardar cambios'));
+        await tester.tap(find.widgetWithText(FilledButton, 'Guardar cambios'));
+        await tester.pumpAndSettle();
+
+        expect(repo.saves.single, (7, 1));
+        expect(find.widgetWithText(FilledButton, 'Guardar cambios'), findsNothing);
+        // El detalle del panel muestra el nombre nuevo, con la tarjeta resaltada.
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(find.text('U. de medida'), findsOneWidget);
+        expect(find.text('Producto editado'), findsWidgets);
+        expect(find.text('Producto 1'), findsNothing);
+        expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
+      });
+
+      testWidgets('si con los filtros el producto editado ya no sale en la lista, el panel se vacía', (
+        tester,
+      ) async {
+        final repo = await pump(tester, const {'productos.update'}, existing: producto, size: tablet);
+        await tester.tap(find.text('Producto 1').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        repo.next = Either.right(
+          ProductPageEntity(items: const [], currentPage: 1, lastPage: 1, total: 0),
+        );
+        await tester.ensureVisible(find.widgetWithText(FilledButton, 'Guardar cambios'));
+        await tester.tap(find.widgetWithText(FilledButton, 'Guardar cambios'));
+        await tester.pumpAndSettle();
+
         expect(find.text('U. de medida'), findsNothing);
       });
 
@@ -1418,30 +1502,79 @@ void main() {
       return (repo: repo, products: products);
     }
 
-    testWidgets('muestra Todos / Productos / Servicios con los números del servidor', (tester) async {
+    testWidgets('los contadores ya no salen sobre la lista: van en el modal de Totales', (tester) async {
       await pump(tester);
 
-      expect(find.text('Todos: 9'), findsOneWidget);
-      expect(find.text('Productos: 6'), findsOneWidget);
-      expect(find.text('Servicios: 3'), findsOneWidget);
+      expect(find.text('Todos: 9'), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
     });
 
-    testWidgets('tocar un contador filtra por ese tipo y lo marca', (tester) async {
+    testWidgets('Acciones ofrece Totales y abre Todos / Productos / Servicios con los números del servidor', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      // Sin permisos de crear ni importar, "Totales" es la única acción: el botón flotante es esa acción.
+      await tester.tap(find.text('Totales'));
+      await tester.pumpAndSettle();
+
+      Finder card(String label, String value) => find.descendant(
+        of: find.widgetWithText(AppMetricCard, label),
+        matching: find.text(value),
+      );
+      expect(card('Todos', '9'), findsOneWidget);
+      expect(card('Productos', '6'), findsOneWidget);
+      expect(card('Servicios', '3'), findsOneWidget);
+      expect(find.text('Cerrar'), findsOneWidget);
+    });
+
+    testWidgets('Totales trae los números del servidor para la búsqueda y los filtros puestos', (tester) async {
+      final env = await pump(tester);
+      env.repo.next = Either.right(
+        ProductPageEntity(
+          items: [ProductEntity(id: 2, codigo: 'S1', name: 'Servicio 1', esServicio: true)],
+          currentPage: 1,
+          lastPage: 1,
+          total: 3,
+          totalProductos: 0,
+          totalServicios: 3,
+        ),
+      );
+      await env.products.setTipo('s');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Totales'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: find.widgetWithText(AppMetricCard, 'Todos'), matching: find.text('3')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.widgetWithText(AppMetricCard, 'Productos'), matching: find.text('0')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.widgetWithText(AppMetricCard, 'Servicios'), matching: find.text('3')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('el tipo se sigue filtrando desde el panel de filtros y sale como chip', (tester) async {
       final env = await pump(tester);
 
-      await tester.tap(find.text('Servicios: 3'));
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Servicios').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver resultados'));
       await tester.pumpAndSettle();
 
       expect(env.repo.calls.last.$4, 's');
       expect(env.products.tipo, 's');
-      expect(
-        tester.widget<ChoiceChip>(find.byKey(const ValueKey('tipo-s'))).selected,
-        isTrue,
-      );
-
-      await tester.tap(find.text('Todos: 9'));
-      await tester.pumpAndSettle();
-      expect(env.repo.calls.last.$4, isNull);
+      expect(find.text('Tipo: Servicios'), findsOneWidget);
     });
 
     testWidgets('el panel de filtros ofrece el estado y lo aplica', (tester) async {
@@ -1527,12 +1660,6 @@ void main() {
       expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
     });
 
-    testWidgets('tocar un contador también pone el chip de tipo', (tester) async {
-      await pump(tester);
-      await tester.tap(find.text('Servicios: 3'));
-      await tester.pumpAndSettle();
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-    });
   });
 
 }

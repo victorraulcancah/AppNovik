@@ -75,6 +75,7 @@ Future<bool?> showClientDetail(
     context,
     pane: pane,
     paneId: c.id,
+    keepPaneOpen: canEdit,
     title: c.displayName,
     subtitle: [c.esEmpresa ? 'RUC' : 'DNI', c.dniRuc].join(' '),
     icon: c.esEmpresa ? Icons.business_outlined : Icons.person_outline,

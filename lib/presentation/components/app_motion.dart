@@ -12,12 +12,17 @@ class AppEntrance extends StatelessWidget {
   /// Cuánto sube mientras aparece (en píxeles lógicos).
   final double offset;
 
+  /// Desde dónde llega, en píxeles lógicos (por ejemplo `Offset(24, 0)` entra desde la derecha).
+  /// Si se da, reemplaza a [offset].
+  final Offset? from;
+
   const AppEntrance({
     super.key,
     required this.child,
     this.delay = Duration.zero,
     this.duration = const Duration(milliseconds: 380),
     this.offset = 16,
+    this.from,
   });
 
   @override
@@ -38,7 +43,7 @@ class AppEntrance extends StatelessWidget {
       builder: (context, t, child) => Opacity(
         opacity: t,
         child: Transform.translate(
-          offset: Offset(0, (1 - t) * offset),
+          offset: (from ?? Offset(0, offset)) * (1 - t),
           child: child,
         ),
       ),

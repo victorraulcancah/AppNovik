@@ -172,27 +172,120 @@ class _Tab extends StatelessWidget {
 /// Contenido de las pestañas. Todas se mantienen montadas (solo se ve la
 /// activa), así los campos conservan lo escrito y se validan aunque estén
 /// ocultas.
-class AppTabsView extends StatelessWidget {
+///
+/// Al cambiar de pestaña, la nueva entra con un fundido y un deslizamiento horizontal desde el
+/// lado hacia el que se avanza (si se pasa a una pestaña de la derecha, llega desde la derecha).
+/// Con "quitar animaciones" del sistema el cambio es directo.
+class AppTabsView extends StatefulWidget {
   final List<AppTabItem> tabs;
   final AppTabsController controller;
 
   const AppTabsView({super.key, required this.tabs, required this.controller});
 
   @override
+  State<AppTabsView> createState() => _AppTabsViewState();
+}
+
+class _AppTabsViewState extends State<AppTabsView> with SingleTickerProviderStateMixin {
+  // Arranca en 1: la pestaña inicial se ve de entrada, sin animación.
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+    value: 1,
+  );
+  late final Animation<double> _curved = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
+
+  late int _shown = widget.controller.index;
+
+  /// 1 si se avanzó hacia una pestaña de la derecha, -1 hacia la izquierda.
+  int _dir = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChange);
+  }
+
+  @override
+  void didUpdateWidget(AppTabsView old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onChange);
+      widget.controller.addListener(_onChange);
+      _shown = widget.controller.index;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChange);
+    _anim.dispose();
+    super.dispose();
+  }
+
+  void _onChange() {
+    final next = widget.controller.index;
+    if (next == _shown) return;
+    _dir = next > _shown ? 1 : -1;
+    _shown = next;
+    _anim.forward(from: 0);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return ListenableBuilder(
-      listenable: controller,
+      listenable: widget.controller,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < tabs.length; i++)
+          for (var i = 0; i < widget.tabs.length; i++)
             Visibility(
-              visible: i == controller.index,
+              visible: i == widget.controller.index,
               maintainState: true,
-              child: tabs[i].child,
+              // La estructura es la misma para todas (así los formularios no pierden su estado);
+              // solo la pestaña activa recibe la animación.
+              child: _TabSlide(
+                animation: i == widget.controller.index ? _curved : kAlwaysCompleteAnimation,
+                direction: _dir,
+                still: still,
+                child: widget.tabs[i].child,
+              ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _TabSlide extends StatelessWidget {
+  final Animation<double> animation;
+  final int direction;
+  final bool still;
+  final Widget child;
+
+  const _TabSlide({
+    required this.animation,
+    required this.direction,
+    required this.still,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final t = still ? 1.0 : animation.value;
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(direction * 28.0 * (1 - t), 0),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

@@ -34,8 +34,13 @@ class AppPaneController extends ChangeNotifier {
 
   /// Muestra un detalle en el panel y devuelve lo que se decida en él (`true` = acción principal,
   /// `null` = se cerró o se eligió otro elemento). [builder] recibe la función que cierra el panel.
+  ///
+  /// Con [keepOnPrimary] la acción principal (por ejemplo "Editar") responde `true` pero deja el
+  /// detalle a la vista: el formulario se abre encima y, si se cancela, el panel sigue como estaba.
+  /// Quien pidió el detalle lo vuelve a presentar (con `present`) si guardó cambios.
   Future<bool?> present({
     required Object? id,
+    bool keepOnPrimary = false,
     required Widget Function(void Function([bool? result]) close) builder,
   }) {
     // Elegir otro elemento deja sin respuesta al anterior.
@@ -48,6 +53,10 @@ class AppPaneController extends ChangeNotifier {
     _selectedId = id;
 
     void close([bool? result]) {
+      if (keepOnPrimary && result == true) {
+        if (!completer.isCompleted) completer.complete(result);
+        return;
+      }
       if (identical(_completer, completer)) {
         _content = null;
         _selectedId = null;
@@ -160,5 +169,28 @@ class AppMasterDetail extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Espera a que [busy] deje de ser verdadero cuando [source] avise un cambio (por ejemplo a que un
+/// provider termine de recargar su lista después de guardar). Sale de todos modos pasado [timeout].
+Future<void> whenIdle(
+  Listenable source,
+  bool Function() busy, {
+  Duration timeout = const Duration(seconds: 15),
+}) async {
+  // Deja que quien guardó alcance a marcar "cargando".
+  await Future<void>.delayed(Duration.zero);
+  if (!busy()) return;
+  final done = Completer<void>();
+  void listener() {
+    if (!busy() && !done.isCompleted) done.complete();
+  }
+
+  source.addListener(listener);
+  try {
+    await done.future.timeout(timeout, onTimeout: () {});
+  } finally {
+    source.removeListener(listener);
   }
 }

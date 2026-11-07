@@ -1504,6 +1504,73 @@ void main() {
         expect(repo.adds.single.items.single, (productId: 5, costo: 8.0, stock: 4));
       });
 
+      testWidgets('si el panel muestra el producto, actualizar su stock lo deja con el stock nuevo', (
+        tester,
+      ) async {
+        final repo = await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
+        await tester.tap(find.text('SUBWOOFER 12').first);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: find.widgetWithText(AppDetailRow, 'Stock total'), matching: find.text('10')),
+          findsOneWidget,
+        );
+
+        // Lo que devuelve el servidor al recargar la lista después de actualizar.
+        repo.itemsOverride = const [
+          StockItemEntity(
+            productId: 5,
+            codigo: 'SUB-5',
+            name: 'SUBWOOFER 12',
+            disponible: 14,
+            costoPromedio: 8,
+            ultimoCosto: 9,
+          ),
+        ];
+        await tester.tap(find.byTooltip('Actualizar stock'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const ValueKey('stock-nuevo')), '14');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Actualizar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Selecciona un producto'), findsNothing);
+        expect(
+          find.descendant(of: find.widgetWithText(AppDetailRow, 'Stock total'), matching: find.text('14')),
+          findsOneWidget,
+        );
+        expect(tester.widget<AppListCard>(find.byType(AppListCard)).selected, isTrue);
+      });
+
+      testWidgets('actualizar el stock de otro producto no toca el detalle que se está viendo', (
+        tester,
+      ) async {
+        final repo = await pumpPage(
+          tester,
+          const StockPage(),
+          setUpRepo: (repo) => repo.itemsOverride = const [
+            StockItemEntity(productId: 5, codigo: 'SUB-5', name: 'SUBWOOFER 12', disponible: 10),
+            StockItemEntity(productId: 6, codigo: 'AMP-6', name: 'AMPLIFICADOR', disponible: 3),
+          ],
+          size: tablet,
+        );
+        await tester.tap(find.text('SUBWOOFER 12').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Actualizar stock').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const ValueKey('stock-nuevo')), '8');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Actualizar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.adds, hasLength(1));
+        // Sigue el detalle del SUBWOOFER (no el del amplificador).
+        expect(
+          find.descendant(of: find.widgetWithText(AppDetailRow, 'Stock total'), matching: find.text('10')),
+          findsOneWidget,
+        );
+      });
+
       testWidgets('el botón "Acciones" queda en la columna de la lista', (tester) async {
         await pumpPage(tester, const StockPage(), setUpRepo: withItem, size: tablet);
         await tester.tap(find.text('SUBWOOFER 12').first);

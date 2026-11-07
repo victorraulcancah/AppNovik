@@ -127,7 +127,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
   Future<void> _editar(ProductEntity p) async {
     final products = context.read<ProductsProvider>();
-    await showProductForm(
+    final saved = await showProductForm(
       context,
       product: p,
       loadCatalogs: products.loadCatalogs,
@@ -135,6 +135,18 @@ class _ProductsPageState extends State<ProductsPage> {
       pickPhoto: widget.pickPhoto,
       onSubmit: (form) => products.saveProduct(form, id: p.id),
     );
+    // En tablet el detalle seguía a la vista: si se guardó, vuelve con los datos nuevos (si se
+    // canceló, queda como estaba).
+    if (saved != true || !mounted || !_pane.isWide || _pane.selectedId != p.id) return;
+    await whenIdle(products, () => products.loading);
+    if (!mounted || _pane.selectedId != p.id) return;
+    final updated = products.items.where((x) => x.id == p.id).firstOrNull;
+    if (updated == null) {
+      // Con los filtros puestos el producto ya no sale en la lista.
+      _pane.close();
+    } else {
+      unawaited(_verDetalle(updated));
+    }
   }
 
   Future<void> _verDetalle(ProductEntity p) async {
@@ -212,7 +224,7 @@ class _ProductsPageState extends State<ProductsPage> {
     }
   }
 
-  List<AppSpeedDialAction> _actions() => [
+  List<AppSpeedDialAction> _actions(ProductsProvider products) => [
         if (_can('productos.store'))
           AppSpeedDialAction(
             label: 'Crear',
@@ -256,12 +268,18 @@ class _ProductsPageState extends State<ProductsPage> {
             color: const Color(0xFFDB2777),
             onPressed: () => _importar(ImportKind.categorias, Icons.account_tree_outlined),
           ),
+        AppSpeedDialAction(
+          label: 'Totales',
+          icon: Icons.functions,
+          color: const Color(0xFF0E90C7),
+          onPressed: () => _showTotals(products),
+        ),
       ];
 
   @override
   Widget build(BuildContext context) {
     final products = context.watch<ProductsProvider>();
-    final actions = _actions();
+    final actions = _actions(products);
 
     return Column(
       children: [
@@ -285,7 +303,7 @@ class _ProductsPageState extends State<ProductsPage> {
     );
   }
 
-  /// La lista: búsqueda, filtros, contadores, tarjetas y el botón "Acciones" abajo a la derecha
+  /// La lista: búsqueda, filtros, tarjetas y el botón "Acciones" abajo a la derecha
   /// (sin acciones, no se muestra).
   Widget _listPane(ProductsProvider products, List<AppSpeedDialAction> actions) {
     return Stack(
@@ -309,7 +327,6 @@ class _ProductsPageState extends State<ProductsPage> {
               onRemove: products.removeSearchTerm,
               onClear: products.clearSearchTerms,
             ),
-            _counters(products),
             Expanded(child: _body(products)),
           ],
         ),
@@ -339,32 +356,32 @@ class _ProductsPageState extends State<ProductsPage> {
           ),
       ];
 
-  /// Todos / Productos / Servicios: como en la web, son los números del servidor y tocarlos
-  /// filtra por tipo.
-  Widget _counters(ProductsProvider products) {
-    if (products.items.isEmpty && products.total == 0) return const SizedBox.shrink();
-
-    Widget chip(String label, int count, String? value) => ChoiceChip(
-          key: ValueKey('tipo-${value ?? 'todos'}'),
-          label: Text('$label: $count'),
-          selected: products.tipo == value,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) => products.setTipo(value),
-        );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Wrap(
-          spacing: 8,
-          children: [
-            chip('Todos', products.total, null),
-            chip('Productos', products.totalProductos, 'p'),
-            chip('Servicios', products.totalServicios, 's'),
-          ],
+  /// Todos / Productos / Servicios en un modal de totales (como el "Totales" de Stock): son los
+  /// números del servidor para la búsqueda y los filtros que están puestos. El tipo se sigue
+  /// filtrando desde el panel de filtros.
+  void _showTotals(ProductsProvider products) {
+    showAppSummary(
+      context,
+      title: 'Totales',
+      subtitle: 'Productos',
+      metrics: [
+        AppSummaryMetric(
+          label: 'Todos',
+          value: '${products.total}',
+          color: const Color(0xFF0E90C7),
         ),
-      ),
+        AppSummaryMetric(
+          label: 'Productos',
+          value: '${products.totalProductos}',
+          color: const Color(0xFF16A34A),
+        ),
+        AppSummaryMetric(
+          label: 'Servicios',
+          value: '${products.totalServicios}',
+          color: const Color(0xFF7C3AED),
+        ),
+      ],
+      note: 'Según la búsqueda y los filtros que están puestos.',
     );
   }
 

@@ -10,6 +10,7 @@ export 'app_detail.dart';
 export 'app_disposer.dart';
 export 'app_dropdown_field.dart';
 export 'app_filter_sheet.dart';
+export 'app_illustrations.dart';
 export 'app_import_modal.dart';
 export 'app_list_card.dart';
 export 'app_list_row.dart';

@@ -331,7 +331,12 @@ class _CheckoutBody extends StatelessWidget {
 
     return ListenableBuilder(
       listenable: draft,
-      builder: (context, _) => Column(
+      // El alto cambia con suavidad cuando se agrega o quita un pago o aparece el tipo de cambio.
+      builder: (context, _) => AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (sales.offeredPaymentMethods.any((m) => m.esPuntos) && points > 0)
@@ -385,14 +390,29 @@ class _CheckoutBody extends StatelessWidget {
           ],
           const SizedBox(height: 16),
           for (var i = 0; i < draft.rows.length; i++) ...[
-            _PaymentCard(
-              key: ObjectKey(draft.rows[i]),
-              index: i,
-              row: draft.rows[i],
-              draft: draft,
-              sales: sales,
-              onRemove: i == 0 ? null : () => draft.removeRow(i),
-            ),
+            // El primer pago ya está al abrir; los que se agregan llegan deslizándose desde la derecha.
+            if (i == 0)
+              _PaymentCard(
+                key: ObjectKey(draft.rows[i]),
+                index: i,
+                row: draft.rows[i],
+                draft: draft,
+                sales: sales,
+                onRemove: null,
+              )
+            else
+              AppEntrance(
+                key: ObjectKey(draft.rows[i]),
+                from: const Offset(28, 0),
+                duration: const Duration(milliseconds: 300),
+                child: _PaymentCard(
+                  index: i,
+                  row: draft.rows[i],
+                  draft: draft,
+                  sales: sales,
+                  onRemove: () => draft.removeRow(i),
+                ),
+              ),
             const SizedBox(height: 10),
           ],
           _PaymentsSummary(draft: draft),
@@ -422,6 +442,7 @@ class _CheckoutBody extends StatelessWidget {
             keyboardType: TextInputType.multiline,
           ),
         ],
+      ),
       ),
     );
   }

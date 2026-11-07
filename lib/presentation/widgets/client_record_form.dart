@@ -360,7 +360,7 @@ class _ClientDraft {
 /// una según los permisos). El mapa de la pestaña Ubicación no está en la app.
 ///
 /// [onSubmit] guarda y devuelve el mensaje de error, o `null` si salió bien.
-Future<void> showClientForm(
+Future<bool?> showClientForm(
   BuildContext context, {
   ClientRecordEntity? client,
   required ClientFormAccess access,
@@ -408,7 +408,7 @@ Future<void> showClientForm(
   if (tabs.isEmpty) {
     error.dispose();
     draft.dispose();
-    return;
+    return null;
   }
   // Todas las pestañas viven mientras el modal está abierto: la primera suelta los controles al cerrarse.
   final first = tabs.first;
@@ -419,7 +419,7 @@ Future<void> showClientForm(
     child: AppDisposer(onDispose: [draft.dispose, error.dispose], child: first.child),
   );
 
-  await showAppModal(
+  return showAppModal(
     context,
     title: editing ? 'Editar cliente' : 'Crear cliente',
     subtitle: editing ? client.displayName : 'Se agrega a tu empresa',

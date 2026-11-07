@@ -429,19 +429,27 @@ class _StockPageState extends State<StockPage> {
     );
   }
 
-  Future<void> _actualizar(StockItemEntity s) {
+  Future<void> _actualizar(StockItemEntity s) async {
     final stock = context.read<StockProvider>();
     var warehouseName = '';
     for (final w in stock.warehouses) {
       if (w.id == stock.warehouseId) warehouseName = w.name;
     }
-    return showStockUpdate(
+    final updated = await showStockUpdate(
       context,
       stock: stock,
       item: s,
       warehouseName: warehouseName,
       canSeeCost: _can('almacenes.show.costo_promedio'),
     );
+    // En tablet, si el panel muestra este producto, vuelve con el stock nuevo.
+    if (updated != true || !mounted || !_pane.isWide || _pane.selectedId != s.productId) return;
+    final fresh = stock.items.where((x) => x.productId == s.productId).firstOrNull;
+    if (fresh == null) {
+      _pane.close();
+    } else {
+      _verDetalle(fresh, stock.priceList?.simboloMoneda ?? 'S/');
+    }
   }
 
   void _verDetalle(StockItemEntity s, String symbol) {

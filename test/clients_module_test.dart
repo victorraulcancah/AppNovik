@@ -815,7 +815,7 @@ void main() {
         expect(find.text('AV. DOS 456'), findsOneWidget);
       });
 
-      testWidgets('"Editar" del panel abre el formulario de edición', (tester) async {
+      testWidgets('"Editar" del panel abre el formulario y el detalle sigue a la vista', (tester) async {
         tablet(tester);
         await _pump(tester, const {'clientes.index', 'clientes.update', 'clientes.update.contactos'});
         await tester.tap(find.text('Ana Pérez').first);
@@ -825,7 +825,54 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Editar cliente'), findsOneWidget);
-        expect(find.text('Línea de crédito'), findsNothing, reason: 'el panel se vació');
+        expect(find.text('Línea de crédito'), findsOneWidget, reason: 'el detalle no se vació');
+        expect(find.text('Selecciona un cliente'), findsNothing);
+      });
+
+      testWidgets('si se cancela la edición el panel conserva el detalle y "Editar" sigue disponible', (
+        tester,
+      ) async {
+        tablet(tester);
+        await _pump(tester, const {'clientes.index', 'clientes.update', 'clientes.update.contactos'});
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Cancelar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Editar cliente'), findsNothing);
+        expect(find.text('Línea de crédito'), findsOneWidget);
+        final edit = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Editar'));
+        expect(edit.onPressed, isNotNull, reason: 'el botón no se queda cargando');
+      });
+
+      testWidgets('al guardar la edición el panel vuelve con el cliente actualizado', (tester) async {
+        tablet(tester);
+        final repo = await _pump(tester, const {'clientes.index', 'clientes.update', 'clientes.update.contactos'});
+        final updated = _clientJson()..['name'] = 'Anita';
+        repo.saved = clientRecordFromJson(updated);
+
+        await tester.tap(find.text('Ana Pérez').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Editar'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Agregar contacto'));
+        await tester.tap(find.text('Agregar contacto'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.widgetWithText(TextFormField, 'Nombres').last, 'Marta');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+        await tester.pumpAndSettle();
+
+        expect(repo.saves, hasLength(1));
+        expect(find.text('Editar cliente'), findsNothing);
+        // El panel muestra otra vez el detalle, ya con el nombre nuevo.
+        expect(find.text('Selecciona un cliente'), findsNothing);
+        expect(find.text('Línea de crédito'), findsOneWidget);
+        expect(find.text('Anita Pérez'), findsWidgets);
+        expect(find.text('Ana Pérez'), findsNothing);
       });
 
       testWidgets('sin el permiso de editar no hay "Editar" en el panel', (tester) async {

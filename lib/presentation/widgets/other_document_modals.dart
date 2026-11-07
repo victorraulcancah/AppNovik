@@ -75,6 +75,8 @@ Future<void> showOtherDocumentDetail(
     context,
     pane: pane,
     paneId: d.id,
+    // "Ver PDF" abre otra pantalla: al volver, el detalle sigue a la vista en el panel.
+    keepPaneOpen: true,
     title: d.numero,
     subtitle: d.kind.label,
     icon: switch (d.kind) {

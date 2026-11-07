@@ -24,6 +24,7 @@ import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/client_usecases.dart';
 import 'package:app_novik/domain/usecases/sale_usecases.dart';
 import 'package:app_novik/domain/usecases/stock_usecases.dart';
+import 'package:app_novik/presentation/components/app_motion.dart' show AppEntrance;
 import 'package:app_novik/presentation/pages/sales_page.dart';
 import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
@@ -1066,6 +1067,32 @@ void main() {
       expect(find.text('Descargar PDF'), findsOneWidget);
       expect(find.text('Ver detalle'), findsOneWidget);
       expect(find.text('V001-0001'), findsOneWidget);
+    });
+
+    testWidgets('el pago que se agrega llega deslizándose desde la derecha y el primero no se anima', (tester) async {
+      await openCheckout(tester);
+      expect(find.text('Método de pago 1'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('Método de pago 1'), matching: find.byType(AppEntrance)),
+        findsNothing,
+        reason: 'el primer pago ya está al abrir',
+      );
+
+      await tester.ensureVisible(find.text('Agregar método de pago'));
+      await tester.tap(find.text('Agregar método de pago'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final entrance = find.ancestor(of: find.text('Método de pago 2'), matching: find.byType(AppEntrance));
+      expect(entrance, findsOneWidget);
+      expect(tester.widget<AppEntrance>(entrance).from, const Offset(28, 0));
+      final opacity = tester.widget<Opacity>(
+        find.descendant(of: entrance, matching: find.byType(Opacity)).first,
+      );
+      expect(opacity.opacity, lessThan(1));
+
+      await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(find.descendant(of: entrance, matching: find.byType(Opacity)).first).opacity, 1);
+      expect(find.text('Método de pago 2'), findsOneWidget);
     });
 
     testWidgets('varios pagos: Crear espera a que sumen el total', (tester) async {

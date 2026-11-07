@@ -27,6 +27,7 @@ Future<bool?> showProductDetail(
     context,
     pane: pane,
     paneId: p.id,
+    keepPaneOpen: canEdit,
     title: p.name,
     subtitle: p.codigo.isEmpty ? null : p.codigo,
     icon: Icons.category_outlined,
