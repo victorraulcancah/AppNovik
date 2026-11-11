@@ -174,7 +174,6 @@ class _ComponentGalleryPageState extends State<ComponentGalleryPage> {
               items: _productos,
               bottomPadding: 96,
               itemBuilder: (context, p, number) => AppListCard(
-                number: number,
                 title: p.$2,
                 lines: [p.$1, p.$3],
                 trailingTitle: p.$5,

@@ -230,7 +230,6 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
     }
 
     return AppListCard(
-      number: number,
       title: d.numero,
       lines: lines.where((l) => l.isNotEmpty).toList(),
       trailingTitle: trailingTitle,

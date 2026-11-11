@@ -426,8 +426,51 @@ void main() {
       expect(q['page'], ['2']);
       expect(q['results'], ['15']);
       expect(q['sortField'], ['cantidad']);
-      expect(q['sortOrder'], ['ascend']);
+      // Menor a mayor: el backend ordena al revés, así que se pide el sentido contrario.
+      expect(q['sortOrder'], ['descend']);
       expect(requests.last.headers['Authorization'], 'Bearer tok');
+    });
+
+    test('mayor a menor se pide con el sentido que el backend invierte', () async {
+      await dataSource.getSalesReport(
+        token: 'tok',
+        filters: filters,
+        page: 1,
+        pageSize: 15,
+        sortField: 'cantidad',
+        sortDescending: true,
+      );
+      final q = requests.last.url.queryParametersAll;
+      expect(q['sortField'], ['cantidad']);
+      expect(q['sortOrder'], ['ascend']);
+    });
+
+    test('Venta total de mayor a menor (el orden de siempre) no manda orden: el servidor ya ordena así', () async {
+      await dataSource.getSalesReport(
+        token: 'tok',
+        filters: filters,
+        page: 1,
+        pageSize: 15,
+        sortField: 'venta',
+        sortDescending: true,
+      );
+      final q = requests.last.url.queryParametersAll;
+      expect(q.containsKey('sortField'), isFalse);
+      expect(q.containsKey('sortOrder'), isFalse);
+    });
+
+    test('Venta total de menor a mayor sí manda el orden', () async {
+      await dataSource.getSalesReport(
+        token: 'tok',
+        filters: filters,
+        page: 1,
+        pageSize: 15,
+        sortField: 'venta',
+        sortDescending: false,
+      );
+      final q = requests.last.url.queryParametersAll;
+      expect(q['sortField'], ['venta']);
+      expect(q['sortOrder'], ['descend']);
     });
 
     test('sin filtros avanzados solo manda las fechas', () async {

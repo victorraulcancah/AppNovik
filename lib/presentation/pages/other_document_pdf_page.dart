@@ -9,6 +9,7 @@ import '../pdf/other_document_pdf.dart';
 import '../providers/auth_provider.dart';
 import '../providers/documents_provider.dart';
 import '../utils/download_file.dart';
+import 'pdf_zoom_page.dart';
 
 /// El PDF de un traslado, una entrada de stock, una guía de remisión o una nota de crédito: se ve
 /// en pantalla y se puede descargar, compartir o imprimir.
@@ -82,6 +83,16 @@ class _OtherDocumentPdfPageState extends State<OtherDocumentPdfPage> {
               // Descargar guarda el PDF en el dispositivo; el botón de compartir lo manda por
               // WhatsApp, correo, etc.
               actions: [
+                // La lupa abre el documento en una pantalla para acercarlo con los dedos.
+                PdfPreviewAction(
+                  icon: const Icon(Icons.zoom_in),
+                  onPressed: (context, build, pageFormat) async {
+                    final bytes = await build(pageFormat);
+                    if (context.mounted) {
+                      await openPdfZoom(context, pdf: bytes, title: d.numero, subtitle: widget.preview ? 'VISTA PREVIA — sin guardar' : d.kind.label);
+                    }
+                  },
+                ),
                 PdfPreviewAction(
                   icon: const Icon(Icons.download_outlined),
                   onPressed: (context, build, pageFormat) async {

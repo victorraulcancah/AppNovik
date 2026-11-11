@@ -14,3 +14,15 @@ String formatCompactMoney(double value, {String symbol = 'S/'}) {
   if (value >= 1000) return '$symbol ${(value / 1000).round()}K';
   return '$symbol ${value.round()}';
 }
+
+/// Nombre y la inicial del apellido: `FRANCIS BULNES GONZALES` → `FRANCIS B.`.
+///
+/// Los nombres peruanos van como nombres + apellido paterno + apellido materno, así que según
+/// cuántas palabras tenga: 1 → igual; 2 o 3 → primera + inicial de la segunda; 4 o más (dos
+/// nombres) → primera + inicial de la tercera (el apellido paterno). Vacío sigue vacío.
+String shortPersonName(String? fullName) {
+  final parts = (fullName ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.length <= 1) return parts.isEmpty ? '' : parts.first;
+  final surname = parts.length >= 4 ? parts[2] : parts[1];
+  return '${parts.first} ${surname.substring(0, 1).toUpperCase()}.';
+}

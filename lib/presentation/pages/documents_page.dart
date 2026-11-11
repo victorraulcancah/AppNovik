@@ -370,11 +370,10 @@ class _DocumentsPageState extends State<DocumentsPage> {
         : 'documentos.ventas.destroy';
 
     return AppListCard(
-      number: number,
       title: d.numero,
       lines: [
         d.cliente,
-        '${d.vendedor} · ${d.almacen}',
+        '${shortPersonName(d.vendedor)} · ${d.almacen}',
         d.creado == null
             ? ''
             : DateFormat(AppConstants.dateTimeFormat).format(d.creado!),

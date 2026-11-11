@@ -430,7 +430,6 @@ class _ProductsPageState extends State<ProductsPage> {
         .join(' · ');
 
     return AppListCard(
-      number: number,
       // La miniatura solo sale si el producto tiene imagen.
       leading: p.imagen == null ? null : ProductImage(path: p.imagen!),
       title: p.name,

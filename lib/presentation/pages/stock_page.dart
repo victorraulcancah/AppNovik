@@ -403,7 +403,6 @@ class _StockPageState extends State<StockPage> {
     ].join(' · ');
 
     return AppListCard(
-      number: number,
       title: s.name,
       lines: [
         [s.esServicio ? 'Servicio' : 'Producto', if (s.codigo.isNotEmpty) s.codigo].join(' · '),

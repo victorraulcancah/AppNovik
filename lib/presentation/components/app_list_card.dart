@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
 import 'app_press.dart';
 
-/// Tarjeta de lista: número en la esquina, título, líneas de detalle y, a la
-/// derecha, un dato destacado con su nota y los botones de acción de la fila.
+/// Tarjeta de lista: título, líneas de detalle y, a la derecha, un dato destacado con su
+/// nota y los botones de acción de la fila.
 class AppListCard extends StatelessWidget {
-  /// Posición en la lista; si es `null` no se muestra la marca de la esquina.
-  final int? number;
   final String title;
   final List<String> lines;
   final String? trailingTitle;
@@ -34,7 +31,6 @@ class AppListCard extends StatelessWidget {
 
   const AppListCard({
     super.key,
-    this.number,
     required this.title,
     this.lines = const [],
     this.trailingTitle,
@@ -79,12 +75,7 @@ class AppListCard extends StatelessWidget {
           child: Stack(
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  number == null ? 16 : 44,
-                  12,
-                  8,
-                  8,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -163,31 +154,6 @@ class AppListCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (number != null)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppTheme.strongFill(theme.brightness),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      '$number',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

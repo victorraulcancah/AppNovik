@@ -51,6 +51,22 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
         if (f.departamentos.isNotEmpty) 'departamentos[]': f.departamentos,
       };
 
+  /// Parámetros de orden de `/ventas/reporte`.
+  ///
+  /// El backend ordena al revés de lo que se le pide: `SaleController::reporte` llama
+  /// `sortBy($campo, SORT_REGULAR, $sortOrder === 'ascend')` y el tercer argumento de `sortBy` es
+  /// "descendente". Por eso `descend` sale de menor a mayor. Aquí se pide el sentido contrario
+  /// para que la lista salga como se eligió. Sin orden explícito, o con el de siempre (Venta
+  /// total de mayor a menor), no se manda nada y el servidor usa el suyo, que ya es ese.
+  /// Si se corrige el backend, hay que quitar esta inversión.
+  static Map<String, List<String>> _sortParams(String? sortField, bool sortDescending) {
+    if (sortField == null || (sortField == 'venta' && sortDescending)) return const {};
+    return {
+      'sortField': [sortField],
+      'sortOrder': [sortDescending ? 'ascend' : 'descend'],
+    };
+  }
+
   @override
   Future<SalesReportEntity> getSalesReport({
     required String token,
@@ -64,10 +80,7 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       ..._filterParams(filters),
       'page': ['$page'],
       'results': ['$pageSize'],
-      if (sortField != null) ...{
-        'sortField': [sortField],
-        'sortOrder': [sortDescending ? 'descend' : 'ascend'],
-      },
+      ..._sortParams(sortField, sortDescending),
     });
     final body = await sendApiRequest(
       () => client.get(uri, headers: ApiConstants.authHeaders(token)),

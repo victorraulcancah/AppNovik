@@ -377,11 +377,10 @@ class _ClientsPageState extends State<ClientsPage> {
         if (canSeePhone && c.telefono != null) c.telefono!,
         if (c.departmentName != null) c.departmentName!,
       ].join(' · '),
-      c.ejecutivoNombre == null ? 'Sin ejecutivo asignado' : 'Ejecutivo: ${c.ejecutivoNombre}',
+      c.ejecutivoNombre == null ? 'Sin ejecutivo asignado' : 'Ejecutivo: ${shortPersonName(c.ejecutivoNombre)}',
     ].where((t) => t.isNotEmpty).toList();
 
     return AppListCard(
-      number: number,
       title: c.displayName,
       lines: lines,
       trailingTitle: formatMoney(c.credito, symbol: 'S/.'),

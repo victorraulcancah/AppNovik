@@ -720,7 +720,7 @@ void main() {
       expect(find.text('Persona · DNI 12345678'), findsWidgets);
       expect(find.text('Distribuidor'), findsWidgets);
       expect(find.text('Activo'), findsWidgets);
-      expect(find.text('Ejecutivo: Juan Pérez'), findsWidgets);
+      expect(find.text('Ejecutivo: Juan P.'), findsWidgets);
       expect(find.text('Todos: 25'), findsOneWidget);
       expect(find.text('Personas: 20'), findsOneWidget);
       expect(find.text('Empresas: 5'), findsOneWidget);

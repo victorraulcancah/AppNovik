@@ -162,7 +162,6 @@ void main() {
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: AppListCard(
-                      number: i,
                       title: 'Distribuidora Comercial del Sur Sociedad Anónima Cerrada',
                       lines: const ['RUC 20123456789 · Código CL-000123', 'Ejecutivo: María Fernanda Quispe'],
                       trailingTitle: 'S/ 12,345.67',

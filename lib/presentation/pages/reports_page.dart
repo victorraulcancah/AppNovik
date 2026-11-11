@@ -474,7 +474,6 @@ class _ReportsPageState extends State<ReportsPage> {
     final detail = [if (p.codigo.isNotEmpty) p.codigo, if (p.marca != null) p.marca!].join(' · ');
 
     return AppListCard(
-      number: number,
       title: p.name,
       lines: [
         if (detail.isNotEmpty) detail,
