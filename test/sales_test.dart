@@ -3960,13 +3960,13 @@ void main() {
         expect(sales.lines.single.dto, 20);
       });
 
-      testWidgets('sin foto muestra un ícono; con foto pide la imagen del producto', (tester) async {
+      testWidgets('sin foto no dibuja recuadro; con foto pide la imagen del producto', (tester) async {
         final (sales, _) = await pumpSales(tester);
         sales.selectWarehouse(1);
         sales.addProduct(_product(), cantidad: 1);
         await tester.pumpAndSettle();
         expect(inCard(find.byType(ProductImage)), findsNothing);
-        expect(inCard(find.byIcon(Icons.inventory_2_outlined)), findsOneWidget);
+        expect(inCard(find.byIcon(Icons.inventory_2_outlined)), findsNothing);
 
         sales.addProduct(
           SaleProductEntity(
@@ -3993,7 +3993,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(inCard(find.text('FL-1 · Ítem libre')), findsOneWidget);
-        expect(inCard(find.byIcon(Icons.edit_note_outlined)), findsOneWidget);
+        expect(inCard(find.byIcon(Icons.edit_note_outlined)), findsNothing);
         expect(find.byTooltip('Editar descripción y código'), findsOneWidget);
         expect(inCard(find.byType(ProductImage)), findsNothing);
         await tester.ensureVisible(find.byTooltip('Más'));

@@ -389,6 +389,8 @@ class _AppModalContentState extends State<_AppModalContent> {
           Flexible(
             fit: widget.fill ? FlexFit.tight : FlexFit.loose,
             child: SingleChildScrollView(
+              // Al deslizar la lista el teclado baja y deja ver más.
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.all(20),
               child: body,
             ),

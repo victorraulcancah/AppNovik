@@ -94,6 +94,7 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
   Timer? _debounce;
   int _request = 0;
   String _query = '';
+  String _text = '';
   bool _loading = false;
   String? _error;
   String? _notice;
@@ -107,6 +108,7 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
 
   void _onChanged(String text) {
     _debounce?.cancel();
+    _text = text.trim();
     final query = text.trim();
     if (query.isEmpty) {
       _request++;
@@ -131,6 +133,10 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
     });
     final result = await widget.search(query);
     if (!mounted || request != _request) return;
+    // Con la respuesta a la vista, el teclado baja (y con él el botón "Cerrar" sube
+    // de nuevo a su lugar) para que la lista tenga más alto. Solo si no se siguió
+    // escribiendo mientras tanto.
+    if (_text == query) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = false;
       result.fold(
@@ -282,6 +288,9 @@ class _SearchField extends StatelessWidget {
       leading: const Icon(Icons.search),
       padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
       onChanged: onChanged,
+      // La tecla de buscar también baja el teclado.
+      textInputAction: TextInputAction.search,
+      onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
     );
   }
 }

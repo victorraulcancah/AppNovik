@@ -230,8 +230,10 @@ class _SaleLineCardState extends State<SaleLineCard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _photo(scheme),
-        const SizedBox(width: 10),
+        if (_photo(scheme) case final photo?) ...[
+          photo,
+          const SizedBox(width: 10),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,26 +321,14 @@ class _SaleLineCardState extends State<SaleLineCard> {
     );
   }
 
-  Widget _photo(ColorScheme scheme) {
-    const size = 68.0;
+  /// La foto del producto. Sin foto no se dibuja nada (antes era un recuadro gris con un ícono
+  /// que le quitaba ancho al nombre y al total).
+  Widget? _photo(ColorScheme scheme) {
+    const size = 56.0;
     final line = widget.line;
     final path = line.product.imagen;
-    if (path != null && !line.esLibre) {
-      return ProductImage(path: path, size: size, radius: 16, fit: BoxFit.cover);
-    }
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Icon(
-        line.esLibre ? Icons.edit_note_outlined : Icons.inventory_2_outlined,
-        size: 30,
-        color: scheme.onSurfaceVariant,
-      ),
-    );
+    if (path == null || line.esLibre) return null;
+    return ProductImage(path: path, size: size, radius: 14, fit: BoxFit.cover);
   }
 
   // ── Cantidad, descuento y basurero ──────────────────────────────────────────────────────
