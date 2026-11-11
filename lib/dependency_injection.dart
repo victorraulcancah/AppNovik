@@ -9,6 +9,7 @@ import 'data/datasources/client_record_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
 import 'data/datasources/guide_remote_datasource.dart';
+import 'data/datasources/inicio_cache_datasource.dart';
 import 'data/datasources/inicio_remote_datasource.dart';
 import 'data/datasources/other_document_remote_datasource.dart';
 import 'data/datasources/product_remote_datasource.dart';
@@ -46,6 +47,7 @@ import 'domain/usecases/client_record_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
 import 'domain/usecases/guide_usecases.dart';
+import 'domain/usecases/inicio_cache_usecases.dart';
 import 'domain/usecases/inicio_usecases.dart';
 import 'domain/usecases/other_document_usecases.dart';
 import 'domain/usecases/product_usecases.dart';
@@ -138,15 +140,23 @@ class DependencyInjection {
               previous!..syncCompany(auth.session?.company.id),
         ),
 
+        // `lazy: false`: tiene que existir desde el login para adelantar sus datos (ver `prefetch`); si
+        // se creara al abrir Inicio, ya sería tarde.
         ChangeNotifierProxyProvider<AuthProvider, InicioProvider>(
+          lazy: false,
           create: (context) => InicioProvider(
             getWarehouseSalesUseCase: GetWarehouseSalesUseCase(repository: _inicioRepository),
             getExecutiveSummaryUseCase: GetExecutiveSummaryUseCase(repository: _inicioRepository),
             getTeamSummaryUseCase: GetTeamSummaryUseCase(repository: _inicioRepository),
             getCeoSummaryUseCase: GetCeoSummaryUseCase(repository: _inicioRepository),
+            getCachedInicioUseCase: GetCachedInicioUseCase(repository: _inicioRepo),
+            clearInicioCacheUseCase: ClearInicioCacheUseCase(repository: _inicioRepo),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
-          update: (context, auth, previous) => previous!..syncSession(auth.session),
+          // Con los roles que dio el login, Inicio empieza a pedir sus datos sin esperar a `/auth`.
+          update: (context, auth, previous) => previous!
+            ..syncSession(auth.session)
+            ..prefetch(auth.pendingUser),
         ),
 
         ChangeNotifierProxyProvider<AuthProvider, ReportsProvider>(
@@ -267,10 +277,16 @@ class DependencyInjection {
         authLocalDataSource: _authLocalDataSource,
       );
 
-  static InicioRepository get _inicioRepository => InicioRepositoryImpl(
-        remoteDataSource: InicioRemoteDataSourceImpl(client: _httpClient),
+  /// Una sola instancia (hace tanto de repositorio de datos como de caché del Inicio).
+  static final InicioRepositoryImpl _inicioRepo = InicioRepositoryImpl(
+        remoteDataSource: InicioRemoteDataSourceImpl(
+          client: _httpClient,
+          cache: InicioCacheDataSourceImpl(),
+        ),
         authLocalDataSource: _authLocalDataSource,
       );
+
+  static InicioRepository get _inicioRepository => _inicioRepo;
 
   static ClientRecordRepository get _clientRecordRepository => ClientRecordRepositoryImpl(
         remoteDataSource: ClientRecordRemoteDataSourceImpl(client: _httpClient),
@@ -303,6 +319,6 @@ class DependencyInjection {
   static AuthRemoteDataSource get _authRemoteDataSource =>
       AuthRemoteDataSourceImpl(client: _httpClient);
 
-  static AuthLocalDataSource get _authLocalDataSource =>
-      AuthLocalDataSourceImpl();
+  /// Una sola instancia: guarda el token en memoria y todos los repositorios deben verlo igual.
+  static final AuthLocalDataSource _authLocalDataSource = AuthLocalDataSourceImpl();
 }

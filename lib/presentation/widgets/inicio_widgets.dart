@@ -215,8 +215,8 @@ class InicioProgressBar extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(height),
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: value),
-        duration: reduce ? Duration.zero : const Duration(milliseconds: 700),
+        tween: Tween(begin: AppCountUpScope.fromZeroOf(context) ? 0 : value, end: value),
+        duration: reduce ? Duration.zero : const Duration(milliseconds: 450),
         curve: Curves.easeOutCubic,
         builder: (context, v, _) => LinearProgressIndicator(
           value: v,
@@ -393,8 +393,8 @@ class InicioGoalRing extends StatelessWidget {
       width: size,
       height: size,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: reduce ? target : 0, end: target),
-        duration: reduce ? Duration.zero : const Duration(milliseconds: 900),
+        tween: Tween(begin: reduce || !AppCountUpScope.fromZeroOf(context) ? target : 0, end: target),
+        duration: reduce ? Duration.zero : const Duration(milliseconds: 550),
         curve: Curves.easeOutCubic,
         builder: (context, value, child) => CustomPaint(
           painter: _RingPainter(progress: value, color: color, track: theme.colorScheme.surfaceContainerHigh),
@@ -1262,7 +1262,13 @@ Widget inicioSections(List<Widget> sections) => Column(
   children: [
     for (var i = 0; i < sections.length; i++) ...[
       if (i > 0) const SizedBox(height: 18),
-      AppEntrance(delay: Duration(milliseconds: 50 * (i < 8 ? i : 8)), offset: 12, child: sections[i]),
+      // Lo de arriba sale ya; el escalonado entero no pasa de ~250 ms (90 de retraso + 160 de entrada).
+      AppEntrance(
+        delay: Duration(milliseconds: i < 3 ? 30 * i : 90),
+        duration: const Duration(milliseconds: 160),
+        offset: 12,
+        child: sections[i],
+      ),
     ],
   ],
 );

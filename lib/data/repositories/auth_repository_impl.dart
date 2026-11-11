@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import '../../core/errors/exceptions.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
@@ -24,7 +28,14 @@ class AuthRepositoryImpl implements AuthRepository {
   ) async {
     try {
       final session = await remoteDataSource.login(usuario, password);
-      await localDataSource.saveSession(session.token, session.user);
+      // El token ya queda en memoria para las peticiones que siguen; el disco se completa en
+      // segundo plano. Si fallara, esta sesión sigue valiendo y solo habría que entrar de nuevo
+      // al reabrir la app.
+      unawaited(
+        localDataSource.saveSession(session.token, session.user).catchError((Object e) {
+          debugPrint('No se pudo guardar la sesión en el dispositivo: $e');
+        }),
+      );
       return Either.right(session.user);
     } on AuthException catch (e) {
       return Either.left(AuthenticationFailure(e.message));

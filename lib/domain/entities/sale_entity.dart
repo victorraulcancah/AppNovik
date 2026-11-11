@@ -83,6 +83,9 @@ class SaleProductEntity {
   /// Unidad de medida del producto ("Kilogramo", "Unidad"...).
   final String? unidad;
 
+  /// Ruta de la foto en el servidor (`/storage/images/products/...`); `null` si no tiene.
+  final String? imagen;
+
   const SaleProductEntity({
     required this.id,
     required this.codigo,
@@ -91,6 +94,7 @@ class SaleProductEntity {
     this.categoryId,
     this.brandId,
     this.unidad,
+    this.imagen,
     this.esServicio = false,
     this.ventaSinStock = false,
     this.stockPorAlmacen = const {},
@@ -114,6 +118,7 @@ class SaleProductEntity {
         categoryId: categoryId,
         brandId: brandId,
         unidad: unidad,
+        imagen: imagen,
         esServicio: esServicio,
         ventaSinStock: ventaSinStock,
         stockPorAlmacen: stockPorAlmacen ?? this.stockPorAlmacen,

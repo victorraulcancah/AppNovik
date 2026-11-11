@@ -173,6 +173,9 @@ class _Tab extends StatelessWidget {
 /// activa), así los campos conservan lo escrito y se validan aunque estén
 /// ocultas.
 ///
+/// Todas ocupan el mismo alto, el de la pestaña más alta: al cambiar de pestaña la ventana no
+/// crece ni se encoge (las ocultas conservan su espacio).
+///
 /// Al cambiar de pestaña, la nueva entra con un fundido y un deslizamiento horizontal desde el
 /// lado hacia el que se avanza (si se pasa a una pestaña de la derecha, llega desde la derecha).
 /// Con "quitar animaciones" del sistema el cambio es directo.
@@ -238,20 +241,28 @@ class _AppTabsViewState extends State<AppTabsView> with SingleTickerProviderStat
     final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return ListenableBuilder(
       listenable: widget.controller,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Apiladas: el alto es el de la más alta y la activa se dibuja arriba.
+      builder: (context, _) => Stack(
+        fit: StackFit.passthrough,
         children: [
           for (var i = 0; i < widget.tabs.length; i++)
-            Visibility(
-              visible: i == widget.controller.index,
-              maintainState: true,
-              // La estructura es la misma para todas (así los formularios no pierden su estado);
-              // solo la pestaña activa recibe la animación.
-              child: _TabSlide(
-                animation: i == widget.controller.index ? _curved : kAlwaysCompleteAnimation,
-                direction: _dir,
-                still: still,
-                child: widget.tabs[i].child,
+            SizedBox(
+              width: double.infinity,
+              child: Visibility(
+                visible: i == widget.controller.index,
+                // Ocultas conservan su estado (los campos no pierden lo escrito) y su espacio
+                // (la ventana mantiene el alto); no reciben toques ni lectura de pantalla.
+                maintainState: true,
+                maintainAnimation: true,
+                maintainSize: true,
+                // La estructura es la misma para todas; solo la pestaña activa recibe la
+                // animación.
+                child: _TabSlide(
+                  animation: i == widget.controller.index ? _curved : kAlwaysCompleteAnimation,
+                  direction: _dir,
+                  still: still,
+                  child: widget.tabs[i].child,
+                ),
               ),
             ),
         ],

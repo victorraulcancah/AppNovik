@@ -1448,6 +1448,50 @@ void main() {
       expect(find.text('Total'), findsOneWidget);
     });
 
+    testWidgets('el detalle trae el encabezado Cantidad / Producto y el usuario como nombre + inicial', (tester) async {
+      await pump(
+        tester,
+        OtherDocumentKind.entradaStock,
+        build: (kind, page) => one({
+          ..._stockEntry(),
+          'user': {'name': 'GUSTAVO MIRANDA PUN'},
+        }, kind),
+      );
+
+      // En la tarjeta de la lista también sale el nombre corto.
+      expect(find.text('GUSTAVO M.'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Ver detalle'));
+      await tester.pumpAndSettle();
+
+      // El detalle: usuario corto y columnas rotuladas sobre la lista de productos.
+      expect(find.text('GUSTAVO M.'), findsNWidgets(2));
+      expect(find.text('GUSTAVO MIRANDA PUN'), findsNothing);
+      expect(find.text('Cantidad'), findsOneWidget);
+      expect(find.text('Producto'), findsOneWidget);
+
+      // "Cantidad" queda sobre la columna de cifras y "Producto" sobre los nombres.
+      final headerQty = tester.getTopLeft(find.text('Cantidad')).dx;
+      final headerName = tester.getTopLeft(find.text('Producto')).dx;
+      expect(headerName, greaterThan(headerQty));
+    });
+
+    testWidgets('los nombres de producto quedan alineados aunque la cantidad tenga distintos dígitos', (tester) async {
+      final json = _stockEntry();
+      // 1500 (cuatro dígitos) contra 10 (dos): antes el chip más ancho corría el nombre a la derecha.
+      ((json['products'] as List).first as Map)['pivot'] = {'costo': '50.5', 'stock': 1500};
+      await pump(tester, OtherDocumentKind.entradaStock, build: (kind, page) => one(json, kind));
+      await tester.tap(find.byTooltip('Ver detalle'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1500'), findsOneWidget);
+      final first = tester.getTopLeft(find.text('SUBWOOFER 12"')).dx;
+      final second = tester.getTopLeft(find.text('CABLE RCA')).dx;
+      expect(first, second);
+      // Y es la misma columna donde arranca el rótulo "Producto".
+      expect(tester.getTopLeft(find.text('Producto')).dx, first);
+    });
+
     testWidgets('el Jefe de Almacén no ve los importes de las entradas de stock', (tester) async {
       await pump(
         tester,

@@ -205,7 +205,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
     switch (d.kind) {
       case OtherDocumentKind.traslado:
         lines.addAll([
-          d.usuario ?? '',
+          shortPersonName(d.usuario),
           '${d.desde ?? '-'} → ${d.hacia ?? '-'}',
           created,
         ]);
@@ -225,7 +225,7 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
           created,
         ]);
       case OtherDocumentKind.entradaStock:
-        lines.addAll([d.usuario ?? '', d.almacen ?? '', created]);
+        lines.addAll([shortPersonName(d.usuario), d.almacen ?? '', created]);
         if (amounts) trailingTitle = formatMoney(d.monto, symbol: 'S/.');
     }
 

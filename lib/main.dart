@@ -68,7 +68,9 @@ class _AppWrapperState extends State<AppWrapper> {
       AuthStatus.unauthenticated ||
       AuthStatus.error => ('login', const LoginPage()),
     };
+    // 150 ms: entre el login y la app no hay por qué hacer esperar más.
     return AppFadeSwitcher(
+      duration: const Duration(milliseconds: 150),
       child: KeyedSubtree(key: ValueKey(key), child: page),
     );
   }

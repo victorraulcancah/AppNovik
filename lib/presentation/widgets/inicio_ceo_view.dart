@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/inicio_entity.dart';
+import '../components/app_motion.dart' show AppCountUpScope;
 import '../providers/inicio_provider.dart';
 import '../utils/inicio_copy.dart';
 import 'inicio_help.dart';
@@ -304,10 +305,10 @@ class _Channels extends StatelessWidget {
                   height: 160,
                   width: 160,
                   child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
+                    tween: Tween(begin: AppCountUpScope.fromZeroOf(context) ? 0 : 1, end: 1),
                     duration: (MediaQuery.maybeDisableAnimationsOf(context) ?? false)
                         ? Duration.zero
-                        : const Duration(milliseconds: 800),
+                        : const Duration(milliseconds: 500),
                     curve: Curves.easeOutCubic,
                     builder: (context, t, _) => CustomPaint(
                       painter: _DonutPainter(

@@ -1,12 +1,17 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
 import 'package:app_novik/core/errors/exceptions.dart';
 import 'package:app_novik/core/errors/failures.dart';
 import 'package:app_novik/core/utils/either.dart';
+import 'package:app_novik/data/datasources/auth_local_datasource.dart';
+import 'package:app_novik/data/datasources/inicio_cache_datasource.dart';
 import 'package:app_novik/data/datasources/inicio_remote_datasource.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/data/models/inicio_model.dart';
+import 'package:app_novik/data/models/user_model.dart';
+import 'package:app_novik/data/repositories/inicio_repository_impl.dart';
 import 'package:app_novik/domain/entities/module_entity.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/inicio_entity.dart';
@@ -14,9 +19,12 @@ import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
 import 'package:app_novik/domain/repositories/auth_repository.dart';
+import 'package:app_novik/domain/repositories/inicio_cache_repository.dart';
 import 'package:app_novik/domain/repositories/inicio_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
+import 'package:app_novik/domain/usecases/inicio_cache_usecases.dart';
 import 'package:app_novik/domain/usecases/inicio_usecases.dart';
+import 'package:app_novik/presentation/components/app_motion.dart' show AppCountUp;
 import 'package:app_novik/presentation/pages/inicio_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/inicio_provider.dart';
@@ -31,6 +39,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+
+import 'support/fake_secure_storage.dart';
 
 // ---------------------------------------------------------------- datos de ejemplo
 
@@ -1429,4 +1439,738 @@ void main() {
       expect(find.text('Cuentas por cobrar'), findsWidgets);
     });
   });
+
+  // ------------------------------------------------------------ velocidad: prefetch, caché, datos guardados
+
+  group('Inicio rápido: pedido adelantado en el login (prefetch)', () {
+    const hint = UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['Vendedor'], companyId: 7);
+
+    test('se pide la vista de arranque al instante y, al llegar la sesión, se reutiliza: una sola petición', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final p = _bare(repo)..prefetch(hint);
+
+      // Todavía no hay sesión (`/auth` en camino) y ya se está pidiendo el resumen del Ejecutivo.
+      expect(repo.started, ['ejecutivo']);
+
+      p.syncSession(_session());
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.loading, isTrue);
+
+      repo.gate!.complete();
+      await load;
+
+      expect(repo.started, ['ejecutivo'], reason: 'el pedido adelantado se usó, no se repitió');
+      expect(p.executive, isNotNull);
+      expect(p.loading, isFalse);
+      expect(p.error, isNull);
+    });
+
+    test('si el pedido adelantado ya llegó, mostrar Inicio no espera nada más', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..prefetch(hint);
+      await _settle(); // el servidor respondió mientras llegaba /auth
+
+      p.syncSession(_session());
+      await p.ensureLoaded();
+
+      expect(repo.started, ['ejecutivo']);
+      expect(p.executive, isNotNull);
+    });
+
+    test('los roles de la sesión son otros: el pedido adelantado se descarta y se pide lo que toca', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..prefetch(hint); // el login dijo Vendedor
+      p.syncSession(_session(roles: const ['Ceo Empresa'])); // /auth dice CEO
+
+      await p.ensureLoaded();
+
+      expect(repo.started, ['ejecutivo', 'ceo']);
+      expect(p.ceo, isNotNull);
+      expect(p.executive, isNull, reason: 'lo adelantado no sirvió y no se mezcla');
+    });
+
+    test('la empresa es otra: se descarta', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..prefetch(hint); // empresa 7
+      p.syncSession(_session(companyId: 8));
+
+      await p.ensureLoaded();
+
+      expect(repo.started, ['ejecutivo', 'ejecutivo']);
+    });
+
+    test('el usuario es otro: se descarta', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..prefetch(const UserEntity(id: 10, name: 'Otro', usuario: 'otro', roles: ['Vendedor'], companyId: 7));
+      p.syncSession(_session()); // usuario 9
+
+      await p.ensureLoaded();
+
+      expect(repo.started, ['ejecutivo', 'ejecutivo']);
+    });
+
+    test('si el login falló o se canceló (hint nulo) se descarta lo adelantado', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)
+        ..prefetch(hint)
+        ..prefetch(null);
+      p.syncSession(_session());
+
+      await p.ensureLoaded();
+
+      expect(repo.started, ['ejecutivo', 'ejecutivo']);
+    });
+
+    test('sin empresa en la respuesta del login no se adelanta nada', () async {
+      final repo = _GatedRepo();
+      _bare(repo).prefetch(const UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['Vendedor']));
+
+      expect(repo.started, isEmpty);
+    });
+
+    test('con la sesión ya armada, prefetch no hace nada (y no borra nada)', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..syncSession(_session());
+      await p.ensureLoaded();
+      repo.started.clear();
+
+      p.prefetch(hint);
+
+      expect(repo.started, isEmpty);
+    });
+
+    test('el mismo login avisado varias veces no duplica la petición', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      _bare(repo)
+        ..prefetch(hint)
+        ..prefetch(hint)
+        ..prefetch(hint);
+
+      expect(repo.started, ['ejecutivo']);
+      repo.gate!.complete();
+    });
+
+    test('se usa una sola vez: un refresco posterior pide de nuevo', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..prefetch(hint);
+      p.syncSession(_session());
+      await p.ensureLoaded();
+
+      await p.refresh();
+
+      expect(repo.started, ['ejecutivo', 'ejecutivo']);
+    });
+
+    test('elige la vista como Inicio: CEO si tiene varios perfiles, y general para el jefe de almacén', () async {
+      final both = _GatedRepo();
+      _bare(both).prefetch(const UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['Vendedor', 'Ceo Empresa'], companyId: 7));
+      expect(both.started, ['ceo']);
+
+      final warehouse = _GatedRepo();
+      _bare(warehouse).prefetch(const UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['Jefe de Almacén'], companyId: 7));
+      expect(warehouse.started, ['general']);
+
+      final boss = _GatedRepo();
+      _bare(boss).prefetch(const UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['JEFE COMERCIAL'], companyId: 7));
+      expect(boss.started, ['jefe']);
+    });
+
+    test('si el pedido adelantado falla, se ve el error y Reintentar pide de nuevo', () async {
+      final repo = _GatedRepo()..failure = const ServerFailure('Error del servidor');
+      final p = _bare(repo)..prefetch(hint);
+      p.syncSession(_session());
+      await p.ensureLoaded();
+
+      expect(p.error, 'Error del servidor');
+      expect(p.executive, isNull);
+
+      repo.failure = null;
+      await p.refresh();
+      expect(p.error, isNull);
+      expect(p.executive, isNotNull);
+      expect(repo.started, ['ejecutivo', 'ejecutivo']);
+    });
+
+    test('un 401 en el pedido adelantado cierra la sesión igual que uno normal', () async {
+      var expired = 0;
+      final repo = _GatedRepo()..failure = const AuthenticationFailure('Sesión expirada');
+      final p = _bare(repo, onExpired: () => expired++)..prefetch(hint);
+      p.syncSession(_session());
+
+      await p.ensureLoaded();
+
+      expect(expired, 1);
+    });
+  });
+
+  group('Inicio rápido: lo último que se vio, al instante (caché)', () {
+    ExecutiveSummaryEntity saved({String? desde, String? hasta}) =>
+        executiveSummaryFromJson({..._executiveJson(), 'desde': ?desde, 'hasta': ?hasta});
+
+    test('muestra lo guardado mientras llega lo nuevo, y lo nuevo lo reemplaza', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..executive = saved();
+      final p = _bare(repo, cache: cache)..syncSession(_session());
+
+      final load = p.ensureLoaded();
+      await _settle();
+
+      expect(p.executive, same(cache.executive), reason: 'ya se ve lo último guardado');
+      expect(p.showingCache, isTrue);
+      expect(p.loading, isTrue, reason: 'y se sigue pidiendo lo nuevo');
+      expect(p.animateFromZero, isFalse, reason: 'las cifras no cuentan desde cero');
+
+      repo.gate!.complete();
+      await load;
+
+      expect(p.executive, isNot(same(cache.executive)));
+      expect(p.showingCache, isFalse);
+      expect(p.loading, isFalse);
+      expect(p.animateFromZero, isFalse, reason: 'esta vista nació de lo guardado: sus cifras pasan del valor viejo al nuevo');
+    });
+
+    test('sin nada guardado todo es como antes: espera el servidor y cuenta desde cero', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final p = _bare(repo, cache: _FakeCache())..syncSession(_session());
+
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.executive, isNull);
+      expect(p.showingCache, isFalse);
+
+      repo.gate!.complete();
+      await load;
+      expect(p.executive, isNotNull);
+      expect(p.animateFromZero, isTrue);
+    });
+
+    test('lo guardado de otro rango no se muestra', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..executive = saved(desde: '2026-09-01', hasta: '2026-09-30');
+      final p = _bare(repo, cache: cache)..syncSession(_session());
+
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.executive, isNull);
+
+      repo.gate!.complete();
+      await load;
+    });
+
+    test('un rango que llega hasta hoy sirve aunque lo guardado terminara ayer ("Este mes" avanza cada día)', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..executive = saved(hasta: '2026-10-30');
+      final p = _bare(repo, cache: cache)..syncSession(_session());
+
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.executive, same(cache.executive));
+
+      repo.gate!.complete();
+      await load;
+    });
+
+    test('si lo nuevo llega antes que la lectura del disco, lo guardado no pisa lo nuevo', () async {
+      final repo = _GatedRepo();
+      final cache = _FakeCache()
+        ..executive = saved()
+        ..gate = Completer<void>();
+      final p = _bare(repo, cache: cache)..syncSession(_session());
+
+      await p.ensureLoaded();
+      final fresh = p.executive;
+      expect(fresh, isNotNull);
+
+      cache.gate!.complete();
+      await _settle();
+
+      expect(p.executive, same(fresh));
+      expect(p.showingCache, isFalse);
+    });
+
+    test('si la red falla, lo guardado sigue a la vista y se avisa que no se pudo actualizar', () async {
+      final repo = _GatedRepo()..failure = const NetworkFailure('Sin conexión a internet');
+      final cache = _FakeCache()..executive = saved();
+      final p = _bare(repo, cache: cache)..syncSession(_session());
+
+      await p.ensureLoaded();
+
+      expect(p.executive, same(cache.executive));
+      expect(p.showingCache, isTrue);
+      expect(p.error, 'Sin conexión a internet');
+      expect(p.loading, isFalse);
+    });
+
+    test('con otra vista (CEO) la caché de esa vista; la de almacén elegido no se usa', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..ceo = ceoSummaryFromJson(_ceoJson());
+      final p = _bare(repo, cache: cache)..syncSession(_session(roles: const ['Ceo Empresa']));
+
+      final all = p.ensureLoaded();
+      await _settle();
+      expect(p.ceo, same(cache.ceo));
+      repo.gate!.complete();
+      await all;
+
+      // Con un almacén elegido (otra consulta) lo guardado no corresponde.
+      final repo2 = _GatedRepo()..gate = Completer<void>();
+      final p2 = _bare(repo2, cache: cache)..syncSession(_session(roles: const ['Ceo Empresa']));
+      final one = p2.selectSucursal(2);
+      await _settle();
+      expect(p2.ceo, isNull);
+      repo2.gate!.complete();
+      await one;
+    });
+
+    test('pantalla general: lo guardado aplica siempre (es el mes en curso)', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..warehouses = warehouseSalesFromJson(_warehousesJson());
+      final p = _bare(repo, cache: cache)..syncSession(_session(roles: const ['jefe de almacén']));
+
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.warehouses, same(cache.warehouses));
+
+      repo.gate!.complete();
+      await load;
+    });
+
+    test('conviven: el pedido adelantado en el login y lo guardado (lo guardado se ve hasta que llega)', () async {
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..executive = saved();
+      final p = _bare(repo, cache: cache)
+        ..prefetch(const UserEntity(id: 9, name: 'Ana', usuario: 'ana', roles: ['Vendedor'], companyId: 7))
+        ..syncSession(_session());
+
+      final load = p.ensureLoaded();
+      await _settle();
+      expect(p.executive, same(cache.executive));
+
+      repo.gate!.complete();
+      await load;
+      expect(repo.started, ['ejecutivo']);
+      expect(p.executive, isNot(same(cache.executive)));
+    });
+
+    test('se borra al cerrar sesión y al cambiar de usuario o empresa, pero no con la primera sesión', () async {
+      final cache = _FakeCache();
+      final p = _bare(_GatedRepo(), cache: cache);
+
+      p.syncSession(_session());
+      expect(cache.clears, 0, reason: 'la primera sesión no borra: lo guardado puede ser de ella misma');
+
+      p.syncSession(_session()); // mismo usuario y empresa: nada
+      expect(cache.clears, 0);
+
+      p.syncSession(_session(companyId: 8)); // otra empresa
+      expect(cache.clears, 1);
+
+      p.syncSession(null); // cerró sesión
+      expect(cache.clears, 2);
+
+      p.syncSession(null); // ya sin sesión: no vuelve a borrar
+      expect(cache.clears, 2);
+    });
+
+    test('sin caché configurada nada de esto estorba', () async {
+      final repo = _GatedRepo();
+      final p = _bare(repo)..syncSession(_session());
+      await p.ensureLoaded();
+      p.syncSession(null);
+
+      expect(p.executive, isNull);
+      expect(p.showingCache, isFalse);
+    });
+  });
+
+  group('Inicio rápido: la pantalla', () {
+    Future<InicioProvider> pumpWith(
+      WidgetTester tester, {
+      required _GatedRepo repo,
+      required _FakeCache cache,
+      bool disableAnimations = false,
+    }) async {
+      final provider = _bare(repo, cache: cache)..syncSession(_session());
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider(storage: _FakeThemeStorage())),
+            ChangeNotifierProvider<AuthProvider>.value(value: _auth(_session())),
+            ChangeNotifierProvider<ShellNavigation>.value(value: ShellNavigation()),
+            ChangeNotifierProvider<InicioProvider>.value(value: provider),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            builder: (context, child) =>
+                MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: disableAnimations), child: child!),
+            home: const Scaffold(body: InicioPage()),
+          ),
+        ),
+      );
+      // El primer cuadro dispara la carga; el segundo ya trae lo guardado.
+      await tester.pump();
+      await tester.pump();
+      return provider;
+    }
+
+    testWidgets('lo guardado se ve de inmediato con "Actualizando…" y sus cifras ya vienen completas', (tester) async {
+      tester.view.physicalSize = const Size(1080, 12000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final repo = _GatedRepo()..gate = Completer<void>();
+      final cache = _FakeCache()..executive = executiveSummaryFromJson(_executiveJson());
+
+      await pumpWith(tester, repo: repo, cache: cache);
+
+      expect(find.text('Actualizando…'), findsOneWidget);
+      // Ninguna cifra está contando desde cero: lo que se ve es su valor final.
+      final counters = tester.widgetList<AppCountUp>(find.byType(AppCountUp)).toList();
+      expect(counters, isNotEmpty);
+      for (final c in counters) {
+        expect(find.text(c.format(c.value)), findsWidgets, reason: 'cifra ${c.format(c.value)} a la vista desde el primer cuadro');
+      }
+
+      repo.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Actualizando…'), findsNothing);
+    });
+
+    testWidgets('si no se pudo actualizar, avisa que se ven los últimos datos guardados', (tester) async {
+      tester.view.physicalSize = const Size(1080, 12000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final repo = _GatedRepo()
+        ..gate = Completer<void>()
+        ..failure = const NetworkFailure('Sin conexión a internet');
+      final cache = _FakeCache()..executive = executiveSummaryFromJson(_executiveJson());
+
+      await pumpWith(tester, repo: repo, cache: cache);
+      repo.gate!.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se pudo actualizar. Se muestran los últimos datos guardados.'), findsOneWidget);
+      expect(find.text('Actualizando…'), findsNothing);
+      expect(find.byType(AppCountUp), findsWidgets, reason: 'el resumen guardado sigue a la vista');
+    });
+
+    testWidgets('sin lo guardado, las cifras cuentan desde cero cuando llegan los datos', (tester) async {
+      tester.view.physicalSize = const Size(1080, 12000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final repo = _GatedRepo()..gate = Completer<void>();
+
+      await pumpWith(tester, repo: repo, cache: _FakeCache());
+      expect(find.byType(AppCountUp), findsNothing, reason: 'esqueleto de carga');
+
+      repo.gate!.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final counters = tester.widgetList<AppCountUp>(find.byType(AppCountUp)).toList();
+      expect(counters, isNotEmpty);
+      final moving = counters.where((c) => c.value > 0 && !find.text(c.format(c.value)).evaluate().isNotEmpty);
+      expect(moving, isNotEmpty, reason: 'al principio todavía no muestran su valor final');
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('InicioCacheDataSource', () {
+    late FakeSecureStorage storage;
+    var clock = DateTime(2026, 10, 31, 10);
+    late InicioCacheDataSourceImpl cache;
+
+    setUp(() {
+      storage = FakeSecureStorage();
+      clock = DateTime(2026, 10, 31, 10);
+      cache = InicioCacheDataSourceImpl(storage: storage, now: () => clock);
+    });
+
+    test('guarda y vuelve a leer lo mismo', () async {
+      await cache.write('sesion-1', 'ejecutivo', {'a': 1, 'b': [1, 2]});
+      expect(await cache.read('sesion-1', 'ejecutivo'), {'a': 1, 'b': [1, 2]});
+    });
+
+    test('con otra sesión no se lee: nunca se mezclan datos de dos usuarios', () async {
+      await cache.write('sesion-1', 'ejecutivo', {'a': 1});
+      expect(await cache.read('sesion-2', 'ejecutivo'), isNull);
+    });
+
+    test('vence a las 24 horas', () async {
+      await cache.write('s', 'ceo', {'a': 1});
+
+      clock = clock.add(const Duration(hours: 23));
+      expect(await cache.read('s', 'ceo'), isNotNull);
+
+      clock = clock.add(const Duration(hours: 2));
+      expect(await cache.read('s', 'ceo'), isNull);
+    });
+
+    test('cada vista tiene la suya', () async {
+      await cache.write('s', 'ejecutivo', {'v': 'e'});
+      await cache.write('s', 'ceo', {'v': 'c'});
+      expect(await cache.read('s', 'ejecutivo'), {'v': 'e'});
+      expect(await cache.read('s', 'ceo'), {'v': 'c'});
+      expect(await cache.read('s', 'jefe'), isNull);
+    });
+
+    test('lo ilegible o con otra forma se ignora, sin fallar', () async {
+      storage.values['inicio_cache_v1_ceo'] = '{no es json';
+      expect(await cache.read('s', 'ceo'), isNull);
+
+      storage.values['inicio_cache_v1_ceo'] = '[1,2]';
+      expect(await cache.read('s', 'ceo'), isNull);
+
+      storage.values['inicio_cache_v1_ceo'] = jsonEncode({'s': 's', 't': 'ayer', 'd': {}});
+      expect(await cache.read('s', 'ceo'), isNull);
+    });
+
+    test('si no se puede escribir, no rompe', () async {
+      storage.failWrites = true;
+      await cache.write('s', 'ceo', {'a': 1});
+      expect(await cache.read('s', 'ceo'), isNull);
+    });
+
+    test('clear borra las cuatro vistas y nada más', () async {
+      storage.values['auth_token_v1'] = 'tok';
+      for (final v in ['general', 'ejecutivo', 'jefe', 'ceo']) {
+        await cache.write('s', v, {'v': v});
+      }
+
+      await cache.clear();
+
+      for (final v in ['general', 'ejecutivo', 'jefe', 'ceo']) {
+        expect(await cache.read('s', v), isNull);
+      }
+      expect(storage.values['auth_token_v1'], 'tok');
+    });
+
+    test('la huella de la sesión es estable, distinta por token y no deja el token escrito', () {
+      expect(sessionScope('12|abcdef'), sessionScope('12|abcdef'));
+      expect(sessionScope('12|abcdef'), isNot(sessionScope('13|abcdef')));
+      expect(sessionScope('12|abcdef'), isNot(contains('abcdef')));
+    });
+  });
+
+  group('InicioRemoteDataSource + caché', () {
+    late FakeSecureStorage storage;
+    late InicioCacheDataSourceImpl cache;
+
+    setUp(() {
+      storage = FakeSecureStorage();
+      cache = InicioCacheDataSourceImpl(storage: storage, now: _now);
+    });
+
+    InicioRemoteDataSourceImpl source(http.Client client, {bool withCache = true}) =>
+        InicioRemoteDataSourceImpl(client: client, cache: withCache ? cache : null);
+
+    http.Client ok(Object body) => MockClient((request) async => http.Response(jsonEncode(body), 200));
+
+    test('una respuesta buena se guarda sin hacer esperar, y se vuelve a leer con la misma sesión', () async {
+      final ds = source(ok(_executiveJson()));
+
+      final fresh = await ds.getExecutiveSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(storage.values.containsKey('inicio_cache_v1_ejecutivo'), isTrue);
+      final back = await ds.cachedExecutiveSummary('tok');
+      expect(back, isNotNull);
+      expect(back!.vendedor, fresh.vendedor);
+      expect(back.desde, fresh.desde);
+      expect(back.hasta, fresh.hasta);
+    });
+
+    test('con otro token (otra sesión) no se ve lo guardado', () async {
+      final ds = source(ok(_executiveJson()));
+      await ds.getExecutiveSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await ds.cachedExecutiveSummary('otro-token'), isNull);
+    });
+
+    test('una respuesta con error no guarda nada', () async {
+      final ds = source(MockClient((request) async => http.Response('{"message":"x"}', 500)));
+
+      await expectLater(
+        ds.getExecutiveSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31)),
+        throwsA(isA<ServerException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(storage.writes, 0);
+    });
+
+    test('las cuatro vistas se guardan y se leen (el CEO, solo "todos los almacenes")', () async {
+      await source(ok(_warehousesJson())).getWarehouseSales('tok');
+      await source(ok(_teamJson())).getTeamSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      final ceoSource = source(ok(_ceoJson()));
+      await ceoSource.getCeoSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await ceoSource.cachedWarehouseSales('tok'), hasLength(2));
+      expect((await ceoSource.cachedTeamSummary('tok'))!.jefe, 'MARIO GOMEZ');
+      expect(await ceoSource.cachedCeoSummary('tok'), isNotNull);
+
+      // Con un almacén elegido, la consulta es otra: no pisa lo guardado de "todos".
+      storage.writes = 0;
+      await source(ok(_ceoJson(sucursal: 2))).getCeoSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31), sucursal: 2);
+      await Future<void>.delayed(Duration.zero);
+      expect(storage.writes, 0);
+    });
+
+    test('lo guardado que ya no se puede leer (cambió el formato) se ignora, sin fallar', () async {
+      final ds = source(ok(_executiveJson()));
+      await cache.write(sessionScope('tok'), 'ejecutivo', [1, 2, 3]); // ya no es un objeto
+
+      expect(await ds.cachedExecutiveSummary('tok'), isNull);
+    });
+
+    test('sin caché configurada: todo funciona y no hay nada guardado', () async {
+      final ds = source(ok(_executiveJson()), withCache: false);
+
+      final fresh = await ds.getExecutiveSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(fresh.vendedor, isNotEmpty);
+      expect(await ds.cachedExecutiveSummary('tok'), isNull);
+      await ds.clearCache();
+      expect(storage.writes, 0);
+    });
+
+    test('clearCache borra lo guardado', () async {
+      final ds = source(ok(_executiveJson()));
+      await ds.getExecutiveSummary('tok', DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      await Future<void>.delayed(Duration.zero);
+
+      await ds.clearCache();
+
+      expect(await ds.cachedExecutiveSummary('tok'), isNull);
+    });
+  });
+
+  group('InicioRepository + caché', () {
+    test('lee lo guardado con el token de la sesión; sin sesión devuelve null', () async {
+      final authStorage = FakeSecureStorage();
+      final auth = AuthLocalDataSourceImpl(storage: authStorage);
+      final cacheStorage = FakeSecureStorage();
+      final repo = InicioRepositoryImpl(
+        remoteDataSource: InicioRemoteDataSourceImpl(
+          client: MockClient((request) async => http.Response(jsonEncode(_executiveJson()), 200)),
+          cache: InicioCacheDataSourceImpl(storage: cacheStorage, now: _now),
+        ),
+        authLocalDataSource: auth,
+      );
+
+      expect(await repo.cachedExecutiveSummary(), isNull, reason: 'sin sesión');
+
+      await auth.saveSession('tok', const UserModel(id: 9, name: 'Ana', usuario: 'ana'));
+      final fresh = await repo.getExecutiveSummary(DateTime(2026, 10, 1), DateTime(2026, 10, 31));
+      expect(fresh.isRight, isTrue);
+      await Future<void>.delayed(Duration.zero);
+
+      expect((await repo.cachedExecutiveSummary())!.vendedor, 'KEDER ALONSO RUIZ');
+
+      // Otra sesión en el mismo teléfono: no ve lo del anterior.
+      await auth.saveSession('otro', const UserModel(id: 10, name: 'Otro', usuario: 'otro'));
+      expect(await repo.cachedExecutiveSummary(), isNull);
+
+      await repo.clearCache();
+      await auth.saveSession('tok', const UserModel(id: 9, name: 'Ana', usuario: 'ana'));
+      expect(await repo.cachedExecutiveSummary(), isNull);
+    });
+  });
+}
+
+// ---------------------------------------------------------------- dobles para la velocidad
+
+Future<void> _settle() async {
+  for (var i = 0; i < 6; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
+/// Un provider sin sesión todavía (como justo después del login, antes de que llegue `/auth`).
+InicioProvider _bare(_FakeRepo repo, {_FakeCache? cache, VoidCallback? onExpired}) => InicioProvider(
+  getWarehouseSalesUseCase: GetWarehouseSalesUseCase(repository: repo),
+  getExecutiveSummaryUseCase: GetExecutiveSummaryUseCase(repository: repo),
+  getTeamSummaryUseCase: GetTeamSummaryUseCase(repository: repo),
+  getCeoSummaryUseCase: GetCeoSummaryUseCase(repository: repo),
+  getCachedInicioUseCase: cache == null ? null : GetCachedInicioUseCase(repository: cache),
+  clearInicioCacheUseCase: cache == null ? null : ClearInicioCacheUseCase(repository: cache),
+  onSessionExpired: onExpired,
+  now: _now,
+);
+
+/// El repositorio de siempre, pero anota cuándo se PIDE cada vista y puede retener las respuestas.
+class _GatedRepo extends _FakeRepo {
+  /// Mientras exista y no se complete, ninguna respuesta llega.
+  Completer<void>? gate;
+
+  /// Las vistas que se han pedido, en orden.
+  final started = <String>[];
+
+  @override
+  Future<Either<Failure, List<WarehouseSalesEntity>>> getWarehouseSales() async {
+    started.add('general');
+    await gate?.future;
+    return super.getWarehouseSales();
+  }
+
+  @override
+  Future<Either<Failure, ExecutiveSummaryEntity>> getExecutiveSummary(DateTime desde, DateTime hasta) async {
+    started.add('ejecutivo');
+    await gate?.future;
+    return super.getExecutiveSummary(desde, hasta);
+  }
+
+  @override
+  Future<Either<Failure, TeamSummaryEntity>> getTeamSummary(DateTime desde, DateTime hasta) async {
+    started.add('jefe');
+    await gate?.future;
+    return super.getTeamSummary(desde, hasta);
+  }
+
+  @override
+  Future<Either<Failure, CeoSummaryEntity>> getCeoSummary(DateTime desde, DateTime hasta, {int? sucursal}) async {
+    started.add('ceo');
+    await gate?.future;
+    return super.getCeoSummary(desde, hasta, sucursal: sucursal);
+  }
+}
+
+/// Lo "guardado" de cada vista, con una espera opcional para simular un disco lento.
+class _FakeCache implements InicioCacheRepository {
+  List<WarehouseSalesEntity>? warehouses;
+  ExecutiveSummaryEntity? executive;
+  TeamSummaryEntity? team;
+  CeoSummaryEntity? ceo;
+  Completer<void>? gate;
+  int clears = 0;
+
+  @override
+  Future<List<WarehouseSalesEntity>?> cachedWarehouseSales() async {
+    await gate?.future;
+    return warehouses;
+  }
+
+  @override
+  Future<ExecutiveSummaryEntity?> cachedExecutiveSummary() async {
+    await gate?.future;
+    return executive;
+  }
+
+  @override
+  Future<TeamSummaryEntity?> cachedTeamSummary() async {
+    await gate?.future;
+    return team;
+  }
+
+  @override
+  Future<CeoSummaryEntity?> cachedCeoSummary() async {
+    await gate?.future;
+    return ceo;
+  }
+
+  @override
+  Future<void> clearCache() async => clears++;
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../domain/entities/saved_credentials_entity.dart';
@@ -40,6 +42,11 @@ class AuthProvider extends ChangeNotifier {
 
   AuthStatus status = AuthStatus.initial;
   UserEntity? user;
+
+  /// El usuario tal como lo devolvió el login, mientras `/auth` todavía no responde. Trae sus roles y
+  /// su empresa, con lo que otras pantallas (Inicio) pueden empezar a pedir sus datos en paralelo.
+  /// `null` fuera de ese lapso.
+  UserEntity? pendingUser;
 
   /// Empresa, módulos y permisos del usuario. Solo existe con sesión iniciada.
   SessionContextEntity? session;
@@ -107,6 +114,11 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
 
+    // Roles y empresa ya se conocen: se avisa ahora, antes de que `/auth` responda, para que Inicio
+    // pida sus datos en paralelo en lugar de esperar.
+    pendingUser = loginResult.right;
+    notifyListeners();
+
     // Con el token guardado, se carga la empresa y los módulos del usuario.
     final contextResult = await _getSessionContextUseCase();
     final context = contextResult.fold((_) => null, (c) => c);
@@ -122,16 +134,28 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
 
-    if (remember) {
-      await _saveCredentialsUseCase(usuario, password);
-    } else {
-      await _clearSavedCredentialsUseCase();
-      savedCredentials = null;
-    }
+    // Recordar (o no) las credenciales no hace falta para mostrar la app: se hace aparte.
+    _rememberCredentials(usuario, password, remember: remember);
 
     _setSession(context);
     notifyListeners();
     return true;
+  }
+
+  /// Guarda o borra las credenciales recordadas sin hacer esperar al login. Si falla no rompe nada:
+  /// solo quedaría sin recordarse.
+  void _rememberCredentials(String usuario, String password, {required bool remember}) {
+    if (!remember) savedCredentials = null;
+    unawaited(() async {
+      try {
+        final result = remember
+            ? await _saveCredentialsUseCase(usuario, password)
+            : await _clearSavedCredentialsUseCase();
+        if (result.isLeft) debugPrint('Credenciales recordadas: ${result.left.message}');
+      } catch (e) {
+        debugPrint('Credenciales recordadas: $e');
+      }
+    }());
   }
 
   Future<void> logout() async {
@@ -143,6 +167,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _setSession(SessionContextEntity context) {
+    pendingUser = null;
     session = context;
     user = context.user;
     errorMessage = null;
@@ -151,6 +176,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Descarta todo lo de la empresa anterior para no mezclar datos entre cuentas.
   void _clearSession() {
+    pendingUser = null;
     session = null;
     user = null;
   }

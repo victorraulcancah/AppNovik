@@ -99,13 +99,18 @@ class _AppPulseState extends State<AppPulse>
 /// Cada hijo debe traer una `key` distinta para que se note el cambio.
 class AppFadeSwitcher extends StatelessWidget {
   final Widget child;
+  final Duration duration;
 
-  const AppFadeSwitcher({super.key, required this.child});
+  const AppFadeSwitcher({
+    super.key,
+    required this.child,
+    this.duration = const Duration(milliseconds: 260),
+  });
 
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 260),
+      duration: duration,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) => FadeTransition(
@@ -120,8 +125,27 @@ class AppFadeSwitcher extends StatelessWidget {
   }
 }
 
+/// Dice a los números que corren ([AppCountUp]) y a las barras que se llenan si deben partir de cero.
+///
+/// Con datos recién llegados del servidor parten de cero (es la gracia de la animación). Pero si lo
+/// que se ve ya son datos guardados, contar desde cero sería esconder una cifra que ya estaba a la
+/// vista: ahí no parten de cero y, si el dato nuevo cambia, pasan del valor viejo al nuevo.
+class AppCountUpScope extends InheritedWidget {
+  final bool fromZero;
+
+  const AppCountUpScope({super.key, required this.fromZero, required super.child});
+
+  /// `true` si no hay un [AppCountUpScope] encima.
+  static bool fromZeroOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppCountUpScope>()?.fromZero ?? true;
+
+  @override
+  bool updateShouldNotify(AppCountUpScope old) => fromZero != old.fromZero;
+}
+
 /// Número que "corre" hasta su valor (y vuelve a correr, desde el valor anterior, si cambia).
-/// [format] arma el texto (por ejemplo con el símbolo de moneda).
+/// [format] arma el texto (por ejemplo con el símbolo de moneda). Parte de cero salvo que un
+/// [AppCountUpScope] diga lo contrario.
 class AppCountUp extends StatelessWidget {
   final double value;
   final String Function(double value) format;
@@ -133,7 +157,7 @@ class AppCountUp extends StatelessWidget {
     required this.value,
     required this.format,
     this.style,
-    this.duration = const Duration(milliseconds: 700),
+    this.duration = const Duration(milliseconds: 450),
   });
 
   @override
@@ -145,8 +169,9 @@ class AppCountUp extends StatelessWidget {
       softWrap: false,
     );
     if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return text;
+    final fromZero = AppCountUpScope.fromZeroOf(context);
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: value),
+      tween: Tween(begin: fromZero ? 0 : value, end: value),
       duration: duration,
       curve: Curves.easeOutCubic,
       builder: (context, v, _) =>

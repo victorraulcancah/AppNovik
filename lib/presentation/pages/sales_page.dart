@@ -10,6 +10,7 @@ import '../utils/success_snack.dart';
 import '../widgets/client_modals.dart';
 import '../widgets/exchange_rate_badge.dart';
 import '../widgets/sale_checkout.dart';
+import '../widgets/sale_line_card.dart';
 import '../widgets/sale_free_item.dart';
 import '../widgets/sale_modals.dart';
 import '../widgets/sale_product_entry.dart';
@@ -476,23 +477,87 @@ class _SalesPageState extends State<SalesPage> {
             Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
             const SizedBox(height: 16),
           ],
-          for (var i = 0; i < sales.lines.length; i++) ...[
-            _SaleLineTile(
-              key: ObjectKey(sales.lines[i].product),
-              line: sales.lines[i],
-              problem: sales.lineProblem(sales.lines[i]),
-              onQuantity: (n) {
-                final aviso = sales.setCantidad(i, n);
-                if (aviso != null) _snack(aviso);
-              },
-              onPrice: (v) => sales.setPrecio(i, v),
-              onDto: (v) => sales.setDto(i, v),
-              onToggleDto: () => sales.toggleDtoFijo(i),
-              onRemove: () => sales.removeLine(i),
-              onEditFree: sales.lines[i].esLibre ? () => _editFree(sales.lines[i]) : null,
+          // Quitar una línea (y deshacerlo) y el resumen de líneas e ítems.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < sales.lines.length; i++) ...[
+                  SaleLineCard(
+                    key: ObjectKey(sales.lines[i].product),
+                    line: sales.lines[i],
+                    problem: sales.lineProblem(sales.lines[i]),
+                    symbol: sales.moneySymbol,
+                    maxQuantity: sales.warehouseId == null
+                        ? null
+                        : sales.lines[i].product.maximoEn(sales.warehouseId!),
+                    listPrice: sales.lines[i].esLibre || sales.priceListId == null
+                        ? null
+                        : sales.lines[i].product.precioEn(sales.priceListId!),
+                    onQuantity: (n) {
+                      final aviso = sales.setCantidad(i, n);
+                      if (aviso != null) _snack(aviso);
+                    },
+                    onPrice: (v) => sales.setPrecio(i, v),
+                    onDto: (v) => sales.setDto(i, v),
+                    onToggleDto: () => sales.toggleDtoFijo(i),
+                    onRemove: () => _removeLine(sales, i),
+                    onEditFree: sales.lines[i].esLibre ? () => _editFree(sales.lines[i]) : null,
+                  ),
+                  if (i < sales.lines.length - 1) const SizedBox(height: 12),
+                ],
+                if (sales.lines.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _linesSummary(sales),
+                ],
+              ],
             ),
-            if (i < sales.lines.length - 1) const SizedBox(height: 10),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Quita la línea y avisa con "Deshacer" (si se tocó el basurero sin querer, vuelve a su lugar).
+  void _removeLine(SalesProvider sales, int index) {
+    final removed = sales.lines[index];
+    sales.removeLine(index);
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Quitaste "${removed.product.name}"', maxLines: 1, overflow: TextOverflow.ellipsis),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Deshacer',
+            onPressed: () => sales.restoreLine(index, removed),
+          ),
+        ),
+      );
+  }
+
+  /// "3 líneas · 5 ítems" (en la web: "Nr. Líneas: 3 / Tot. Ítems: 5").
+  Widget _linesSummary(SalesProvider sales) {
+    final theme = Theme.of(context);
+    final lines = sales.lines.length;
+    final items = sales.lines.fold<int>(0, (sum, l) => sum + l.cantidad);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Icon(Icons.shopping_bag_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            '$lines ${lines == 1 ? 'línea' : 'líneas'} · $items ${items == 1 ? 'ítem' : 'ítems'}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -578,319 +643,6 @@ class _SalesPageState extends State<SalesPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Una línea de la venta: producto, cantidad con − / +, precio editable, descuento (en % o en
-/// monto) y subtotal. Un ítem libre se muestra con su descripción y una marca "Ítem libre".
-class _SaleLineTile extends StatefulWidget {
-  final SaleLineEntity line;
-  final String? problem;
-  final ValueChanged<int> onQuantity;
-  final ValueChanged<double> onPrice;
-  final ValueChanged<double> onDto;
-  final VoidCallback onToggleDto;
-  final VoidCallback onRemove;
-
-  /// Solo en un ítem libre: abre el formulario para cambiar su descripción y su código.
-  final VoidCallback? onEditFree;
-
-  const _SaleLineTile({
-    super.key,
-    required this.line,
-    required this.problem,
-    required this.onQuantity,
-    required this.onPrice,
-    required this.onDto,
-    required this.onToggleDto,
-    required this.onRemove,
-    this.onEditFree,
-  });
-
-  @override
-  State<_SaleLineTile> createState() => _SaleLineTileState();
-}
-
-class _SaleLineTileState extends State<_SaleLineTile> {
-  late final _quantity = TextEditingController(text: '${widget.line.cantidad}');
-  late final _price = TextEditingController(text: _priceText(widget.line.precio));
-  late final _dto = TextEditingController(text: _dtoText(widget.line.dto));
-  final _quantityFocus = FocusNode();
-  final _priceFocus = FocusNode();
-  final _dtoFocus = FocusNode();
-
-  static String _priceText(double v) => v == 0 ? '' : v.toStringAsFixed(2);
-
-  static String _dtoText(double v) =>
-      v == 0 ? '' : (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString());
-
-  @override
-  void didUpdateWidget(_SaleLineTile old) {
-    super.didUpdateWidget(old);
-    // Lo cambió otra cosa (la lista de precios, el tope de stock): se refleja en el campo.
-    if (!_quantityFocus.hasFocus && _quantity.text != '${widget.line.cantidad}') {
-      _quantity.text = '${widget.line.cantidad}';
-    }
-    if (!_priceFocus.hasFocus && (double.tryParse(_price.text) ?? 0) != widget.line.precio) {
-      _price.text = _priceText(widget.line.precio);
-    }
-    // El descuento se recorta (100 %, o el subtotal si es un monto): el campo muestra el valor
-    // que quedó, aunque se esté escribiendo.
-    final typed = double.tryParse(_dto.text) ?? 0;
-    if (typed != widget.line.dto && (!_dtoFocus.hasFocus || typed > widget.line.dto)) {
-      final text = _dtoText(widget.line.dto);
-      _dto.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
-    }
-  }
-
-  @override
-  void dispose() {
-    _quantity.dispose();
-    _price.dispose();
-    _dto.dispose();
-    _quantityFocus.dispose();
-    _priceFocus.dispose();
-    _dtoFocus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final line = widget.line;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 6, 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: widget.problem == null ? scheme.outlineVariant : scheme.error,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Producto y botón para quitarlo.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        line.product.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        line.esLibre
-                            ? [if (line.codigoLibre != null) line.codigoLibre!, 'Ítem libre'].join(' · ')
-                            : [line.product.codigo, ?line.product.marca].join(' · '),
-                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (widget.onEditFree != null)
-                IconButton(
-                  tooltip: 'Editar descripción y código',
-                  onPressed: widget.onEditFree,
-                  icon: Icon(Icons.edit_outlined, size: 20, color: scheme.onSurfaceVariant),
-                ),
-              IconButton(
-                tooltip: 'Quitar',
-                onPressed: widget.onRemove,
-                icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Cantidad y precio, cada uno con todo el ancho que necesita.
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: _QuantityField(
-                    controller: _quantity,
-                    focusNode: _quantityFocus,
-                    onMinus: () => widget.onQuantity(line.cantidad - 1),
-                    onPlus: () => widget.onQuantity(line.cantidad + 1),
-                    onChanged: (text) {
-                      final n = int.tryParse(text);
-                      if (n != null && n >= 1) widget.onQuantity(n);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 4,
-                  child: TextField(
-                    controller: _price,
-                    focusNode: _priceFocus,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
-                    decoration: InputDecoration(
-                      labelText: 'Precio ${context.watch<SalesProvider>().moneySymbol}',
-                      hintText: '0',
-                    ),
-                    onChanged: (text) => widget.onPrice(double.tryParse(text) ?? 0),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Descuento: un porcentaje o, cambiando el tipo, un monto (como la web).
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: TextField(
-                    controller: _dto,
-                    focusNode: _dtoFocus,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
-                    decoration: InputDecoration(
-                      labelText: line.dtoFijo
-                          ? 'Descuento ${context.watch<SalesProvider>().moneySymbol}'
-                          : 'Descuento %',
-                      hintText: '0',
-                      prefixIcon: IconButton(
-                        tooltip: line.dtoFijo
-                            ? 'Descontar en porcentaje (%)'
-                            : 'Descontar un monto fijo',
-                        onPressed: widget.onToggleDto,
-                        icon: const Icon(Icons.swap_horiz, size: 20),
-                      ),
-                      prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 44),
-                      suffixText: line.dtoFijo ? null : '%',
-                    ),
-                    onChanged: (text) => widget.onDto(double.tryParse(text) ?? 0),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 4,
-                  child: line.tieneDescuento
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: Text(
-                            'Desc. −${formatMoney(line.montoDto, symbol: context.watch<SalesProvider>().moneySymbol)}',
-                            textAlign: TextAlign.end,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // El aviso (si lo hay) a la izquierda y el subtotal de la línea a la derecha.
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: widget.problem == null
-                      ? const SizedBox.shrink()
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                widget.problem!,
-                                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Subtotal  ',
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-                Text(
-                  formatMoney(line.subtotalConDto, symbol: context.watch<SalesProvider>().moneySymbol),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Cantidad: un campo numérico con los botones − y + dentro, para que ocupe el mismo
-/// ancho y alto que el campo de precio.
-class _QuantityField extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-  final ValueChanged<String> onChanged;
-
-  const _QuantityField({
-    required this.controller,
-    required this.focusNode,
-    required this.onMinus,
-    required this.onPlus,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const buttonSize = BoxConstraints(minWidth: 38, minHeight: 44);
-
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      textAlign: TextAlign.center,
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(
-        labelText: 'Cantidad',
-        prefixIcon: IconButton(
-          tooltip: 'Menos',
-          onPressed: onMinus,
-          icon: const Icon(Icons.remove, size: 20),
-        ),
-        prefixIconConstraints: buttonSize,
-        suffixIcon: IconButton(
-          tooltip: 'Más',
-          onPressed: onPlus,
-          icon: const Icon(Icons.add, size: 20),
-        ),
-        suffixIconConstraints: buttonSize,
-      ),
-      onChanged: onChanged,
     );
   }
 }

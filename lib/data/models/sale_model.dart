@@ -41,6 +41,11 @@ List<ClientEntity> clientsFromJson(dynamic json) => json is List
 
 /// Producto de `GET /productos/search`: `warehouses[].pivot.stock` y
 /// `list_prices[].pivot.precio` dan el stock por almacén y el precio por lista.
+String? _productImage(dynamic v) {
+  if (v is! String) return null;
+  return v.replaceFirst('/storage/', '').isEmpty ? null : v;
+}
+
 SaleProductEntity saleProductFromJson(Map<String, dynamic> json) {
   Map<int, double> pivots(dynamic list, String field) {
     final result = <int, double>{};
@@ -65,6 +70,8 @@ SaleProductEntity saleProductFromJson(Map<String, dynamic> json) {
     brandId: _int(json['brand_id']) ?? (brand is Map ? _int(brand['id']) : null),
     categoryId: _int(json['category_id']),
     unidad: measure is Map ? _text(measure['name']) : null,
+    // Como en Productos, la web trata `/storage/` solo como "sin imagen".
+    imagen: _productImage(json['img']),
     esServicio: json['tipo'] == 's',
     ventaSinStock: _bool(json['vender_sin_stock']),
     stockPorAlmacen: pivots(json['warehouses'], 'stock'),

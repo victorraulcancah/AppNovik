@@ -24,13 +24,15 @@ import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/client_usecases.dart';
 import 'package:app_novik/domain/usecases/sale_usecases.dart';
 import 'package:app_novik/domain/usecases/stock_usecases.dart';
-import 'package:app_novik/presentation/components/app_motion.dart' show AppEntrance;
+import 'package:app_novik/presentation/components/app_motion.dart' show AppCountUp, AppEntrance;
 import 'package:app_novik/presentation/pages/sales_page.dart';
 import 'package:app_novik/presentation/pdf/receipt_pdf.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/clients_provider.dart';
 import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
+import 'package:app_novik/presentation/widgets/product_image.dart';
+import 'package:app_novik/presentation/widgets/sale_line_card.dart';
 import 'package:app_novik/presentation/widgets/sale_modals.dart';
 import 'package:app_novik/theme/app_theme.dart';
 import 'support/screen_look.dart';
@@ -2609,6 +2611,25 @@ void main() {
           handle.dispose();
         });
 
+        testWidgets('Ventas con el panel de descuento abierto y el tope de stock: ${look.label}', (tester) async {
+          final handle = tester.ensureSemantics();
+          final (sales, _) = await pump(tester, look: look);
+          sales.selectWarehouse(1);
+          sales.selectClient(cliente);
+          sales.addProduct(_product(prices: const {12: 20}), cantidad: 5); // 5 = todo el stock
+          sales.setDto(0, 15);
+          await tester.pumpAndSettle();
+          expect(find.text('Máx. stock: 5'), findsOneWidget);
+
+          await tester.ensureVisible(find.text('−15 %'));
+          await tester.tap(find.text('−15 %'));
+          await tester.pumpAndSettle();
+          expect(find.text('Descuento %'), findsOneWidget);
+
+          await expectLooksRight(tester, look);
+          handle.dispose();
+        });
+
         testWidgets('Registrar venta en dólares: ${look.label}', (tester) async {
           final (sales, _) = await pump(tester, look: look);
           sales.selectWarehouse(1);
@@ -2637,6 +2658,30 @@ void main() {
           await expectLooksRight(tester, look, contrast: false);
         });
       }
+
+      testWidgets('en pantalla angosta con letra grande el total y el descuento bajan, y todo se lee', (tester) async {
+        final handle = tester.ensureSemantics();
+        const look = ScreenLook(size: Size(320, 640));
+        final (sales, _) = await pump(tester, look: look);
+        sales.selectWarehouse(1);
+        sales.selectClient(cliente);
+        sales.addProduct(_product(name: 'SUBWOOFER DE 12 PULGADAS CON BOBINA DOBLE', prices: const {12: 20}), cantidad: 2);
+        await tester.pumpAndSettle();
+
+        final card = find.byType(SaleLineCard);
+        final name = tester.getRect(find.descendant(of: card, matching: find.textContaining('SUBWOOFER')));
+        final total = tester.getRect(find.descendant(of: card, matching: find.byType(AppCountUp)));
+        final chip = tester.getRect(find.descendant(of: card, matching: find.text('Descuento 0 %')));
+        final minus = tester.getRect(find.byTooltip('Menos'));
+
+        // El total va bajo el nombre (no a su lado) y el descuento bajo la fila de la cantidad.
+        expect(total.top, greaterThan(name.bottom - 1));
+        expect(chip.top, greaterThan(minus.bottom - 1));
+        // Y el texto del botón no se achica hasta ser ilegible: al menos ~11 px reales.
+        expect(chip.height, greaterThan(11));
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
 
       // La prueba de contraste de Flutter se confunde con el texto de ayuda del equivalente en soles
       // ("≈ S/ ..."): lo mide en un lugar donde no está. Se ve bien en la captura; por eso el modal en
@@ -2721,7 +2766,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Cuota 2'), findsOneWidget);
-      expect(find.widgetWithText(TextField, '50.00'), findsNWidgets(3)); // el monto y las dos cuotas
+      // Cada cuota por la mitad del crédito (la línea del carrito guarda su precio en el panel cerrado).
+      expect(tester.widget<TextField>(_field('Cuota 1')).controller!.text, '50.00');
+      expect(tester.widget<TextField>(_field('Cuota 2')).controller!.text, '50.00');
       expect(find.text('Los pagos suman el total'), findsOneWidget);
 
       await tester.ensureVisible(find.text('Crear'));
@@ -3578,6 +3625,13 @@ void main() {
       sales.addProduct(_product(), cantidad: 2); // S/ 40 x 2
       await tester.pumpAndSettle();
 
+      // El descuento está en un botón compacto; el campo se abre al tocarlo.
+      expect(find.text('Descuento 0 %'), findsOneWidget);
+      expect(_field('Descuento %'), findsNothing);
+      await tester.ensureVisible(find.text('Descuento 0 %'));
+      await tester.tap(find.text('Descuento 0 %'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Descuento %'), findsOneWidget);
       await tester.ensureVisible(_field('Descuento %'));
       await tester.enterText(_field('Descuento %'), '10');
@@ -3586,7 +3640,10 @@ void main() {
       expect(sales.lines.single.dto, 10);
       expect(sales.total, 72);
       expect(find.text('Desc. −S/ 8.00'), findsOneWidget);
+      // El total con descuento, el original tachado y el botón con lo descontado.
       expect(find.text('S/ 72.00'), findsWidgets);
+      expect(find.text('S/ 80.00'), findsOneWidget);
+      expect(find.text('−10 %'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Descontar un monto fijo'));
       await tester.pumpAndSettle();
@@ -3595,6 +3652,7 @@ void main() {
       expect(sales.lines.single.dtoFijo, isTrue);
       expect(sales.total, 70);
       expect(find.text('Desc. −S/ 10.00'), findsOneWidget);
+      expect(find.text('−S/ 10.00'), findsOneWidget);
     });
 
     testWidgets('el descuento escrito se recorta al máximo y el campo lo refleja', (tester) async {
@@ -3603,6 +3661,9 @@ void main() {
       sales.addProduct(_product(), cantidad: 2);
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Descuento 0 %'));
+      await tester.tap(find.text('Descuento 0 %'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(_field('Descuento %'));
       await tester.enterText(_field('Descuento %'), '150');
       await tester.pumpAndSettle();
@@ -3653,6 +3714,330 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.sent!.vendedorId, isNull);
+    });
+
+    group('tarjeta de la línea del carrito', () {
+      Finder inCard(Finder f) => find.descendant(of: find.byType(SaleLineCard), matching: f);
+
+      testWidgets('muestra el código, la marca, el nombre, el precio unitario, la cantidad, el total y el resumen', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2); // S/ 40 x 2
+        await tester.pumpAndSettle();
+
+        expect(inCard(find.text('SUB-12')), findsOneWidget);
+        expect(inCard(find.text('SUBWOOFER 12"')), findsOneWidget);
+        // El precio unitario y, a su lado, la marca.
+        expect(find.textContaining('P. Unit.: S/ 40.00  ·  PIONEER'), findsOneWidget);
+        expect(tester.widget<TextField>(inCard(find.byType(TextField)).first).controller!.text, '2');
+        expect(inCard(find.text('S/ 80.00')), findsOneWidget);
+        expect(inCard(find.text('Descuento 0 %')), findsOneWidget);
+        expect(find.text('1 línea · 2 ítems'), findsOneWidget);
+      });
+
+      testWidgets('el resumen cuenta líneas e ítems', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        sales.addProduct(_product(id: 101, name: 'TWEETER', codigo: 'TW-1', prices: const {11: 10}), cantidad: 3);
+        await tester.pumpAndSettle();
+
+        expect(find.text('2 líneas · 5 ítems'), findsOneWidget);
+      });
+
+      testWidgets('− no baja de 1 (el basurero es el que quita) y + sube la cantidad', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.byTooltip('Menos'));
+        await tester.tap(find.byTooltip('Menos'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 1);
+        expect(sales.lines, hasLength(1));
+
+        await tester.tap(find.byTooltip('Más'));
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 2);
+
+        await tester.tap(find.byTooltip('Menos'));
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 1);
+      });
+
+      testWidgets('el área táctil de − + y del basurero es de 48 px', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        await tester.pumpAndSettle();
+
+        for (final tip in ['Menos', 'Más', 'Quitar']) {
+          final size = tester.getSize(find.byTooltip(tip));
+          expect(size.width, greaterThanOrEqualTo(48), reason: tip);
+          expect(size.height, greaterThanOrEqualTo(48), reason: tip);
+        }
+      });
+
+      testWidgets('con todo el stock en la venta, el + se apaga y la tarjeta dice "Máx. stock"', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1); // hay 5
+        sales.addProduct(_product(), cantidad: 4);
+        await tester.pumpAndSettle();
+        expect(find.text('Máx. stock: 5'), findsNothing);
+
+        await tester.ensureVisible(find.byTooltip('Más'));
+        await tester.tap(find.byTooltip('Más'));
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 5);
+        expect(find.text('Máx. stock: 5'), findsOneWidget);
+
+        // El + ya no sube nada y no hace falta avisar con un snackbar.
+        await tester.tap(find.byTooltip('Más'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 5);
+        expect(find.byType(SnackBar), findsNothing);
+
+        // Al bajar, el aviso se va.
+        await tester.tap(find.byTooltip('Menos'));
+        await tester.pumpAndSettle();
+        expect(find.text('Máx. stock: 5'), findsNothing);
+      });
+
+      testWidgets('un producto sin tope (vender sin stock) nunca muestra "Máx. stock"', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(sinStock: true), cantidad: 9);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Máx. stock'), findsNothing);
+        await tester.ensureVisible(find.byTooltip('Más'));
+        await tester.tap(find.byTooltip('Más'));
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 10);
+      });
+
+      testWidgets('quitar avisa con "Deshacer" y la línea vuelve a su lugar', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        sales.addProduct(_product(id: 101, name: 'TWEETER', codigo: 'TW-1', prices: const {11: 10}), cantidad: 3);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.byTooltip('Quitar').first);
+        await tester.tap(find.byTooltip('Quitar').first);
+        await tester.pumpAndSettle();
+
+        expect(sales.lines.map((l) => l.product.name), ['TWEETER']);
+        expect(find.text('Quitaste "SUBWOOFER 12""'), findsOneWidget);
+        expect(find.text('Deshacer'), findsOneWidget);
+        expect(find.text('1 línea · 3 ítems'), findsOneWidget);
+
+        await tester.tap(find.text('Deshacer'));
+        await tester.pumpAndSettle();
+
+        // En su lugar (la primera), con su cantidad, y el resumen se actualiza.
+        expect(sales.lines.map((l) => l.product.name), ['SUBWOOFER 12"', 'TWEETER']);
+        expect(sales.lines.first.cantidad, 2);
+        expect(find.text('2 líneas · 5 ítems'), findsOneWidget);
+      });
+
+      testWidgets('deshacer no repite un producto que ya se volvió a agregar', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.byTooltip('Quitar'));
+        await tester.tap(find.byTooltip('Quitar'));
+        await tester.pumpAndSettle();
+        sales.addProduct(_product(), cantidad: 1);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Deshacer'));
+        await tester.pumpAndSettle();
+        expect(sales.lines, hasLength(1));
+        expect(sales.lines.single.cantidad, 1);
+      });
+
+      testWidgets('con descuento se ve el total nuevo, el original tachado y lo descontado en el botón', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2); // 80
+        sales.setDto(0, 25);
+        await tester.pumpAndSettle();
+
+        expect(inCard(find.text('S/ 60.00')), findsOneWidget);
+        final struck = tester.widget<Text>(inCard(find.text('S/ 80.00')));
+        expect(struck.style?.decoration, TextDecoration.lineThrough);
+        expect(inCard(find.text('−25 %')), findsOneWidget);
+        expect(inCard(find.text('Descuento 0 %')), findsNothing);
+      });
+
+      testWidgets('el total de la línea corre hasta su valor al cambiar la cantidad', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1); // 40
+        await tester.pumpAndSettle();
+        expect(inCard(find.text('S/ 40.00')), findsOneWidget);
+
+        sales.setCantidad(0, 3); // 120
+        await tester.pump(); // arma el cuadro con el valor nuevo: la cuenta arranca
+        await tester.pump(const Duration(milliseconds: 150));
+        // A mitad de camino no es ni el valor viejo ni el nuevo.
+        expect(inCard(find.text('S/ 40.00')), findsNothing);
+        expect(inCard(find.text('S/ 120.00')), findsNothing);
+        await tester.pumpAndSettle();
+        expect(inCard(find.text('S/ 120.00')), findsOneWidget);
+      });
+
+      testWidgets('un precio cambiado a mano se marca y muestra el de la lista', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1); // lista: S/ 40
+        await tester.pumpAndSettle();
+        expect(find.textContaining('(lista'), findsNothing);
+
+        // Tocar el precio unitario abre el panel donde se cambia.
+        await tester.ensureVisible(find.textContaining('P. Unit.'));
+        await tester.tap(find.textContaining('P. Unit.'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(inCard(_field('Precio S/')));
+        await tester.enterText(inCard(_field('Precio S/')), '35');
+        await tester.pumpAndSettle();
+
+        expect(sales.lines.single.precio, 35);
+        expect(find.textContaining('P. Unit.: S/ 35.00  (lista S/ 40.00)'), findsOneWidget);
+        expect(inCard(find.text('S/ 35.00')), findsOneWidget);
+      });
+
+      testWidgets('un producto sin precio en la lista abre el panel y avisa', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(prices: const {}), cantidad: 1);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sin precio. Escríbelo para poder vender'), findsOneWidget);
+        expect(inCard(_field('Precio S/')), findsOneWidget);
+      });
+
+      testWidgets('el botón de descuento abre y cierra el panel de precio y descuento', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1);
+        await tester.pumpAndSettle();
+        expect(inCard(_field('Precio S/')), findsNothing);
+
+        await tester.ensureVisible(find.text('Descuento 0 %'));
+        await tester.tap(find.text('Descuento 0 %'));
+        await tester.pumpAndSettle();
+        expect(inCard(_field('Precio S/')), findsOneWidget);
+        expect(inCard(_field('Descuento %')), findsOneWidget);
+
+        await tester.tap(find.text('Descuento 0 %'));
+        await tester.pumpAndSettle();
+        expect(inCard(_field('Precio S/')), findsNothing);
+        expect(inCard(_field('Descuento %')), findsNothing);
+      });
+
+      testWidgets('el panel conserva lo escrito al cerrarse y abrirse', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Descuento 0 %'));
+        await tester.tap(find.text('Descuento 0 %'));
+        await tester.pumpAndSettle();
+        await tester.enterText(_field('Descuento %'), '20');
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('−20 %'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('−20 %'));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(_field('Descuento %')).controller!.text, '20');
+        expect(sales.lines.single.dto, 20);
+      });
+
+      testWidgets('sin foto muestra un ícono; con foto pide la imagen del producto', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1);
+        await tester.pumpAndSettle();
+        expect(inCard(find.byType(ProductImage)), findsNothing);
+        expect(inCard(find.byIcon(Icons.inventory_2_outlined)), findsOneWidget);
+
+        sales.addProduct(
+          SaleProductEntity(
+            id: 102,
+            codigo: 'CAB-1',
+            name: 'CABLE RCA',
+            imagen: '/storage/images/products/cable.png',
+            stockPorAlmacen: const {1: 9},
+            precioPorLista: const {11: 5},
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(inCard(find.byType(ProductImage)), findsOneWidget);
+        expect(
+          tester.widget<ProductImage>(inCard(find.byType(ProductImage))).path,
+          '/storage/images/products/cable.png',
+        );
+      });
+
+      testWidgets('un ítem libre lleva su insignia, el lápiz y ninguna foto ni tope', (tester) async {
+        final (sales, _) = await pumpSales(tester, permissions: const {'ventas.store', 'factura.libre'});
+        sales.selectWarehouse(1);
+        await sales.addFreeItem(descripcion: 'FLETE A PROVINCIA', codigo: 'FL-1', precio: 30);
+        await tester.pumpAndSettle();
+
+        expect(inCard(find.text('FL-1 · Ítem libre')), findsOneWidget);
+        expect(inCard(find.byIcon(Icons.edit_note_outlined)), findsOneWidget);
+        expect(find.byTooltip('Editar descripción y código'), findsOneWidget);
+        expect(inCard(find.byType(ProductImage)), findsNothing);
+        await tester.ensureVisible(find.byTooltip('Más'));
+        await tester.tap(find.byTooltip('Más'));
+        await tester.pumpAndSettle();
+        expect(sales.lines.single.cantidad, 2);
+        expect(find.textContaining('Máx. stock'), findsNothing);
+      });
+
+      testWidgets('con "quitar animaciones" la tarjeta sale completa de entrada', (tester) async {
+        _phoneScreen(tester);
+        final repo = _FakeSaleRepository();
+        final session = _session();
+        final sales = _provider(repo)..syncSession(session);
+        await tester.pumpWidget(
+          MultiProvider(
+            providers: [
+              ChangeNotifierProvider<ThemeProvider>(
+                create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
+              ),
+              ChangeNotifierProvider<AuthProvider>.value(value: _auth(session)),
+              ChangeNotifierProvider<SalesProvider>.value(value: sales),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: child!,
+              ),
+              home: const Scaffold(body: SalesPage()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 2);
+        await tester.pumpAndSettle();
+        expect(find.text('S/ 80.00'), findsWidgets);
+
+        // Sin animaciones el total cambia de golpe: en el primer cuadro ya es el valor final.
+        sales.setCantidad(0, 3); // 120
+        await tester.pump();
+        expect(find.text('S/ 120.00'), findsWidgets);
+      });
     });
   });
 

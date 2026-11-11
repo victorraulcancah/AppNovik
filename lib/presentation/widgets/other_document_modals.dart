@@ -124,7 +124,7 @@ class _DetailBody extends StatelessWidget {
         switch (d.kind) {
           OtherDocumentKind.traslado => _info([
               AppDetailRow(label: 'Fecha de emisión', value: _date(d.creado)),
-              AppDetailRow(label: 'Usuario', value: d.usuario),
+              AppDetailRow(label: 'Usuario', value: shortPersonName(d.usuario)),
               AppDetailRow(label: 'Desde', value: d.desde),
               AppDetailRow(label: 'Hacia', value: d.hacia),
               AppDetailRow(
@@ -139,7 +139,7 @@ class _DetailBody extends StatelessWidget {
           OtherDocumentKind.entradaStock => _info([
               AppDetailRow(label: 'Fecha de emisión', value: _date(d.creado)),
               AppDetailRow(label: 'Sucursal', value: d.almacen),
-              AppDetailRow(label: 'Usuario', value: d.usuario),
+              AppDetailRow(label: 'Usuario', value: shortPersonName(d.usuario)),
             ]),
           OtherDocumentKind.guia => _info([
               AppDetailRow(label: 'Comprobante', value: d.comprobanteNumero),
@@ -179,7 +179,8 @@ class _DetailBody extends StatelessWidget {
         if (d.lines.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text('Productos', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
+          const _LinesHeader(),
           for (final line in d.lines)
             _LineTile(document: d, line: line, showAmounts: showAmounts),
           const Divider(height: 24),
@@ -196,6 +197,39 @@ class _DetailBody extends StatelessWidget {
   static String? _address(String? address, String? ubigeo) {
     final parts = [address, ubigeo].whereType<String>();
     return parts.isEmpty ? null : parts.join(' · ');
+  }
+}
+
+/// Ancho de la columna de cantidad: igual para todas las filas y para el encabezado.
+const double _quantityColumnWidth = 60;
+
+/// Encabezado de la lista de productos: "Cantidad" sobre las cifras y "Producto" sobre los nombres.
+class _LinesHeader extends StatelessWidget {
+  const _LinesHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _quantityColumnWidth,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('Cantidad', style: style),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text('Producto', style: style)),
+        ],
+      ),
+    );
   }
 }
 
@@ -234,16 +268,19 @@ class _LineTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            constraints: const BoxConstraints(minWidth: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            width: _quantityColumnWidth,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(
-              formatQuantity(line.cantidad),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                formatQuantity(line.cantidad),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
           const SizedBox(width: 12),

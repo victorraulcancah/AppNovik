@@ -22,14 +22,36 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   AuthLocalDataSourceImpl({FlutterSecureStorage? storage})
       : storage = storage ?? const FlutterSecureStorage();
 
+  /// El token se lee del almacenamiento seguro una sola vez y luego vive en memoria: cada
+  /// petición a la API lo pide y cada lectura cuesta una ida al cifrado del teléfono. Por eso esta
+  /// clase debe ser una sola instancia para toda la app (ver `DependencyInjection`).
+  String? _token;
+  bool _tokenKnown = false;
+
+  /// Escritura de la sesión en curso; `clear()` la espera para que un cierre de sesión inmediato
+  /// no deje el token guardado después de borrarlo.
+  Future<void>? _saving;
+
   @override
-  Future<void> saveSession(String token, UserModel user) async {
+  Future<void> saveSession(String token, UserModel user) {
+    // Desde aquí las peticiones ya usan el token nuevo, aunque el disco termine después.
+    _token = token;
+    _tokenKnown = true;
+    final write = _write(token, user);
+    _saving = write;
+    return write;
+  }
+
+  Future<void> _write(String token, UserModel user) async {
     try {
-      await storage.write(key: AppConstants.tokenStorageKey, value: token);
-      await storage.write(
-        key: AppConstants.userStorageKey,
-        value: json.encode(user.toJson()),
-      );
+      // Las dos escrituras van juntas: no dependen una de la otra.
+      await Future.wait([
+        storage.write(key: AppConstants.tokenStorageKey, value: token),
+        storage.write(
+          key: AppConstants.userStorageKey,
+          value: json.encode(user.toJson()),
+        ),
+      ]);
     } catch (e) {
       throw CacheException('No se pudo guardar la sesión: $e');
     }
@@ -37,8 +59,12 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<String?> getToken() async {
+    if (_tokenKnown) return _token;
     try {
-      return await storage.read(key: AppConstants.tokenStorageKey);
+      final stored = await storage.read(key: AppConstants.tokenStorageKey);
+      _token = stored;
+      _tokenKnown = true;
+      return stored;
     } catch (e) {
       throw CacheException('No se pudo leer la sesión: $e');
     }
@@ -57,9 +83,15 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clear() async {
+    _token = null;
+    _tokenKnown = true;
     try {
-      await storage.delete(key: AppConstants.tokenStorageKey);
-      await storage.delete(key: AppConstants.userStorageKey);
+      // Si el login todavía está guardando en segundo plano, primero termina (y su error no importa).
+      await _saving?.catchError((Object _) {});
+      await Future.wait([
+        storage.delete(key: AppConstants.tokenStorageKey),
+        storage.delete(key: AppConstants.userStorageKey),
+      ]);
     } catch (e) {
       throw CacheException('No se pudo cerrar la sesión: $e');
     }

@@ -85,8 +85,31 @@ class _InicioPageState extends State<InicioPage> {
           ),
         if (inicio.usesRange) _toolbar(inicio),
         if (inicio.loading && hasData) const LinearProgressIndicator(minHeight: 2),
+        if (inicio.showingCache) _cacheNote(inicio),
         Expanded(child: _body(inicio, view)),
       ],
+    );
+  }
+
+  /// Aviso discreto cuando lo que se ve son los últimos datos guardados: mientras se actualiza, o si no
+  /// se pudo.
+  Widget _cacheNote(InicioProvider inicio) {
+    final scheme = Theme.of(context).colorScheme;
+    final failed = inicio.error != null && !inicio.loading;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Row(
+        children: [
+          Icon(failed ? Icons.cloud_off_outlined : Icons.sync, size: 14, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              failed ? 'No se pudo actualizar. Se muestran los últimos datos guardados.' : 'Actualizando…',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -199,7 +222,11 @@ class _InicioPageState extends State<InicioPage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
               // Cada vista con su propia llave: al cambiar de perfil sus secciones vuelven a entrar.
-              child: KeyedSubtree(key: ValueKey(view), child: content),
+              // Si lo que se ve es lo último guardado, las cifras no cuentan desde cero.
+              child: AppCountUpScope(
+                fromZero: inicio.animateFromZero,
+                child: KeyedSubtree(key: ValueKey(view), child: content),
+              ),
             ),
           ),
         ],
@@ -212,6 +239,7 @@ class _InicioPageState extends State<InicioPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppEntrance(
+          duration: const Duration(milliseconds: 160),
           child: InicioGreeting(
             greeting: greetingFor(view, firstName(fullName), inicio.now.hour),
             subtitle: subtitle,
@@ -340,10 +368,11 @@ class _GeneralView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppEntrance(child: hero),
+        AppEntrance(duration: const Duration(milliseconds: 160), child: hero),
         const SizedBox(height: 16),
         AppEntrance(
-          delay: const Duration(milliseconds: 80),
+          delay: const Duration(milliseconds: 40),
+          duration: const Duration(milliseconds: 160),
           offset: 12,
           child: InicioPanel(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),

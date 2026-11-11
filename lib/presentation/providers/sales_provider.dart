@@ -723,6 +723,17 @@ class SalesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Devuelve a la venta una línea que se quitó (el "Deshacer" de la pantalla), en su lugar o al
+  /// final si la lista cambió. Si el producto ya está en la venta no la repite.
+  void restoreLine(int index, SaleLineEntity line) {
+    final already = line.esLibre ? false : lines.any((l) => !l.esLibre && l.product.id == line.product.id);
+    if (already) return;
+    final at = index < 0 ? 0 : (index > lines.length ? lines.length : index);
+    lines = [...lines]..insert(at, line);
+    submitError = null;
+    notifyListeners();
+  }
+
   /// Problema de una línea con el almacén y precio actuales (para marcarla en pantalla).
   String? lineProblem(SaleLineEntity line) {
     if (line.precio <= 0) return 'Sin precio. Escríbelo para poder vender';
