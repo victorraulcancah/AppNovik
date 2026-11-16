@@ -516,9 +516,19 @@ void main() {
       expect(find.textContaining(r'$. 0.00'), findsNothing);
     });
 
-    testWidgets('los totales de soles y dólares salen arriba', (tester) async {
+    testWidgets('los totales ya no salen sueltos arriba: están en Acciones → Totales', (tester) async {
       await _pump(tester);
 
+      // Arriba de la lista no hay tarjetas informativas.
+      expect(find.byType(AppMetricCard), findsNothing);
+      expect(find.text('Total soles'), findsNothing);
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Totales'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppMetricCard), findsNWidgets(2));
       expect(find.text('Total soles'), findsOneWidget);
       expect(find.text('S/. 9,000.25'), findsOneWidget);
       expect(find.text('Total dólares'), findsOneWidget);

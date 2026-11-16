@@ -154,7 +154,6 @@ class _DebtsPageState extends State<DebtsPage> {
                 provider.filters.copyWith(clearClient: true, clearSeller: true),
               ),
             ),
-            if (provider.items.isNotEmpty || provider.total > 0) _Totals(provider: provider),
             Expanded(child: _body(provider)),
           ],
         ),
@@ -163,6 +162,12 @@ class _DebtsPageState extends State<DebtsPage> {
           bottom: 16,
           child: AppSpeedDial(
             actions: [
+              AppSpeedDialAction(
+                label: 'Totales',
+                icon: Icons.functions,
+                color: const Color(0xFF0E90C7),
+                onPressed: () => _showTotals(provider),
+              ),
               AppSpeedDialAction(
                 label: provider.exporting ? 'Exportando…' : 'Exportar Excel',
                 icon: Icons.description_outlined,
@@ -173,6 +178,29 @@ class _DebtsPageState extends State<DebtsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// "Total soles" y "Total dólares" de la cabecera de la web, en el modal de totales (como los de
+  /// Stock y Productos): son los del servidor para la búsqueda y los filtros que están puestos.
+  void _showTotals(DebtsProvider provider) {
+    showAppSummary(
+      context,
+      title: 'Totales',
+      subtitle: 'Deudas',
+      metrics: [
+        AppSummaryMetric(
+          label: 'Total soles',
+          value: formatMoney(provider.totalSoles, symbol: 'S/.'),
+          color: const Color(0xFF65A30D),
+        ),
+        AppSummaryMetric(
+          label: 'Total dólares',
+          value: formatMoney(provider.totalDolares, symbol: r'$.'),
+          color: const Color(0xFFCA8A04),
+        ),
+      ],
+      note: 'Según la búsqueda y los filtros que están puestos.',
     );
   }
 
@@ -215,39 +243,6 @@ class _DebtsPageState extends State<DebtsPage> {
       trailingTitle: formatMoney(d.deudaSoles, symbol: 'S/.'),
       trailingCaption: d.deudaDolares != 0 ? formatMoney(d.deudaDolares, symbol: r'$.') : null,
       trailingCaptionColor: scheme.onSurfaceVariant,
-    );
-  }
-}
-
-/// "Total Soles" y "Total Dólares" de la cabecera de la web.
-class _Totals extends StatelessWidget {
-  final DebtsProvider provider;
-
-  const _Totals({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: AppMetricCard(
-              label: 'Total soles',
-              value: formatMoney(provider.totalSoles, symbol: 'S/.'),
-              color: const Color(0xFF65A30D),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: AppMetricCard(
-              label: 'Total dólares',
-              value: formatMoney(provider.totalDolares, symbol: r'$.'),
-              color: const Color(0xFFCA8A04),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -335,7 +335,7 @@ class _ProductsPageState extends State<ProductsPage> {
           color: const Color(0xFF7C3AED),
         ),
       ],
-      note: 'Según la búsqueda y los filtros que están puestos.',
+      note: 'Según la búsqueda.',
     );
   }
 

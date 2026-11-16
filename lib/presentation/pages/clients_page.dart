@@ -220,6 +220,21 @@ class _ClientsPageState extends State<ClientsPage> {
     }
   }
 
+  /// Todos / Personas / Empresas en el modal de totales (como los de Stock y Productos): los
+  /// contadores de la cabecera de la web. El tipo se filtra desde el panel de filtros.
+  void _showTotals(ClientListProvider provider) {
+    showAppSummary(
+      context,
+      title: 'Totales',
+      subtitle: 'Clientes',
+      metrics: [
+        AppSummaryMetric(label: 'Todos', value: '${provider.allCount}', color: const Color(0xFF0E90C7)),
+        AppSummaryMetric(label: 'Personas', value: '${provider.totalPersonas}', color: const Color(0xFF16A34A)),
+        AppSummaryMetric(label: 'Empresas', value: '${provider.totalEmpresas}', color: const Color(0xFF7C3AED)),
+      ],
+    );
+  }
+
   List<AppSpeedDialAction> _actions(ClientListProvider provider) {
     return [
       if (_can('clientes.store'))
@@ -243,6 +258,12 @@ class _ClientsPageState extends State<ClientsPage> {
           color: const Color(0xFF0E90C7),
           onPressed: _categories,
         ),
+      AppSpeedDialAction(
+        label: 'Totales',
+        icon: Icons.functions,
+        color: const Color(0xFF0E90C7),
+        onPressed: () => _showTotals(provider),
+      ),
       if (_can('clientes.export'))
         AppSpeedDialAction(
           label: provider.exporting ? 'Exportando…' : 'Exportar',
@@ -323,7 +344,6 @@ class _ClientsPageState extends State<ClientsPage> {
                 ),
               ),
             ),
-            _TypeCounters(provider: provider),
             Expanded(child: _body(provider)),
           ],
         ),
@@ -403,38 +423,6 @@ class _ClientsPageState extends State<ClientsPage> {
         AppActionButton(type: AppActionType.view, onPressed: () => _detail(c)),
         if (_canEdit) AppActionButton(type: AppActionType.edit, onPressed: () => _edit(c)),
       ],
-    );
-  }
-}
-
-/// "Todos / Personas / Empresas" con su cantidad, que también filtran la lista (como los
-/// contadores de la cabecera de la web).
-class _TypeCounters extends StatelessWidget {
-  final ClientListProvider provider;
-
-  const _TypeCounters({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final tipo = provider.filters.tipo;
-    Widget chip(String label, int count, String? value) => ChoiceChip(
-          label: Text('$label: $count'),
-          selected: tipo == value,
-          onSelected: (_) => provider.setTipo(value),
-        );
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Row(
-        children: [
-          chip('Todos', provider.allCount, null),
-          const SizedBox(width: 8),
-          chip('Personas', provider.totalPersonas, 'p'),
-          const SizedBox(width: 8),
-          chip('Empresas', provider.totalEmpresas, 'e'),
-        ],
-      ),
     );
   }
 }

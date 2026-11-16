@@ -721,9 +721,23 @@ void main() {
       expect(find.text('Distribuidor'), findsWidgets);
       expect(find.text('Activo'), findsWidgets);
       expect(find.text('Ejecutivo: Juan P.'), findsWidgets);
-      expect(find.text('Todos: 25'), findsOneWidget);
-      expect(find.text('Personas: 20'), findsOneWidget);
-      expect(find.text('Empresas: 5'), findsOneWidget);
+      // Los contadores ya no están sueltos arriba: van en el modal de totales.
+      expect(find.text('Todos: 25'), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+    });
+
+    testWidgets('Acciones → Totales muestra Todos, Personas y Empresas en tarjetas informativas', (tester) async {
+      await _pump(tester, const {'clientes.index'});
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Totales'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppMetricCard), findsNWidgets(3));
+      expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Todos'), matching: find.text('25')), findsOneWidget);
+      expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Personas'), matching: find.text('20')), findsOneWidget);
+      expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Empresas'), matching: find.text('5')), findsOneWidget);
     });
 
     testWidgets('sin el permiso show-telefono el teléfono no se ve', (tester) async {
@@ -740,15 +754,6 @@ void main() {
       final repo = await _pump(tester, const {});
       expect(find.text('Sin acceso'), findsOneWidget);
       expect(repo.listCalls, isEmpty);
-    });
-
-    testWidgets('tocar Empresas filtra la lista por tipo', (tester) async {
-      final repo = await _pump(tester, const {'clientes.index'});
-
-      await tester.tap(find.text('Empresas: 5'));
-      await tester.pumpAndSettle();
-
-      expect(repo.listCalls.last.filters.tipo, 'e');
     });
 
     testWidgets('el detalle muestra datos, direcciones, contactos y crédito', (tester) async {
@@ -901,7 +906,9 @@ void main() {
 
     testWidgets('crear: las pestañas dependen de los permisos', (tester) async {
       await _pump(tester, const {'clientes.index', 'clientes.store'});
-      await tester.tap(find.text('Crear cliente'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Crear cliente'));
       await tester.pumpAndSettle();
 
       expect(find.text('Información básica'), findsOneWidget);
@@ -914,7 +921,9 @@ void main() {
 
     testWidgets('el Ceo ve también las condiciones de venta', (tester) async {
       await _pump(tester, const {'clientes.index', 'clientes.store'}, roles: const ['Ceo Empresa']);
-      await tester.tap(find.text('Crear cliente'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Crear cliente'));
       await tester.pumpAndSettle();
 
       expect(find.text('Condiciones de venta'), findsOneWidget);
@@ -922,7 +931,9 @@ void main() {
 
     testWidgets('crear con datos incompletos muestra el motivo y no guarda', (tester) async {
       final repo = await _pump(tester, const {'clientes.index', 'clientes.store'});
-      await tester.tap(find.text('Crear cliente'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Crear cliente'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Crear'));
@@ -1081,8 +1092,10 @@ void main() {
     testWidgets('con permiso de categorizar se configuran las categorías y se guardan', (tester) async {
       final repo = await _pump(tester, const {'clientes.index', 'clientes.categorizar'});
 
-      // Es la única acción: sale directa, sin "Acciones".
-      await tester.tap(find.text('Configurar categorías'));
+      // Siempre hay varias acciones (con "Totales"): salen dentro de "Acciones".
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Configurar categorías'));
       await tester.pumpAndSettle();
 
       expect(find.text('CICLO DE ACTUALIZACIÓN'), findsOneWidget);
@@ -1102,7 +1115,9 @@ void main() {
     testWidgets('el Vendedor sin permiso de categorizar solo mira las categorías', (tester) async {
       await _pump(tester, const {'clientes.index'}, roles: const ['Vendedor']);
 
-      await tester.tap(find.text('Ver categorías'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ver categorías'));
       await tester.pumpAndSettle();
 
       expect(find.text('Categorías de clientes'), findsOneWidget);
