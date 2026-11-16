@@ -32,6 +32,7 @@ import 'package:app_novik/presentation/providers/clients_provider.dart';
 import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/widgets/product_image.dart';
+import 'package:app_novik/presentation/widgets/product_image_viewer.dart';
 import 'package:app_novik/presentation/widgets/sale_line_card.dart';
 import 'package:app_novik/presentation/widgets/sale_modals.dart';
 import 'package:app_novik/theme/app_theme.dart';
@@ -1231,6 +1232,34 @@ void main() {
 
       expect(sales.lines.map((l) => (l.product.id, l.cantidad)), [(100, 1), (101, 1)]);
       expect(find.text('Buscar productos'), findsNothing);
+    });
+
+    testWidgets('cada producto lleva su foto (o un recuadro vacío) y al tocarla se abre a pantalla completa', (tester) async {
+      final conFoto = SaleProductEntity(
+        id: 200,
+        codigo: 'CAB-12',
+        name: 'CABLE 12GA',
+        imagen: '/storage/images/products/cable.png',
+        stockPorAlmacen: const {1: 9},
+        precioPorLista: const {11: 5},
+      );
+      await open(tester, products: [conFoto, audio]);
+      final hoja = find.byType(BottomSheet);
+
+      expect(find.descendant(of: hoja, matching: find.byType(ProductImage)), findsOneWidget);
+      expect(find.descendant(of: hoja, matching: find.byType(ProductImagePlaceholder)), findsOneWidget);
+
+      // Tocar la foto no marca el producto: abre la imagen.
+      await tester.tap(find.descendant(of: hoja, matching: find.byType(ProductImage)));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductImageViewer), findsOneWidget);
+      expect(find.text('CABLE 12GA'), findsWidgets);
+      expect(find.byTooltip('Compartir imagen'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductImageViewer), findsNothing);
+      expect(find.text('0 seleccionados'), findsOneWidget);
     });
 
     testWidgets('el nombre sale completo y la ventana no cambia de alto al buscar', (tester) async {

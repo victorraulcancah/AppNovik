@@ -59,7 +59,7 @@ Map<String, dynamic> _json({
 };
 
 RankingReport _report(List<(String, double)> rows, {bool hasMore = false, double? total}) => RankingReport(
-  rows: [for (final (i, r) in rows.indexed) RankingRow(id: i + 1, name: r.$1, venta: r.$2)],
+  rows: [for (final (i, r) in rows.indexed) RankingRow(id: i + 1, name: r.$1, venta: r.$2, nVentas: 5, subtotal: r.$2, margen: 50)],
   total: total ?? rows.fold<double>(0, (s, r) => s + r.$2),
   totalRows: rows.length,
   hasMore: hasMore,
@@ -668,17 +668,23 @@ void main() {
       return repo;
     }
 
-    /// Elige un reporte en el selector (las fichas se arman a medida que se deslizan).
+    /// Abre un reporte tocando su tarjeta de Venta general; "Venta general" vuelve con la flecha.
     Future<void> choose(WidgetTester tester, String label) async {
-      final scrollable = find.descendant(of: find.byType(ReportKindSelector), matching: find.byType(Scrollable));
-      // Vuelve al principio y desliza hasta la ficha pedida.
-      await tester.drag(scrollable, const Offset(5000, 0));
+      if (label == 'Venta general') {
+        await tester.tap(find.byTooltip('Volver a Venta general'));
+        await tester.pumpAndSettle();
+        return;
+      }
+      final title = {
+        'Departamentos': 'Ventas por departamentos',
+        'Vendedor': 'Ventas por vendedores',
+        'Marcas': 'Ventas por marcas',
+        'Categoría': 'Ventas por categorías',
+        'Cliente': 'Ventas por clientes',
+      }[label]!;
+      await tester.ensureVisible(find.text(title));
       await tester.pumpAndSettle();
-      final chip = find.widgetWithText(ChoiceChip, label);
-      await tester.scrollUntilVisible(chip, 100, scrollable: scrollable);
-      await tester.ensureVisible(chip);
-      await tester.pumpAndSettle();
-      await tester.tap(chip);
+      await tester.tap(find.text(title));
       await tester.pumpAndSettle();
     }
 
@@ -694,15 +700,26 @@ void main() {
       expect(find.text('Venta Total'), findsOneWidget);
     });
 
-    testWidgets('el selector muestra los seis reportes, en el orden de la lista', (tester) async {
+    testWidgets('no hay fichas de reportes arriba: se entra por las tarjetas de Venta general', (tester) async {
       await pump(tester, size: const Size(1100, 1600));
 
-      final chips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip)).toList();
-      final labels = [
-        for (final c in chips.take(6)) ((c.label as Text).data),
-      ];
-      expect(labels, ['Venta general', 'Departamentos', 'Vendedor', 'Marcas', 'Categoría', 'Cliente']);
-      expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Venta general')).selected, isTrue);
+      expect(find.byType(ReportKindSelector), findsNothing);
+      expect(find.widgetWithText(ChoiceChip, 'Departamentos'), findsNothing);
+      expect(find.widgetWithText(ChoiceChip, 'Vendedor'), findsNothing);
+      expect(find.text('Ventas por departamentos'), findsOneWidget);
+    });
+
+    testWidgets('sin Venta general queda el selector para pasar de un reporte a otro', (tester) async {
+      await pump(
+        tester,
+        size: const Size(1100, 1600),
+        session: _session(permissions: const {'reportes.index', 'reportes.marcas.index', 'reportes.vendedor.index'}),
+      );
+
+      expect(find.byType(ReportKindSelector), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Marcas'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Vendedor'), findsOneWidget);
+      expect(find.byTooltip('Volver a Venta general'), findsNothing);
     });
 
     testWidgets('Venta general trae las tarjetas con el top 3, el monto, la barra y el %', (tester) async {
@@ -757,7 +774,7 @@ void main() {
       expect(tester.element(find.byType(RankingView)).read<ReportsProvider>().kind, ReportKind.marcas);
     });
 
-    testWidgets('el selector cambia de reporte sin volver a pedir lo ya pedido', (tester) async {
+    testWidgets('abrir un reporte y volver con la flecha no vuelve a pedir lo ya pedido', (tester) async {
       final repo = await pump(tester);
       final before = repo.calls.length;
 
@@ -770,6 +787,23 @@ void main() {
 
       await choose(tester, 'Venta general');
       expect(find.text('Venta Total'), findsOneWidget);
+    });
+
+    testWidgets('cada fila trae más detalles: ventas, ticket, subtotal, descuento y margen', (tester) async {
+      await pump(tester);
+      await choose(tester, 'Marcas');
+
+      // Con el margen tapado (como en Venta general) se ve "S/. *******"; el ojo lo destapa.
+      expect(find.textContaining('Subtotal'), findsWidgets);
+      expect(find.textContaining('Desc.'), findsWidgets);
+      expect(find.textContaining('ventas · Ticket prom.'), findsWidgets);
+      expect(find.text('Margen S/. *******'), findsWidgets);
+
+      await tester.tap(find.byTooltip('Ver el margen'));
+      await tester.pumpAndSettle();
+      expect(find.text('Margen S/. *******'), findsNothing);
+      expect(find.textContaining('Margen S/.'), findsWidgets);
+      expect(find.textContaining(RegExp('unidad', caseSensitive: false)), findsNothing);
     });
 
     testWidgets('los reportes por entidad no ofrecen comparar el año anterior ni el Excel', (tester) async {
