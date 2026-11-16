@@ -27,33 +27,35 @@ Future<void> _open(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('al llegar los resultados el teclado baja para dar más alto', (tester) async {
+  testWidgets('la ventana no se mueve ni cambia de alto al buscar, y el teclado sigue ahí', (tester) async {
     await _open(tester);
+    final topAntes = tester.getTopLeft(find.text('Producto')).dy;
+    final cerrarAntes = tester.getTopLeft(find.text('Cerrar')).dy;
 
     await tester.enterText(find.byType(TextField), 'evo');
-    // Mientras escribe, el campo sigue enfocado (el teclado arriba).
-    expect(FocusManager.instance.primaryFocus?.hasPrimaryFocus, isTrue);
-
+    await tester.pump(const Duration(milliseconds: 100));
+    // Mientras carga (esqueleto) y con los resultados a la vista, sigue en el mismo lugar.
+    expect(tester.getTopLeft(find.text('Producto')).dy, topAntes);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
     expect(find.text('evo uno'), findsOneWidget);
-    final field = tester.widget<EditableText>(find.byType(EditableText));
-    expect(field.focusNode.hasFocus, isFalse);
-  });
-
-  testWidgets('si se siguió escribiendo, no le quita el teclado', (tester) async {
-    await _open(tester);
-
-    await tester.enterText(find.byType(TextField), 'ev');
-    await tester.pump(const Duration(milliseconds: 500));
-    // Antes de que termine la respuesta anterior, escribe otra letra.
-    await tester.enterText(find.byType(TextField), 'evo');
-    await tester.pump();
-
+    expect(tester.getTopLeft(find.text('Producto')).dy, topAntes);
+    expect(tester.getTopLeft(find.text('Cerrar')).dy, cerrarAntes);
+    // El teclado no baja solo al llegar los resultados.
     final field = tester.widget<EditableText>(find.byType(EditableText));
     expect(field.focusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('con muchos o pocos resultados la ventana mide lo mismo', (tester) async {
+    await _open(tester);
+    final alto = tester.getSize(find.byType(Material).last);
+
+    await tester.enterText(find.byType(TextField), 'a');
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byType(Material).last), alto);
   });
 
   testWidgets('un resultado puede llevar un widget a la izquierda y no corta el nombre', (tester) async {

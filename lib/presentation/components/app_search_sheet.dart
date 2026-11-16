@@ -100,7 +100,6 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
   Timer? _debounce;
   int _request = 0;
   String _query = '';
-  String _text = '';
   bool _loading = false;
   String? _error;
   String? _notice;
@@ -114,7 +113,6 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
 
   void _onChanged(String text) {
     _debounce?.cancel();
-    _text = text.trim();
     final query = text.trim();
     if (query.isEmpty) {
       _request++;

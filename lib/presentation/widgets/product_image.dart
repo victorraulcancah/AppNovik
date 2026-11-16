@@ -64,6 +64,27 @@ class ProductImage extends StatelessWidget {
   }
 }
 
+/// Un recuadro vacío del tamaño de la miniatura, para los productos sin foto: así las listas
+/// quedan alineadas.
+class ProductImagePlaceholder extends StatelessWidget {
+  final double size;
+  final double radius;
+
+  const ProductImagePlaceholder({super.key, this.size = 48, this.radius = 10});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    ),
+  );
+}
+
 /// La imagen grande del detalle: crece y aparece con un fundido, como si saliera de la miniatura
 /// de la lista. (Un `Hero` no sirve aquí: el detalle se abre como modal o panel y no como una
 /// pantalla, y Flutter solo anima héroes entre pantallas.) Con "quitar animaciones" sale directa.

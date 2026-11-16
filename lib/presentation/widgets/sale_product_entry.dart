@@ -59,8 +59,8 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
         final list = sales.priceListId;
         final stock = warehouse == null ? 0.0 : p.stockEn(warehouse);
         return AppSearchItem(
-          // La foto del producto, si tiene.
-          leading: p.imagen == null ? null : ProductImage(path: p.imagen!),
+          // La foto del producto; sin foto, un recuadro vacío para que todo quede alineado.
+          leading: p.imagen == null ? const ProductImagePlaceholder() : ProductImage(path: p.imagen!),
           title: p.name,
           subtitle: [
             p.codigo,
