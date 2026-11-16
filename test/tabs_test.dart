@@ -1,3 +1,4 @@
+import 'package:app_novik/presentation/components/app_modal.dart';
 import 'package:app_novik/presentation/components/app_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,5 +155,45 @@ void main() {
       await tester.tap(find.text('botón dos'));
       expect(taps, 1);
     });
+  });
+
+  testWidgets('al pasar de una pestaña larga (desplazada) a una corta, la corta se ve y no la ventana vacía', (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showAppModal(
+              context,
+              title: 'Editar',
+              primaryLabel: 'Guardar',
+              tabs: [
+                AppTabItem(
+                  label: 'Larga',
+                  child: Column(children: [for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('fila $i'))]),
+                ),
+                AppTabItem(label: 'Corta', child: const Text('contenido corto')),
+              ],
+            ),
+            child: const Text('abrir'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+
+    // Se baja bien abajo en la larga y se pasa a la corta.
+    await tester.drag(find.text('fila 1'), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Corta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('contenido corto').hitTestable(), findsOneWidget);
+    final scroll = tester.state<ScrollableState>(find.byType(Scrollable).last);
+    expect(scroll.position.pixels, 0);
   });
 }

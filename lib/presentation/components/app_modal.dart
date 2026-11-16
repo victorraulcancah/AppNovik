@@ -245,6 +245,8 @@ class _AppModalContent extends StatefulWidget {
 class _AppModalContentState extends State<_AppModalContent> {
   bool _busy = false;
   AppTabsController? _ownTabs;
+  final _scroll = ScrollController();
+  int _lastTab = 0;
 
   AppTabsController? get _tabs {
     if (widget.tabs == null) return null;
@@ -252,7 +254,28 @@ class _AppModalContentState extends State<_AppModalContent> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    final tabs = _tabs;
+    if (tabs != null) {
+      _lastTab = tabs.index;
+      tabs.addListener(_onTabChanged);
+    }
+  }
+
+  /// Al cambiar de pestaña se vuelve arriba: todas miden lo mismo (la más alta), así que, si se venía
+  /// desplazado en una larga, una corta quedaría arriba de lo que se ve y la ventana parecería vacía.
+  void _onTabChanged() {
+    final index = _tabs?.index ?? 0;
+    if (index == _lastTab) return;
+    _lastTab = index;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  @override
   void dispose() {
+    _tabs?.removeListener(_onTabChanged);
+    _scroll.dispose();
     _ownTabs?.dispose();
     super.dispose();
   }
@@ -408,6 +431,7 @@ class _AppModalContentState extends State<_AppModalContent> {
           Flexible(
             fit: widget.fill ? FlexFit.tight : FlexFit.loose,
             child: SingleChildScrollView(
+              controller: _scroll,
               // Al deslizar la lista el teclado baja y deja ver más.
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.all(20),

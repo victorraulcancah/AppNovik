@@ -200,6 +200,33 @@ void main() {
     expect(find.byType(SearchBar), findsOneWidget);
   });
 
+  testWidgets('el botón verde de agrupar va en la fila de las pestañas, junto a Pagos (como en la web)', (tester) async {
+    await _pump(tester, repo, withClient: true);
+
+    final pagos = tester.getRect(find.widgetWithText(ChoiceChip, 'Pagos'));
+    final boton = tester.getRect(find.byTooltip('Agrupar por venta'));
+    expect((boton.center.dy - pagos.center.dy).abs(), lessThan(pagos.height));
+    expect(boton.left, greaterThanOrEqualTo(pagos.right));
+    final material = tester.widget<Material>(
+      find.descendant(of: find.byTooltip('Agrupar por venta'), matching: find.byType(Material)).first,
+    );
+    expect(material.color, const Color(0xFF84CC16)); // verde cuando agrupa
+  });
+
+  testWidgets('desde Pedidos, el botón verde lleva a Estado de Cuenta ya agrupado', (tester) async {
+    await _pump(tester, repo, withClient: true);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Pedidos'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Agrupar por venta'));
+    await tester.pumpAndSettle();
+
+    expect(repo.lastQuery!.agrupado, isTrue);
+    expect(find.text('Una fila por venta'), findsOneWidget);
+    // Agrupado, el botón es naranja y dice "Ver por producto".
+    expect(find.byTooltip('Ver por producto'), findsOneWidget);
+  });
+
   testWidgets('sin movimientos dice "Sin movimientos"', (tester) async {
     repo.main = [];
     await _pump(tester, repo, withClient: true);

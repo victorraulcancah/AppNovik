@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
@@ -277,6 +278,8 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
                     ),
                   ),
                 ),
+              const SizedBox(width: 6),
+              _groupButton(provider),
             ],
           ),
         ),
@@ -285,15 +288,47 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
     );
   }
 
-  /// Buscador de producto y el botón de agrupar (solo en la pestaña principal; el buscador solo en
-  /// la vista por producto, porque la agrupada tiene una fila por venta, sin productos).
-  Widget _mainTools(AccountStatementProvider provider) {
-    final toggle = IconButton.filledTonal(
-      tooltip: provider.agrupado ? 'Ver por producto' : 'Agrupar por venta',
-      isSelected: provider.agrupado,
-      onPressed: () => provider.setAgrupado(!provider.agrupado),
-      icon: Icon(provider.agrupado ? Icons.layers_clear_outlined : Icons.layers_outlined),
+  /// El botón de agrupar de la web, en la fila de las pestañas: verde para agrupar los pedidos por
+  /// venta (una fila por venta) y naranja para volver a verlos por producto. Desde Pedidos o Pagos
+  /// lleva a Estado de Cuenta ya agrupado.
+  Widget _groupButton(AccountStatementProvider provider) {
+    final grouped = provider.agrupado;
+    return Tooltip(
+      message: grouped ? 'Ver por producto' : 'Agrupar por venta',
+      child: Semantics(
+        button: true,
+        label: grouped ? 'Ver por producto' : 'Agrupar por venta',
+        child: Material(
+          color: grouped ? const Color(0xFFF97316) : const Color(0xFF84CC16),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              if (provider.tab != StatementTab.estadoDeCuenta) {
+                provider.selectTab(StatementTab.estadoDeCuenta);
+                provider.setAgrupado(true);
+              } else {
+                provider.setAgrupado(!grouped);
+              }
+            },
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Icon(
+                grouped ? Icons.layers_clear_outlined : Icons.layers_outlined,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  /// Buscador de producto (solo en la pestaña principal y en la vista por producto, porque la
+  /// agrupada tiene una fila por venta, sin productos).
+  Widget _mainTools(AccountStatementProvider provider) {
     if (provider.agrupado) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 16, 0),
@@ -307,7 +342,6 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
                     ),
               ),
             ),
-            toggle,
           ],
         ),
       );
@@ -316,7 +350,6 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
       hint: 'Buscar por código o descripción',
       controller: _searchController,
       onChanged: _onSearchChanged,
-      actions: [const SizedBox(width: 4), toggle],
     );
   }
 

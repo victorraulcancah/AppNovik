@@ -740,6 +740,13 @@ void main() {
       expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Empresas'), matching: find.text('5')), findsOneWidget);
     });
 
+    testWidgets('el monto usado solo sale si hay algo usado: en 0 no dice nada (ni "Crédito")', (tester) async {
+      await _pump(tester, const {'clientes.index'});
+
+      expect(find.text('Crédito'), findsNothing);
+      expect(find.textContaining('Usado S/. 0.00'), findsNothing);
+    });
+
     testWidgets('sin el permiso show-telefono el teléfono no se ve', (tester) async {
       await _pump(tester, const {'clientes.index'});
       expect(find.textContaining('+51987654321'), findsNothing);

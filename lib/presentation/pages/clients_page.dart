@@ -404,7 +404,8 @@ class _ClientsPageState extends State<ClientsPage> {
       title: c.displayName,
       lines: lines,
       trailingTitle: formatMoney(c.credito, symbol: 'S/.'),
-      trailingCaption: c.lineaUtilizada > 0 ? 'Usado ${formatMoney(c.lineaUtilizada, symbol: 'S/.')}' : 'Crédito',
+      // El monto usado; en 0 no dice nada.
+      trailingCaption: c.lineaUtilizada > 0 ? 'Usado ${formatMoney(c.lineaUtilizada, symbol: 'S/.')}' : null,
       trailingCaptionColor: scheme.onSurfaceVariant,
       footer: Wrap(
         spacing: 6,
