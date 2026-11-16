@@ -50,6 +50,7 @@ class SaleRemoteDataSourceImpl implements SaleRemoteDataSource {
           _uri('/productos/search', {'company_id': '$companyId', 'search': search}),
           headers: ApiConstants.authHeaders(token),
         ),
+        retry: true,
       ));
 
   @override

@@ -85,7 +85,17 @@ class _PickerBodyState extends State<_PickerBody> {
     _onChanged(code);
   }
 
-  List<SaleProductEntity> get _visible => _results;
+  /// Los que se pueden agregar primero y, al final, los "Sin stock" / "Todo en la venta" (cada grupo
+  /// conserva el orden del servidor).
+  List<SaleProductEntity> get _visible {
+    bool blocked(SaleProductEntity p) => (widget.sales.disponibleParaAgregar(p) ?? 1) < 1;
+    return [
+      for (final p in _results)
+        if (!blocked(p)) p,
+      for (final p in _results)
+        if (blocked(p)) p,
+    ];
+  }
 
   void _onChanged(String text) {
     _debounce?.cancel();
@@ -305,11 +315,16 @@ class _ProductCardState extends State<_ProductCard> {
               borderRadius: BorderRadius.circular(14),
               onTap: _blocked ? null : () => _select(!checked),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 10, 10),
-                child: Column(
+                padding: const EdgeInsets.fromLTRB(4, 8, 10, 8),
+                // Todas las tarjetas miden lo mismo como mínimo (la altura de una de tres líneas de texto), con
+                // el contenido centrado; solo una de nombre larguísimo crece.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 100),
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Checkbox(
                           value: checked,
@@ -317,7 +332,7 @@ class _ProductCardState extends State<_ProductCard> {
                         ),
                         // La foto del producto (o un recuadro vacío): al tocarla se abre a pantalla completa.
                         Padding(
-                          padding: const EdgeInsets.only(top: 6, right: 10),
+                          padding: const EdgeInsets.only(right: 10),
                           child: _product.imagen == null
                               ? const ProductImagePlaceholder(size: 52)
                               : Semantics(
@@ -335,7 +350,7 @@ class _ProductCardState extends State<_ProductCard> {
                         ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.only(top: 10),
+                            padding: EdgeInsets.zero,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -365,7 +380,7 @@ class _ProductCardState extends State<_ProductCard> {
                         ),
                         const SizedBox(width: 8),
                         Padding(
-                          padding: const EdgeInsets.only(top: 10),
+                          padding: EdgeInsets.zero,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -402,6 +417,7 @@ class _ProductCardState extends State<_ProductCard> {
                       ],
                     ),
                   ],
+                ),
                 ),
               ),
             ),

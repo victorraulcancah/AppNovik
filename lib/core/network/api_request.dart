@@ -12,8 +12,16 @@ import 'connection_monitor.dart';
 ///
 /// [timeout] reemplaza el tiempo de espera de siempre en las peticiones que tardan más (por
 /// ejemplo, emitir un documento ante la SUNAT).
-Future<dynamic> sendApiRequest(Future<http.Response> Function() request, {Duration? timeout}) async {
-  final response = await _send(request, timeout: timeout);
+///
+/// Con [retry], si la conexión se corta antes de que llegue la respuesta ("Connection closed before
+/// full header was received", común en el celular), se repite UNA vez. Solo para consultas (GET):
+/// nunca para crear algo, porque podría duplicarse.
+Future<dynamic> sendApiRequest(
+  Future<http.Response> Function() request, {
+  Duration? timeout,
+  bool retry = false,
+}) async {
+  final response = await _send(request, timeout: timeout, retry: retry);
   try {
     return json.decode(response.body);
   } on FormatException catch (e) {
@@ -27,9 +35,23 @@ Future<Uint8List> sendApiBytes(Future<http.Response> Function() request) async {
   return response.bodyBytes;
 }
 
-Future<http.Response> _send(Future<http.Response> Function() request, {Duration? timeout}) async {
+bool _connectionDropped(Object e) =>
+    e is http.ClientException && (e.message.contains('Connection closed') || e.message.contains('Connection reset'));
+
+Future<http.Response> _send(
+  Future<http.Response> Function() request, {
+  Duration? timeout,
+  bool retry = false,
+}) async {
   try {
-    final response = await request().timeout(timeout ?? ApiConstants.connectionTimeout);
+    http.Response response;
+    try {
+      response = await request().timeout(timeout ?? ApiConstants.connectionTimeout);
+    } catch (e) {
+      if (!retry || !_connectionDropped(e)) rethrow;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      response = await request().timeout(timeout ?? ApiConstants.connectionTimeout);
+    }
     // Hubo respuesta (buena o mala): el servidor es alcanzable.
     ConnectionMonitor.reachedServer();
 
@@ -54,6 +76,12 @@ Future<http.Response> _send(Future<http.Response> Function() request, {Duration?
   } on TimeoutException {
     ConnectionMonitor.lostConnection();
     throw const NetworkException('Tiempo de espera agotado');
+  } on http.ClientException catch (e) {
+    if (_connectionDropped(e)) {
+      ConnectionMonitor.lostConnection();
+      throw const NetworkException('Se cortó la conexión con el servidor. Intenta de nuevo.');
+    }
+    throw ServerException('Error de conexión: $e');
   } catch (e) {
     throw ServerException('Error de conexión: $e');
   }

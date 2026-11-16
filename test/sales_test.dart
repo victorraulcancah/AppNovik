@@ -1256,10 +1256,48 @@ void main() {
       expect(find.text('CABLE 12GA'), findsWidgets);
       expect(find.byTooltip('Compartir imagen'), findsOneWidget);
 
+      // Fondo blanco (las fotos se suben así) y el nombre abajo, no encima de la foto.
+      final scaffold = tester.widget<Scaffold>(find.descendant(of: find.byType(ProductImageViewer), matching: find.byType(Scaffold)));
+      expect(scaffold.backgroundColor, Colors.white);
+      final screen = tester.getSize(find.byType(ProductImageViewer));
+      final name = tester.getTopLeft(find.descendant(of: find.byType(ProductImageViewer), matching: find.text('CABLE 12GA')));
+      expect(name.dy, greaterThan(screen.height * 0.7));
+      final cerrar = tester.getTopLeft(find.byTooltip('Cerrar'));
+      expect(cerrar.dy, lessThan(screen.height * 0.2));
+
       await tester.tap(find.byTooltip('Cerrar'));
       await tester.pumpAndSettle();
       expect(find.byType(ProductImageViewer), findsNothing);
       expect(find.text('0 seleccionados'), findsOneWidget);
+    });
+
+    testWidgets('todas las tarjetas miden lo mismo, tengan el nombre corto o largo', (tester) async {
+      final corto = _product(id: 300, name: 'RCA', codigo: 'R-1');
+      final largo = _product(id: 301, name: 'AMPLIFICADOR DIGITAL MONORAL 1CH * 1500 RMS 4500WATTS', codigo: 'A-1');
+      await open(tester, products: [corto, largo, audio]);
+
+      final cards = find.descendant(of: find.byType(BottomSheet), matching: find.byType(Material));
+      final heights = <double>{};
+      for (final name in ['RCA', 'SUBWOOFER 12"']) {
+        final card = find.ancestor(of: find.text(name), matching: find.byType(InkWell)).first;
+        heights.add(tester.getSize(card).height);
+      }
+      expect(cards, findsWidgets);
+      // El de nombre corto y el de uno normal miden lo mismo (el mínimo común).
+      expect(heights.length, 1);
+      expect(heights.single, greaterThanOrEqualTo(100));
+    });
+
+    testWidgets('los "Sin stock" van al final de la lista', (tester) async {
+      // El servidor los trae primero; en la pantalla quedan abajo, cada grupo en su orden.
+      await open(tester, products: [agotado, audio, accesorio]);
+
+      final y = {
+        for (final name in ['RADIO DEH', 'SUBWOOFER 12"', 'CABLE RCA'])
+          name: tester.getTopLeft(find.text(name)).dy,
+      };
+      expect(y['SUBWOOFER 12"']!, lessThan(y['CABLE RCA']!));
+      expect(y['CABLE RCA']!, lessThan(y['RADIO DEH']!));
     });
 
     testWidgets('el nombre sale completo y la ventana no cambia de alto al buscar', (tester) async {
@@ -3622,7 +3660,7 @@ void main() {
         expect(inCard(find.text('SUB-12')), findsOneWidget);
         expect(inCard(find.text('SUBWOOFER 12"')), findsOneWidget);
         // El precio unitario y, a su lado, la marca.
-        expect(find.textContaining('P. Unit.: S/ 40.00  ·  PIONEER'), findsOneWidget);
+        expect(find.textContaining('S/ 40.00 / Unidad  ·  PIONEER'), findsOneWidget);
         expect(tester.widget<TextField>(inCard(find.byType(TextField)).first).controller!.text, '2');
         expect(inCard(find.text('S/ 80.00')), findsOneWidget);
         expect(inCard(find.byTooltip('Precio y descuento')), findsOneWidget);
@@ -3811,15 +3849,15 @@ void main() {
         expect(find.textContaining('(lista'), findsNothing);
 
         // Tocar el precio unitario abre el panel donde se cambia.
-        await tester.ensureVisible(find.textContaining('P. Unit.'));
-        await tester.tap(find.textContaining('P. Unit.'));
+        await tester.ensureVisible(find.textContaining('/ Unidad'));
+        await tester.tap(find.textContaining('/ Unidad'));
         await tester.pumpAndSettle();
         await tester.ensureVisible(inCard(_field('Precio S/')));
         await tester.enterText(inCard(_field('Precio S/')), '35');
         await tester.pumpAndSettle();
 
         expect(sales.lines.single.precio, 35);
-        expect(find.textContaining('P. Unit.: S/ 35.00  (lista S/ 40.00)'), findsOneWidget);
+        expect(find.textContaining('S/ 35.00 / Unidad  (lista S/ 40.00)'), findsOneWidget);
         expect(inCard(find.text('S/ 35.00')), findsOneWidget);
       });
 

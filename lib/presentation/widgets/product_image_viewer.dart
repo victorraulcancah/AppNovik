@@ -12,7 +12,7 @@ Future<void> openProductImage(BuildContext context, {required String path, Strin
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
       opaque: false,
-      barrierColor: Colors.black,
+      barrierColor: Colors.white,
       barrierDismissible: true,
       transitionDuration: const Duration(milliseconds: 220),
       reverseTransitionDuration: const Duration(milliseconds: 160),
@@ -64,8 +64,11 @@ class _ProductImageViewerState extends State<ProductImageViewer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    // Las fotos de los productos se suben con fondo blanco: el visor también es blanco, así la foto
+    // se funde con el fondo en lugar de quedar en un recuadro.
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -73,65 +76,76 @@ class _ProductImageViewerState extends State<ProductImageViewer> {
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).pop(),
             child: SafeArea(
-              child: InteractiveViewer(
-                minScale: 1,
-                maxScale: 5,
-                child: Center(
-                  child: Image.network(
-                    ProductImage.urlOf(widget.path),
-                    headers: _headers,
-                    fit: BoxFit.contain,
-                    loadingBuilder: (context, child, progress) => progress == null
-                        ? child
-                        : const Center(child: CircularProgressIndicator(color: Colors.white)),
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.image_not_supported_outlined,
-                      color: Colors.white54,
-                      size: 64,
+              child: Padding(
+                // Deja libre arriba (botones) y abajo (nombre) para que no se encimen con la foto.
+                padding: const EdgeInsets.only(top: 56, bottom: 96),
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 5,
+                  child: Center(
+                    child: Image.network(
+                      ProductImage.urlOf(widget.path),
+                      headers: _headers,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null ? child : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, _, _) => Icon(
+                        Icons.image_not_supported_outlined,
+                        color: scheme.outline,
+                        size: 64,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Cerrar',
-                    color: Colors.white,
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  if (widget.title != null)
-                    Expanded(
-                      child: Text(
-                        widget.title!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(color: Colors.white),
-                      ),
-                    )
-                  else
+          // Arriba: cerrar y compartir.
+          Align(
+            alignment: Alignment.topCenter,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Cerrar',
+                      color: Colors.black87,
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                     const Spacer(),
-                  IconButton(
-                    tooltip: 'Compartir imagen',
-                    color: Colors.white,
-                    icon: _sharing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.share_outlined),
-                    onPressed: _sharing ? null : _share,
-                  ),
-                ],
+                    IconButton(
+                      tooltip: 'Compartir imagen',
+                      color: Colors.black87,
+                      icon: _sharing
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.share_outlined),
+                      onPressed: _sharing ? null : _share,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+          // Abajo: el nombre del producto, completo.
+          if (widget.title != null)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Text(
+                    widget.title!,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

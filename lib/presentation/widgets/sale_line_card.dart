@@ -281,7 +281,7 @@ class _SaleLineCardState extends State<SaleLineCard> {
                   child: Text.rich(
                     TextSpan(
                       children: [
-                        TextSpan(text: 'P. Unit.: ${_money(line.precio)}'),
+                        TextSpan(text: '${_money(line.precio)} / ${(line.product.unidad ?? '').trim().isEmpty ? 'Unidad' : line.product.unidad}'),
                         if (edited)
                           TextSpan(
                             text: '  (lista ${_money(widget.listPrice!)})',
