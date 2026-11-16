@@ -384,16 +384,17 @@ class _DocumentsPageState extends State<DocumentsPage> {
       selected: _pane.selectedId == d.id,
       onTap: () => _showDetail(d),
       actions: [
-        AppActionButton(
-          type: AppActionType.view,
-          onPressed: () => _showDetail(d),
-        ),
+        // Primero culminar/editar (lo que más se hace) y luego ver el detalle.
         if (_canContinueQuote(d))
           AppActionButton(
             type: AppActionType.edit,
             label: 'Culminar venta o editar cotización',
             onPressed: () => _continueQuote(d),
           ),
+        AppActionButton(
+          type: AppActionType.view,
+          onPressed: () => _showDetail(d),
+        ),
         AppActionButton(
           type: AppActionType.pdf,
           label: 'Ver comprobante PDF',

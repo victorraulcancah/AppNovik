@@ -17,11 +17,15 @@ class AppSearchItem {
   /// Cantidad ya elegida de este elemento; se muestra como una insignia.
   final int selectedCount;
 
+  /// Un widget a la izquierda (por ejemplo la foto de un producto).
+  final Widget? leading;
+
   const AppSearchItem({
     required this.title,
     this.subtitle,
     this.trailing,
     this.selectedCount = 0,
+    this.leading,
   });
 }
 
@@ -219,21 +223,18 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         child: Row(
           children: [
+            if (view.leading != null) ...[view.leading!, const SizedBox(width: 12)],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     view.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   if (view.subtitle != null)
                     Text(
                       view.subtitle!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),

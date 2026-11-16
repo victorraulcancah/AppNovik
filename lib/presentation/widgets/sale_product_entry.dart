@@ -5,6 +5,7 @@ import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/sales_provider.dart';
+import 'product_image.dart';
 import 'sale_free_item.dart';
 import 'sale_product_picker.dart';
 
@@ -58,6 +59,8 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
         final list = sales.priceListId;
         final stock = warehouse == null ? 0.0 : p.stockEn(warehouse);
         return AppSearchItem(
+          // La foto del producto, si tiene.
+          leading: p.imagen == null ? null : ProductImage(path: p.imagen!),
           title: p.name,
           subtitle: [
             p.codigo,
