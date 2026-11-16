@@ -2,6 +2,7 @@ import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/report_entity.dart';
+import '../../domain/entities/report_ranking_entity.dart';
 import '../../domain/repositories/report_repository.dart';
 import '../datasources/auth_local_datasource.dart';
 import '../datasources/report_remote_datasource.dart';
@@ -34,6 +35,27 @@ class ReportRepositoryImpl with TokenGuard implements ReportRepository {
           pageSize: pageSize,
           sortField: sortField,
           sortDescending: sortDescending,
+        ),
+      );
+
+  @override
+  Future<Either<Failure, RankingReport>> getRanking({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    int page = 1,
+    int pageSize = 100,
+    String? search,
+  }) =>
+      withToken(
+        (token) => remoteDataSource.getRanking(
+          token: token,
+          kind: kind,
+          filters: filters,
+          companyId: companyId,
+          page: page,
+          pageSize: pageSize,
+          search: search,
         ),
       );
 

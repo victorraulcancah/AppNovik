@@ -4,11 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/report_entity.dart';
+import '../../domain/entities/report_ranking_entity.dart';
 import '../components/components.dart';
-import '../providers/auth_provider.dart';
 import '../providers/reports_provider.dart';
 import '../utils/download_file.dart';
 import '../widgets/report_filters.dart';
+import '../widgets/report_rankings.dart';
 import 'receipt_page.dart';
 
 const _limeColor = Color(0xFF84CC16);
@@ -42,10 +43,8 @@ class _ReportsPageState extends State<ReportsPage> {
     });
   }
 
-  bool get _canView {
-    final session = context.read<AuthProvider>().session;
-    return (session?.can('reportes.index') ?? false) && (session?.can('reportes.ventas.index') ?? false);
-  }
+  /// Se puede entrar si el usuario tiene alguno de los reportes (Venta general o uno por entidad).
+  bool get _canView => context.read<ReportsProvider>().availableKinds.isNotEmpty;
 
   void _snack(String message) {
     ScaffoldMessenger.of(context)
@@ -117,11 +116,11 @@ class _ReportsPageState extends State<ReportsPage> {
 
     return Column(
       children: [
-        const AppPageHeader(
+        AppPageHeader(
           icon: Icons.bar_chart_outlined,
           title: 'Reportes',
-          subtitle: 'Ventas General',
-          trailing: AppAccountMenu(),
+          subtitle: reports.kind.subtitle,
+          trailing: const AppAccountMenu(),
         ),
         if (canView) _toolbar(reports),
         if (canView && reports.loading && reports.report != null)
@@ -133,8 +132,13 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _toolbar(ReportsProvider reports) {
     final scheme = Theme.of(context).colorScheme;
+    final kinds = reports.availableKinds;
+    final general = reports.kind == ReportKind.general;
     return Column(
       children: [
+        // Con más de un reporte disponible, el selector: Venta general, Departamentos, Vendedor...
+        if (kinds.length > 1)
+          ReportKindSelector(kinds: kinds, selected: reports.kind, onSelect: reports.selectKind),
         SizedBox(
           height: 56,
           child: ListView.separated(
@@ -164,15 +168,18 @@ class _ReportsPageState extends State<ReportsPage> {
           padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
           child: Row(
             children: [
+              // La comparación con el año anterior y el Excel son de Venta general.
               Expanded(
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: reports.compare,
-                  onChanged: (v) => reports.setCompare(v ?? false),
-                  title: const Text('Comparar año anterior'),
-                ),
+                child: general
+                    ? CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: reports.compare,
+                        onChanged: (v) => reports.setCompare(v ?? false),
+                        title: const Text('Comparar año anterior'),
+                      )
+                    : const SizedBox(height: 48),
               ),
               IconButton(
                 tooltip: 'Filtros avanzados',
@@ -183,11 +190,12 @@ class _ReportsPageState extends State<ReportsPage> {
                   child: Icon(Icons.filter_list, color: scheme.primary),
                 ),
               ),
-              IconButton(
-                tooltip: 'Descargar Excel',
-                onPressed: reports.exporting ? null : _export,
-                icon: Icon(Icons.download_outlined, color: scheme.primary),
-              ),
+              if (general)
+                IconButton(
+                  tooltip: 'Descargar Excel',
+                  onPressed: reports.exporting ? null : _export,
+                  icon: Icon(Icons.download_outlined, color: scheme.primary),
+                ),
             ],
           ),
         ),
@@ -207,6 +215,7 @@ class _ReportsPageState extends State<ReportsPage> {
         message: 'No tienes permiso para ver este reporte.',
       );
     }
+    if (reports.kind.isRanking) return _ranking(reports, reports.kind);
     final report = reports.report;
     if (report == null) {
       if (reports.error != null) {
@@ -221,8 +230,10 @@ class _ReportsPageState extends State<ReportsPage> {
     }
 
     final products = report.products;
-    // Cifras, gráfica y encabezado de productos, luego cada producto y el cargando.
-    const lead = 3;
+    // Cifras, gráfica, tarjetas de los reportes por entidad (si hay) y encabezado de productos, luego
+    // cada producto y el cargando.
+    final dashboard = reports.dashboardKinds.isNotEmpty;
+    final lead = dashboard ? 4 : 3;
     final count = lead + (products.isEmpty ? 1 : products.length) + (reports.loadingMore ? 1 : 0);
 
     return RefreshIndicator(
@@ -242,7 +253,9 @@ class _ReportsPageState extends State<ReportsPage> {
               child = _cards(reports, report);
             } else if (i == 1) {
               child = _chart(reports, report);
-            } else if (i == 2) {
+            } else if (dashboard && i == 2) {
+              child = _dashboard(reports);
+            } else if (i == lead - 1) {
               child = _productsHeader(reports, report);
             } else if (products.isEmpty) {
               child = const AppEmptyState(
@@ -268,6 +281,45 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// Las tarjetas "Ventas por departamentos / vendedores / marcas / categorías / clientes": el top 3
+  /// de cada reporte, y al tocarlas se abre la lista completa.
+  Widget _dashboard(ReportsProvider reports) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final kind in reports.dashboardKinds) ...[
+          RankingSummaryCard(
+            kind: kind,
+            state: reports.ranking(kind),
+            showAmounts: !reports.ocultarImportes,
+            onOpen: () => reports.selectKind(kind),
+            onRetry: () => reports.retryRanking(kind),
+          ),
+          if (kind != reports.dashboardKinds.last) const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  /// La lista completa de un reporte por entidad.
+  Widget _ranking(ReportsProvider reports, ReportKind kind) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: RankingView(
+          key: ValueKey('ranking-${kind.name}'),
+          kind: kind,
+          state: reports.ranking(kind),
+          showAmounts: !reports.ocultarImportes,
+          onSearch: (text) => reports.setRankingSearch(kind, text),
+          onRefresh: reports.refresh,
+          onRetry: () => reports.retryRanking(kind),
+          onLoadMore: () => reports.loadMoreRanking(kind),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'package:app_novik/data/models/report_model.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/report_entity.dart';
+import 'package:app_novik/domain/entities/report_ranking_entity.dart';
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
 import 'package:app_novik/domain/entities/session_context_entity.dart';
 import 'package:app_novik/domain/entities/user_entity.dart';
@@ -146,6 +147,16 @@ class _FakeRepo implements ReportRepository {
     if (build != null) return Either.right(build!(filters, page));
     return Either.right(salesReportFromJson(_json()));
   }
+
+  @override
+  Future<Either<Failure, RankingReport>> getRanking({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    int page = 1,
+    int pageSize = 100,
+    String? search,
+  }) async => Either.right(const RankingReport());
 
   @override
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) async {

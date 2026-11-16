@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/report_entity.dart';
+import '../../domain/entities/report_ranking_entity.dart';
 import '../../domain/entities/session_context_entity.dart';
 import '../../domain/usecases/report_usecases.dart';
 
@@ -32,15 +35,64 @@ enum ReportSort {
   const ReportSort(this.label);
 }
 
+/// Estado de un reporte por entidad (departamentos, vendedores, marcas, categorías o clientes): las
+/// filas pedidas hasta ahora, el total del rango (de él sale el %) y la búsqueda.
+class RankingState {
+  List<RankingRow> rows = [];
+  double total = 0;
+  int totalRows = 0;
+  bool hasMore = false;
+  int page = 1;
+  bool loading = true;
+  bool loadingMore = false;
+  String? error;
+
+  /// Lo que se escribió en el buscador.
+  String query = '';
+
+  /// Resultado de buscar en el servidor (solo Clientes, cuando no caben todos en una página).
+  List<RankingRow>? serverRows;
+  bool searching = false;
+
+  bool get loaded => !loading && error == null;
+
+  /// Lo que representa [row] del total, de 0 a 100.
+  double share(RankingRow row) => total > 0 ? row.venta / total * 100 : 0;
+
+  static String _fold(String text) {
+    const from = 'áàäâéèëêíìïîóòöôúùüûñ';
+    const to = 'aaaaeeeeiiiioooouuuun';
+    final out = StringBuffer();
+    for (final ch in text.toLowerCase().trim().split('')) {
+      final i = from.indexOf(ch);
+      out.write(i >= 0 ? to[i] : ch);
+    }
+    return out.toString();
+  }
+
+  /// Las filas que se ven: todas, o las que coinciden con la búsqueda por nombre.
+  List<RankingRow> get visible {
+    final q = _fold(query);
+    if (q.isEmpty) return rows;
+    final server = serverRows;
+    if (server != null) return server;
+    return [for (final r in rows) if (_fold(r.name).contains(q)) r];
+  }
+}
+
 /// Estado del reporte Ventas General: el rango y los filtros, las cifras, la gráfica, los
 /// productos (paginados) y, si se pide, lo mismo del año anterior para compararlo.
 class ReportsProvider extends ChangeNotifier {
   static const pageSize = 15;
 
+  /// Filas que se piden de una vez en los reportes por entidad (el máximo del servidor).
+  static const rankingPageSize = 100;
+
   final GetSalesReportUseCase _getReport;
   final ExportSalesReportUseCase _export;
   final GetReportCatalogsUseCase _getCatalogs;
   final GetReportSaleUseCase _getSale;
+  final GetRankingReportUseCase? _getRanking;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -53,12 +105,14 @@ class ReportsProvider extends ChangeNotifier {
     required ExportSalesReportUseCase exportSalesReportUseCase,
     required GetReportCatalogsUseCase getCatalogsUseCase,
     required GetReportSaleUseCase getSaleUseCase,
+    GetRankingReportUseCase? getRankingUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   }) : _getReport = getSalesReportUseCase,
        _export = exportSalesReportUseCase,
        _getCatalogs = getCatalogsUseCase,
        _getSale = getSaleUseCase,
+       _getRanking = getRankingUseCase,
        _onSessionExpired = onSessionExpired,
        _now = now ?? DateTime.now;
 
@@ -100,6 +154,11 @@ class ReportsProvider extends ChangeNotifier {
 
   bool exporting = false;
 
+  /// El reporte que se está viendo.
+  ReportKind kind = ReportKind.general;
+  final Map<ReportKind, RankingState> _rankings = {};
+  Timer? _searchTimer;
+
   bool _hasRole(String role) => _roles.contains(role.toLowerCase());
 
   /// El Jefe de Almacén ve movimiento (qué salió y cuánto), no importes ni margen.
@@ -118,6 +177,19 @@ class ReportsProvider extends ChangeNotifier {
       !_permissions.contains('reportes.ventas.ver-otros-vendedores');
 
   DateTime get now => _now();
+
+  /// ¿Puede el usuario abrir este reporte? Mismos permisos que las pestañas de la web.
+  bool canSee(ReportKind value) =>
+      _permissions.contains('reportes.index') && _permissions.contains(value.permission);
+
+  /// Los reportes que el usuario puede abrir, en el orden del selector.
+  List<ReportKind> get availableKinds => [for (final k in ReportKind.values) if (canSee(k)) k];
+
+  /// Los reportes por entidad que salen como tarjeta en Venta general.
+  List<ReportKind> get dashboardKinds => [for (final k in availableKinds) if (k.isRanking) k];
+
+  /// El estado de un reporte por entidad; `null` mientras no se pide.
+  RankingState? ranking(ReportKind value) => _rankings[value];
 
   /// Primer y último día del rango elegido.
   DateTimeRange get dates {
@@ -187,6 +259,9 @@ class ReportsProvider extends ChangeNotifier {
     sort = ReportSort.venta;
     sortDescending = true;
     compare = false;
+    kind = ReportKind.general;
+    _rankings.clear();
+    _searchTimer?.cancel();
     report = null;
     previous = null;
     loading = false;
@@ -200,6 +275,8 @@ class ReportsProvider extends ChangeNotifier {
 
   Future<void> ensureLoaded() async {
     if (_companyId == null || _loadedOnce || loading) return;
+    // Sin Venta general (solo reportes por entidad), se abre en el primero que tenga.
+    if (!canSee(kind) && availableKinds.isNotEmpty) kind = availableKinds.first;
     await refresh();
   }
 
@@ -260,7 +337,18 @@ class ReportsProvider extends ChangeNotifier {
     loading = true;
     loadingMore = false;
     error = null;
+    // Otro rango u otros filtros: los reportes por entidad se piden de nuevo.
+    _rankings.clear();
+    _searchTimer?.cancel();
     notifyListeners();
+    if (kind.isRanking) unawaited(_loadRanking(kind, request));
+    if (!canSee(ReportKind.general)) {
+      // Sin permiso de Venta general no se pide su reporte: solo los de entidad.
+      loading = false;
+      _loadedOnce = true;
+      notifyListeners();
+      return;
+    }
 
     final result = await _getReport(
       filters: filters,
@@ -288,6 +376,161 @@ class ReportsProvider extends ChangeNotifier {
     notifyListeners();
 
     if (compare && report != null) await _loadPrevious(request: request);
+    // Las tarjetas de Venta general (top 3 de cada reporte) se piden una tras otra, sin apurar al servidor.
+    if (!kind.isRanking && request == _request) unawaited(ensureDashboard());
+  }
+
+  // ── Reportes por entidad ────────────────────────────────────────────────────────────────
+
+  /// Cambia de reporte. Los de entidad se piden la primera vez que se abren.
+  Future<void> selectKind(ReportKind value) async {
+    if (value == kind || !canSee(value)) return;
+    kind = value;
+    notifyListeners();
+    if (value.isRanking) {
+      await ensureRanking(value);
+    } else {
+      await ensureDashboard();
+    }
+  }
+
+  Future<void> ensureRanking(ReportKind value) async {
+    if (_rankings[value] != null || _companyId == null || !canSee(value)) return;
+    await _loadRanking(value, _request);
+  }
+
+  /// Pide, de a uno, los reportes que salen como tarjeta en Venta general.
+  Future<void> ensureDashboard() async {
+    final request = _request;
+    for (final k in dashboardKinds) {
+      if (request != _request || kind != ReportKind.general) return;
+      if (_rankings[k] == null) await _loadRanking(k, request);
+    }
+  }
+
+  Future<void> _loadRanking(ReportKind value, int request) async {
+    final load = _getRanking;
+    final companyId = _companyId;
+    if (load == null || companyId == null) return;
+
+    final state = RankingState();
+    _rankings[value] = state;
+    notifyListeners();
+
+    final result = await load(
+      kind: value,
+      filters: filters,
+      companyId: companyId,
+      page: 1,
+      pageSize: rankingPageSize,
+    );
+    // Llegó tarde: cambió el rango, los filtros o la empresa.
+    if (request != _request || _rankings[value] != state) return;
+
+    state.loading = false;
+    result.fold(
+      (failure) {
+        state.error = failure.message;
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (data) {
+        state.rows = data.rows;
+        state.total = data.total;
+        state.totalRows = data.totalRows;
+        state.hasMore = data.hasMore;
+      },
+    );
+    notifyListeners();
+  }
+
+  /// Vuelve a pedir un reporte por entidad que falló.
+  Future<void> retryRanking(ReportKind value) {
+    _rankings.remove(value);
+    return _loadRanking(value, _request);
+  }
+
+  /// La página siguiente de un reporte por entidad (si hay más de 100 filas).
+  Future<void> loadMoreRanking(ReportKind value) async {
+    final state = _rankings[value];
+    final load = _getRanking;
+    final companyId = _companyId;
+    if (state == null || load == null || companyId == null) return;
+    if (!state.hasMore || state.loading || state.loadingMore || state.query.isNotEmpty) return;
+
+    final request = _request;
+    state.loadingMore = true;
+    notifyListeners();
+    final result = await load(
+      kind: value,
+      filters: filters,
+      companyId: companyId,
+      page: state.page + 1,
+      pageSize: rankingPageSize,
+    );
+    if (request != _request || _rankings[value] != state) return;
+
+    state.loadingMore = false;
+    result.fold(
+      (failure) {
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (data) {
+        state.page += 1;
+        state.rows = [...state.rows, ...data.rows];
+        state.hasMore = data.hasMore;
+      },
+    );
+    notifyListeners();
+  }
+
+  /// El buscador por nombre. Filtra lo que ya se pidió; en Clientes, si faltan páginas, busca
+  /// también en el servidor. El % siempre es sobre el total del rango, no sobre lo buscado.
+  void setRankingSearch(ReportKind value, String text) {
+    final state = _rankings[value];
+    if (state == null) return;
+    final query = text.trim();
+    state.query = query;
+    state.serverRows = null;
+    state.searching = false;
+    _searchTimer?.cancel();
+    notifyListeners();
+    if (query.isEmpty || value != ReportKind.clientes || !state.hasMore) return;
+    _searchTimer = Timer(const Duration(milliseconds: 450), () => _serverSearch(value, query));
+  }
+
+  Future<void> _serverSearch(ReportKind value, String query) async {
+    final state = _rankings[value];
+    final load = _getRanking;
+    final companyId = _companyId;
+    if (state == null || load == null || companyId == null || state.query != query) return;
+
+    final request = _request;
+    state.searching = true;
+    notifyListeners();
+    final result = await load(
+      kind: value,
+      filters: filters,
+      companyId: companyId,
+      page: 1,
+      pageSize: rankingPageSize,
+      search: query,
+    );
+    if (request != _request || _rankings[value] != state || state.query != query) return;
+
+    state.searching = false;
+    result.fold(
+      (failure) {
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (data) => state.serverRows = data.rows,
+    );
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPrevious({int? request}) async {

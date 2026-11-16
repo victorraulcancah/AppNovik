@@ -2,6 +2,7 @@ import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../entities/document_entity.dart';
 import '../entities/report_entity.dart';
+import '../entities/report_ranking_entity.dart';
 
 abstract class ReportRepository {
   /// El reporte Ventas General. [page] y [pageSize] paginan los productos; [sortField]
@@ -12,6 +13,17 @@ abstract class ReportRepository {
     int pageSize = 15,
     String? sortField,
     bool sortDescending = true,
+  });
+
+  /// Un ranking (departamentos, vendedores, marcas, categorías o clientes) del rango y los filtros,
+  /// de mayor a menor venta. [search] solo lo usa Clientes (búsqueda en el servidor).
+  Future<Either<Failure, RankingReport>> getRanking({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    int page = 1,
+    int pageSize = 100,
+    String? search,
   });
 
   /// Excel del reporte con los mismos filtros.

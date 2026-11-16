@@ -2,6 +2,7 @@ import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../entities/document_entity.dart';
 import '../entities/report_entity.dart';
+import '../entities/report_ranking_entity.dart';
 import '../repositories/report_repository.dart';
 
 class GetSalesReportUseCase {
@@ -26,6 +27,34 @@ class GetSalesReportUseCase {
       pageSize: pageSize,
       sortField: sortField,
       sortDescending: sortDescending,
+    );
+  }
+}
+
+class GetRankingReportUseCase {
+  final ReportRepository repository;
+  GetRankingReportUseCase({required this.repository});
+
+  Future<Either<Failure, RankingReport>> call({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    int page = 1,
+    int pageSize = 100,
+    String? search,
+  }) {
+    if (filters.desde.isAfter(filters.hasta)) {
+      return Future.value(
+        Either.left(const ValidationFailure('La fecha inicial no puede ser posterior a la final')),
+      );
+    }
+    return repository.getRanking(
+      kind: kind,
+      filters: filters,
+      companyId: companyId,
+      page: page,
+      pageSize: pageSize,
+      search: search,
     );
   }
 }

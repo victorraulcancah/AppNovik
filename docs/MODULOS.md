@@ -164,7 +164,7 @@ Replicado de `novik.test/documentos` (ventas y cotizaciones), sin probar contra 
 
 ### Estado de Reportes
 
-Reportes es el reporte **Ventas General** de la web (pestaña con permiso `reportes.ventas.index`, dentro de `reportes.index`):
+Reportes tiene **Venta general** (la pestaña Ventas General de la web, permiso `reportes.ventas.index`, dentro de `reportes.index`) y, desde el 2026-11-16, los reportes por **Departamentos, Vendedor, Marcas, Categoría y Cliente** (ver "Reportes por entidad" abajo):
 
 - **Fechas**: los mismos atajos de la web (Última semana, Esta semana, Último mes, **Este mes** por defecto, Último año, Este año) o fechas a elección.
 - **Cifras** (`GET /ventas/reporte`): Venta Total, Unidades Vendidas, N° de Ventas, Ticket Promedio y Margen (bruto o neto; sale oculto con `S/. ****` hasta tocar el ojo, igual que en la web; el neto descuenta el IGV y la renta de la empresa).
@@ -173,8 +173,21 @@ Reportes es el reporte **Ventas General** de la web (pestaña con permiso `repor
 - **Productos y servicios** vendidos en el rango (se cargan de a 15 al bajar), ordenables por venta total, cantidad, subtotal o descuento. **Ver documentos** lista las ventas que incluyen ese producto y abre su comprobante (`GET /ventas/{id}`).
 - **Filtros avanzados**: fechas, sucursales, clientes, vendedores, marcas, categoría y departamentos (mismos parámetros que la web). **Descargar Excel** (`POST /ventas/export/reporte`) con los filtros puestos.
 - **Por rol**, como en la web: el Jefe de Almacén no ve importes ni margen (solo unidades); el Vendedor ve importes pero no el margen, y sin el permiso `reportes.ventas.ver-otros-vendedores` solo se ve a sí mismo en el filtro de vendedores; solo el CEO ve el margen en todo caso.
-- **Alcance**: Reportes en la app es **solo esta pestaña (Ventas General)**; el usuario pidió que no se agreguen las demás pestañas de la web.
+- **Alcance**: el 2026-10-31 el usuario pidió que no se agregaran las demás pestañas de la web; el 2026-11-16, tras ver una app de la competencia, pidió **solo estos**: Venta general, Departamentos, Vendedor, Marcas, Categoría y Cliente, en formato rápido (sin tablas largas) y **con el % en vez de las unidades**. No van: Productos, Sucursales, Tracking, caída de clientes, etc.
 - Antes la app mostraba un "Resumen ejecutivo" que no es un reporte de la web (es del Dashboard); se quitó.
+
+#### Reportes por entidad (Departamentos, Vendedor, Marcas, Categoría, Cliente)
+
+Una sola pantalla de Reportes: arriba un **selector de reporte** (fichas que se deslizan: Venta general · Departamentos · Vendedor · Marcas · Categoría · Cliente; solo salen las que el usuario puede abrir, y con una sola no hay selector) y debajo el rango de fechas y los filtros de siempre, que valen para todos los reportes.
+
+- **Tarjetas en Venta general** (bajo la gráfica, antes de los productos): "Ventas por departamentos / vendedores / marcas / categorías / clientes" con el **top 3** (posición, nombre completo, monto a la derecha, barra proporcional al primero y su **% del total**) y una flecha; tocar la tarjeta abre la lista completa. Las tarjetas se piden una tras otra al cargar Venta general (cada reporte carga todo el servicio en memoria, así que no se piden a la vez) y se piden de nuevo al cambiar el rango o los filtros.
+- **Lista completa**: título ("Ventas por marcas"), "Total S/. X · N marcas", buscador por nombre y, de mayor a menor, una tarjeta por fila con nombre, monto, **% del total** y una barra fina. **Nunca muestra unidades** (a pedido). El % siempre es sobre el total del rango, aunque se busque. Reutiliza lo ya pedido por las tarjetas (no vuelve a llamar). Se piden 100 filas de una vez (el máximo del servidor); con más, se pide la página siguiente al bajar.
+- **Buscador**: filtra por nombre (sin importar mayúsculas ni tildes) lo ya pedido. Solo en **Cliente**, si faltan páginas, busca también en el servidor (`cliente_search`, con una pausa de 450 ms). Los demás reportes no tienen búsqueda en el servidor que sirva (categorías la ignora, vendedores no la tiene) y rara vez pasan de 100 filas.
+- **Sin importes** (Jefe de Almacén): no se ve ningún monto, solo el %.
+- **Fuera de estos reportes**: no ofrecen "Comparar año anterior" ni "Descargar Excel" (son de Venta general).
+- **Endpoints** (todos `GET`, paginados con `page` y `per_page=100`, con `fechas[]`, `company_id`, `sucursales[]`, `clientes[]`, `vendedores[]`, `marcas[]`, `tipos_producto[]` y `departamentos[]`): Departamentos `/ventas/reporte-departamentos-v2`, Vendedor `/ventas/reporte-vendedores-v2` (usa `name`; la empresa sale del usuario autenticado), Marcas `/ventas/reporte-marcas-v2`, Categoría `/ventas/reporte-categorias-v2`, Cliente `/ventas/reporte-clientes-v2`. Respuesta: `{success, data: [{id, <marca|categoria|departamento|cliente|name>, venta_total, ...}], resumen: {total_ventas, ...}, pagination: {total, has_more}}`, ya de mayor a menor `venta_total`. Sin ventas responde solo `data: []` (sin `resumen`). La app usa `venta_total` y `resumen.total_ventas`.
+- **Permisos** (los de las pestañas de la web, dentro de `reportes.index`): Departamentos `reportes.sucursal.index`, Vendedor `reportes.vendedor.index`, Marcas `reportes.marcas.index`, Categoría `reportes.categorias.index`, Cliente `reportes.cliente_comparativa.index`. OJO: el backend valida Departamentos, Marcas, Categoría y Cliente con `reportes.sucursal.index` (`ReporteSucursalRequest::authorize`), no con el permiso propio de cada uno; si un rol tiene el permiso de marcas pero no el de sucursal, la tarjeta mostrará el error del servidor con "Reintentar". El Vendedor sin `reportes.ventas.ver-otros-vendedores` ve solo lo suyo (lo decide el servidor).
+- **Pendiente de probar contra el servidor real**: todo lo anterior se probó con respuestas simuladas leídas del código del backend.
 
 ### Estado de Ventas
 

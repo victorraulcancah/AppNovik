@@ -4,8 +4,10 @@ import '../../core/constants/api_constants.dart';
 import '../../core/network/api_request.dart';
 import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/report_entity.dart';
+import '../../domain/entities/report_ranking_entity.dart';
 import '../models/document_model.dart';
 import '../models/report_model.dart';
+import '../models/report_ranking_model.dart';
 
 abstract class ReportRemoteDataSource {
   Future<SalesReportEntity> getSalesReport({
@@ -15,6 +17,16 @@ abstract class ReportRemoteDataSource {
     required int pageSize,
     String? sortField,
     required bool sortDescending,
+  });
+
+  Future<RankingReport> getRanking({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int page,
+    required int pageSize,
+    String? search,
   });
 
   Future<Uint8List> exportSalesReport(String token, SalesReportFilters filters);
@@ -51,6 +63,16 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
         if (f.departamentos.isNotEmpty) 'departamentos[]': f.departamentos,
       };
 
+  /// Dónde está cada ranking. Todos devuelven las filas por entidad de mayor a menor venta.
+  static String _rankingPath(ReportKind kind) => switch (kind) {
+    ReportKind.departamentos => '/ventas/reporte-departamentos-v2',
+    ReportKind.vendedores => '/ventas/reporte-vendedores-v2',
+    ReportKind.marcas => '/ventas/reporte-marcas-v2',
+    ReportKind.categorias => '/ventas/reporte-categorias-v2',
+    ReportKind.clientes => '/ventas/reporte-clientes-v2',
+    ReportKind.general => '/ventas/reporte',
+  };
+
   /// Parámetros de orden de `/ventas/reporte`.
   ///
   /// El backend ordena al revés de lo que se le pide: `SaleController::reporte` llama
@@ -86,6 +108,38 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       () => client.get(uri, headers: ApiConstants.authHeaders(token)),
     );
     return salesReportFromJson(body as Map<String, dynamic>);
+  }
+
+  /// Los reportes por entidad de la web (`*-v2`) piden las sucursales como `sucursales[]` y las
+  /// categorías como `tipos_producto[]`; el resto de los filtros se llaman igual que en Ventas General.
+  @override
+  Future<RankingReport> getRanking({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int page,
+    required int pageSize,
+    String? search,
+  }) async {
+    final uri = _uri(_rankingPath(kind), {
+      'fechas[]': [_day(filters.desde), _day(filters.hasta)],
+      'company_id': ['$companyId'],
+      if (filters.sucursales.isNotEmpty) 'sucursales[]': filters.sucursales,
+      if (filters.clientes.isNotEmpty) 'clientes[]': filters.clientes,
+      if (filters.vendedores.isNotEmpty) 'vendedores[]': filters.vendedores,
+      if (filters.marcas.isNotEmpty) 'marcas[]': filters.marcas,
+      if (filters.categorias.isNotEmpty) 'tipos_producto[]': filters.categorias,
+      if (filters.departamentos.isNotEmpty) 'departamentos[]': filters.departamentos,
+      if (kind == ReportKind.clientes && search != null && search.trim().isNotEmpty)
+        'cliente_search': [search.trim()],
+      'page': ['$page'],
+      'per_page': ['$pageSize'],
+    });
+    final body = await sendApiRequest(
+      () => client.get(uri, headers: ApiConstants.authHeaders(token)),
+    );
+    return rankingFromJson(kind, body);
   }
 
   @override
