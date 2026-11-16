@@ -59,6 +59,8 @@ Future<void> showAppSearchSheet<T>(
     icon: icon,
     primaryLabel: null,
     secondaryLabel: closeLabel,
+    // Alto fijo: la ventana no se mueve ni cambia de tamaño al escribir o llegar los resultados.
+    fixedHeight: true,
     child: _SearchBody<T>(
       hint: hint,
       emptyHint: emptyHint,
@@ -137,10 +139,6 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
     });
     final result = await widget.search(query);
     if (!mounted || request != _request) return;
-    // Con la respuesta a la vista, el teclado baja (y con él el botón "Cerrar" sube
-    // de nuevo a su lugar) para que la lista tenga más alto. Solo si no se siguió
-    // escribiendo mientras tanto.
-    if (_text == query) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = false;
       result.fold(

@@ -67,6 +67,8 @@ extension on AppModalTone {
 ///   como siempre.
 /// - [keepPaneOpen]: en el panel, la acción principal (por ejemplo "Editar") no vacía el panel:
 ///   responde `true` y el detalle sigue a la vista mientras se abre el formulario encima.
+/// - [fixedHeight]: la ventana tiene un alto fijo (no crece ni se encoge con el contenido ni se
+///   mueve con el teclado, que queda encima). Para buscadores, cuya lista cambia al escribir.
 Future<bool?> showAppModal(
   BuildContext context, {
   required String title,
@@ -85,6 +87,7 @@ Future<bool?> showAppModal(
   AppPaneController? pane,
   Object? paneId,
   bool keepPaneOpen = false,
+  bool fixedHeight = false,
 }) {
   assert(child != null || (tabs != null && tabs.isNotEmpty), 'Pasa child o tabs');
   final isTablet =
@@ -134,7 +137,12 @@ Future<bool?> showAppModal(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: build(ctx, handle: false),
+          child: fixedHeight
+              ? SizedBox(
+                  height: MediaQuery.sizeOf(ctx).height * 0.8,
+                  child: build(ctx, handle: false, fill: true),
+                )
+              : build(ctx, handle: false),
         ),
       ),
     );
@@ -148,10 +156,21 @@ Future<bool?> showAppModal(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-      child: build(ctx, handle: true),
-    ),
+    builder: (ctx) {
+      if (fixedHeight) {
+        // Alto fijo (el 85 % de la pantalla): el teclado se dibuja encima sin empujar ni achicar la
+        // ventana, así no salta al buscar.
+        final size = MediaQuery.sizeOf(ctx);
+        return SizedBox(
+          height: size.height * 0.85,
+          child: build(ctx, handle: true, fill: true),
+        );
+      }
+      return Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+        child: build(ctx, handle: true),
+      );
+    },
   );
 }
 

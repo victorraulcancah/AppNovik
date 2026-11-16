@@ -1440,6 +1440,14 @@ void main() {
       expect(find.byTooltip('Culminar venta o editar cotización'), findsOneWidget);
     });
 
+    testWidgets('en la tarjeta, culminar o editar va antes que ver el detalle', (tester) async {
+      await pump(tester, permissions: quotePermissions, serving: pendingQuote());
+
+      final editar = tester.getCenter(find.byTooltip('Culminar venta o editar cotización'));
+      final ver = tester.getCenter(find.byTooltip('Ver detalle').first);
+      expect(editar.dx, lessThan(ver.dx));
+    });
+
     testWidgets('sin permiso para vender no se ofrece culminar la cotización', (tester) async {
       await pump(
         tester,

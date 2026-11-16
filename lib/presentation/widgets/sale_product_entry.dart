@@ -172,7 +172,13 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
           borderRadius: BorderRadius.circular(14),
           child: InputDecorator(
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.inventory_2_outlined),
+              // Con el producto elegido, su foto (si tiene) en lugar del ícono.
+              prefixIcon: product?.imagen == null
+                  ? const Icon(Icons.inventory_2_outlined)
+                  : Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: ProductImage(path: product!.imagen!, size: 32, radius: 8),
+                    ),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -189,8 +195,6 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
             ),
             child: Text(
               product?.name ?? 'Producto',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: product == null
                   ? theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant)
                   : theme.textTheme.bodyLarge,
