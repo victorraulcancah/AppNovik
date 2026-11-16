@@ -1166,6 +1166,21 @@ void main() {
       expect(result.right.single.id, 1);
       expect(repo.searches, ['sub']);
     });
+
+    test('un código de barras se resuelve al código del producto', () async {
+      repo.products = [product(1)];
+
+      final codigo = await provider.codigoDeBarras('7750000000017');
+
+      expect(codigo, repo.products.single.codigo);
+      expect(repo.searches, ['7750000000017']);
+    });
+
+    test('un código de barras sin producto da null', () async {
+      repo.products = [];
+
+      expect(await provider.codigoDeBarras('000'), isNull);
+    });
   });
 
   // ---------------------------------------------------------------------------------------------

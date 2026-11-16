@@ -305,6 +305,14 @@ class RankingView extends StatefulWidget {
   final ReportKind kind;
   final RankingState? state;
   final bool showAmounts;
+
+  /// ¿Se puede ver el margen? (rol con margen) y, si se puede, ¿está a la vista o tapado con "*"?
+  final bool showMargin;
+  final bool marginVisible;
+  final VoidCallback? onToggleMargin;
+
+  /// Vuelve a "Venta general" (la flecha del encabezado).
+  final VoidCallback? onBack;
   final ValueChanged<String> onSearch;
   final Future<void> Function() onRefresh;
   final VoidCallback onRetry;
@@ -315,6 +323,10 @@ class RankingView extends StatefulWidget {
     required this.kind,
     required this.state,
     required this.showAmounts,
+    this.showMargin = false,
+    this.marginVisible = false,
+    this.onToggleMargin,
+    this.onBack,
     required this.onSearch,
     required this.onRefresh,
     required this.onRetry,
@@ -332,6 +344,22 @@ class _RankingViewState extends State<RankingView> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  /// Los detalles de una fila bajo su nombre (sin unidades): documento y categoría del cliente,
+  /// número de ventas con su ticket promedio, subtotal con descuento y margen.
+  List<String> _details(RankingRow row) {
+    final margin = widget.marginVisible
+        ? '${_soles(row.margen)}${row.venta > 0 ? ' (${rankingPercent(row.margen / row.venta * 100)})' : ''}'
+        : 'S/. *******';
+    return [
+      if (row.documento != null || row.categoria != null)
+        [?row.documento, ?row.categoria].join(' · '),
+      if (widget.showAmounts && row.nVentas > 0)
+        '${row.nVentas} ${row.nVentas == 1 ? 'venta' : 'ventas'} · Ticket prom. ${_soles(row.ticketPromedio!)}',
+      if (widget.showAmounts) 'Subtotal ${_soles(row.subtotal)} · Desc. ${_soles(row.descuento)}',
+      if (widget.showAmounts && widget.showMargin) 'Margen $margin',
+    ];
   }
 
   @override
@@ -359,19 +387,37 @@ class _RankingViewState extends State<RankingView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: EdgeInsets.fromLTRB(widget.onBack == null ? 16 : 4, 8, 8, 0),
+          child: Row(
             children: [
-              Text(
-                kind.cardTitle,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              if (widget.onBack != null)
+                IconButton(
+                  tooltip: 'Volver a Venta general',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: widget.onBack,
+                ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kind.cardTitle,
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.showAmounts ? 'Total ${_soles(state.total)} · $count' : count,
+                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                widget.showAmounts ? 'Total ${_soles(state.total)} · $count' : count,
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
+              if (widget.showMargin && widget.onToggleMargin != null)
+                IconButton(
+                  tooltip: widget.marginVisible ? 'Ocultar el margen' : 'Ver el margen',
+                  icon: Icon(widget.marginVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  onPressed: widget.onToggleMargin,
+                ),
             ],
           ),
         ),
@@ -396,6 +442,7 @@ class _RankingViewState extends State<RankingView> {
               final share = state.share(row);
               return AppListCard(
                 title: row.name,
+                lines: _details(row),
                 trailingTitle: widget.showAmounts ? _soles(row.venta) : rankingPercent(share),
                 trailingCaption: widget.showAmounts ? rankingPercent(share) : null,
                 footer: Padding(

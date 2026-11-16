@@ -78,7 +78,30 @@ class RankingRow {
   /// Venta total en soles.
   final double venta;
 
-  const RankingRow({this.id, required this.name, this.venta = 0});
+  /// Cuántas ventas tuvo (0 si el reporte no lo trae).
+  final int nVentas;
+  final double subtotal;
+  final double descuento;
+  final double margen;
+
+  /// Solo clientes: su documento y su categoría.
+  final String? documento;
+  final String? categoria;
+
+  const RankingRow({
+    this.id,
+    required this.name,
+    this.venta = 0,
+    this.nVentas = 0,
+    this.subtotal = 0,
+    this.descuento = 0,
+    this.margen = 0,
+    this.documento,
+    this.categoria,
+  });
+
+  /// Lo vendido entre el número de ventas; `null` sin número de ventas.
+  double? get ticketPromedio => nVentas > 0 ? venta / nVentas : null;
 }
 
 /// Una página de un ranking, de mayor a menor venta, con el total del rango: de él sale el

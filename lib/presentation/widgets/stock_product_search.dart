@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
 import '../../domain/entities/stock_manage_entity.dart';
+import '../components/app_search_bar.dart';
 
 /// Buscador de productos para armar un aumento de stock o una transferencia: se escribe, se
 /// espera un momento y salen los productos; al tocar uno se agrega.
@@ -131,6 +132,13 @@ class _StockProductSearchState extends State<StockProductSearch> {
             EdgeInsets.symmetric(horizontal: 16),
           ),
           trailing: [
+            if (widget.enabled)
+              BarcodeScanButton(
+                onScanned: (code) {
+                  _controller.text = code;
+                  _onChanged(code);
+                },
+              ),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.all(8),

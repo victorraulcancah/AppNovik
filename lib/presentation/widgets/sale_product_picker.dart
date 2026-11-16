@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/sales_provider.dart';
+import 'product_image.dart';
+import 'product_image_viewer.dart';
 
 typedef _Pick = ({SaleProductEntity product, int cantidad});
 
-/// Buscador de productos de la venta, en un modal: se busca por nombre, código, marca o
-/// categoría, se puede filtrar por categoría y marca, y se marcan varios productos con su
-/// cantidad para agregarlos de una vez. Devuelve `true` si se agregó algo.
+/// Buscador de productos de la venta (el único), en un modal de alto fijo: se busca por nombre,
+/// código, marca o categoría, se puede filtrar por categoría y marca, y se marcan uno o varios
+/// productos para agregarlos de una vez con cantidad 1 (la cantidad, el precio y el descuento se
+/// ajustan después en la tarjeta del carrito). Devuelve `true` si se agregó algo.
 Future<bool> showSaleProductPicker(BuildContext context) async {
   final sales = context.read<SalesProvider>();
   sales.ensureProductFilters();
@@ -25,8 +27,9 @@ Future<bool> showSaleProductPicker(BuildContext context) async {
   final added = await showAppModal(
     context,
     title: 'Buscar productos',
-    subtitle: 'Marca los que quieres y su cantidad',
+    subtitle: 'Marca los que quieres agregar',
     icon: Icons.add_shopping_cart_outlined,
+    fixedHeight: true,
     primaryLabel: 'Agregar a la venta',
     primaryEnabled: hasSelection,
     error: error,
@@ -59,9 +62,11 @@ class _PickerBody extends StatefulWidget {
 }
 
 class _PickerBodyState extends State<_PickerBody> {
+  final _searchController = TextEditingController();
   Timer? _debounce;
   int _request = 0;
   String _query = '';
+  String _text = '';
   bool _loading = false;
   String? _error;
   List<SaleProductEntity> _results = [];
@@ -73,7 +78,14 @@ class _PickerBodyState extends State<_PickerBody> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  /// Código de barras leído con la cámara: se busca de una vez (el servidor busca por código de barras).
+  void _onScanned(String code) {
+    _searchController.text = code;
+    _onChanged(code);
   }
 
   bool get _filtersActive => _categoryId != null || _brandId != null;
@@ -87,6 +99,7 @@ class _PickerBodyState extends State<_PickerBody> {
 
   void _onChanged(String text) {
     _debounce?.cancel();
+    _text = text.trim();
     final query = text.trim();
     if (query.isEmpty) {
       _request++;
@@ -110,6 +123,9 @@ class _PickerBodyState extends State<_PickerBody> {
     });
     final result = await widget.sales.searchProducts(query);
     if (!mounted || request != _request) return;
+    // Con la respuesta a la vista, el teclado baja para ver bien los resultados (la ventana es de
+    // alto fijo y no se mueve). Solo si no se siguió escribiendo.
+    if (_text == query) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = false;
       result.fold(
@@ -127,7 +143,8 @@ class _PickerBodyState extends State<_PickerBody> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final visible = _visible;
-    final maxHeight = math.min(420.0, MediaQuery.sizeOf(context).height * 0.5);
+    // La ventana mide el 85 % de la pantalla: la lista ocupa lo que queda bajo el buscador.
+    final maxHeight = math.max(220.0, MediaQuery.sizeOf(context).height * 0.85 - 360);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -136,11 +153,13 @@ class _PickerBodyState extends State<_PickerBody> {
           children: [
             Expanded(
               child: TextField(
+                controller: _searchController,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Nombre, código, marca…',
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: BarcodeScanButton(onScanned: _onScanned),
                 ),
                 onChanged: _onChanged,
               ),
@@ -282,7 +301,7 @@ class _PickerBodyState extends State<_PickerBody> {
   }
 }
 
-/// Un producto del buscador: casilla, nombre, stock, unidad y cantidad.
+/// Un producto del buscador: casilla, nombre, stock y precio.
 class _ProductCard extends StatefulWidget {
   final SaleProductEntity product;
   final SalesProvider sales;
@@ -300,8 +319,6 @@ class _ProductCard extends StatefulWidget {
 }
 
 class _ProductCardState extends State<_ProductCard> {
-  late final TextEditingController _quantity;
-
   SaleProductEntity get _product => widget.product;
 
   /// Lo que todavía se puede agregar (menos lo que ya está en la venta); `null` sin tope.
@@ -312,53 +329,15 @@ class _ProductCardState extends State<_ProductCard> {
 
   bool get _blocked => _limit != null && _limit! < 1;
 
-  @override
-  void initState() {
-    super.initState();
-    final current = widget.selection.value[_product.id]?.cantidad;
-    _quantity = TextEditingController(text: '${current ?? 1}');
-  }
-
-  @override
-  void dispose() {
-    _quantity.dispose();
-    super.dispose();
-  }
-
-  int _parsed() {
-    final n = int.tryParse(_quantity.text) ?? 1;
-    final limit = _limit;
-    final clamped = n < 1 ? 1 : (limit != null && n > limit ? limit : n);
-    return clamped;
-  }
-
   void _select(bool on) {
     final next = {...widget.selection.value};
     if (on) {
       if (_blocked) return;
-      final n = _parsed();
-      _quantity.text = '$n';
-      next[_product.id] = (product: _product, cantidad: n);
+      next[_product.id] = (product: _product, cantidad: 1);
     } else {
       next.remove(_product.id);
     }
     widget.selection.value = next;
-  }
-
-  void _onQuantityChanged(String text) {
-    if (text.isEmpty || _blocked) return;
-    final n = _parsed();
-    if ('$n' != text) {
-      _quantity.value = TextEditingValue(
-        text: '$n',
-        selection: TextSelection.collapsed(offset: '$n'.length),
-      );
-    }
-    // Escribir una cantidad marca el producto.
-    widget.selection.value = {
-      ...widget.selection.value,
-      _product.id: (product: _product, cantidad: n),
-    };
   }
 
   @override
@@ -413,6 +392,24 @@ class _ProductCardState extends State<_ProductCard> {
                           value: checked,
                           onChanged: _blocked ? null : (v) => _select(v ?? false),
                         ),
+                        // La foto del producto (o un recuadro vacío): al tocarla se abre a pantalla completa.
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6, right: 10),
+                          child: _product.imagen == null
+                              ? const ProductImagePlaceholder(size: 52)
+                              : Semantics(
+                                  button: true,
+                                  label: 'Ver la imagen de ${_product.name}',
+                                  child: GestureDetector(
+                                    onTap: () => openProductImage(
+                                      context,
+                                      path: _product.imagen!,
+                                      title: _product.name,
+                                    ),
+                                    child: ProductImage(path: _product.imagen!, size: 52),
+                                  ),
+                                ),
+                        ),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.only(top: 10),
@@ -421,8 +418,6 @@ class _ProductCardState extends State<_ProductCard> {
                               children: [
                                 Text(
                                   _product.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                                 Text(
@@ -431,8 +426,6 @@ class _ProductCardState extends State<_ProductCard> {
                                     ?_product.marca,
                                     ?category,
                                   ].join(' · '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                                 ),
                                 if (inSale > 0)
@@ -484,44 +477,6 @@ class _ProductCardState extends State<_ProductCard> {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Unidad',
-                                enabled: false,
-                                isDense: true,
-                                suffixIcon: Icon(Icons.straighten_outlined, size: 18),
-                              ),
-                              child: Text(
-                                _product.unidad ?? '—',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: scheme.onSurfaceVariant),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: _quantity,
-                              enabled: !_blocked,
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              decoration: const InputDecoration(labelText: 'Cant.', isDense: true),
-                              onChanged: _onQuantityChanged,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),

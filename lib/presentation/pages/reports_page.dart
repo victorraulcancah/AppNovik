@@ -136,8 +136,9 @@ class _ReportsPageState extends State<ReportsPage> {
     final general = reports.kind == ReportKind.general;
     return Column(
       children: [
-        // Con más de un reporte disponible, el selector: Venta general, Departamentos, Vendedor...
-        if (kinds.length > 1)
+        // Los reportes por entidad se abren desde las tarjetas de Venta general (con su flecha para
+        // volver). Solo si el usuario no tiene Venta general queda el selector para cambiar de uno a otro.
+        if (kinds.length > 1 && !kinds.contains(ReportKind.general))
           ReportKindSelector(kinds: kinds, selected: reports.kind, onSelect: reports.selectKind),
         SizedBox(
           height: 56,
@@ -316,6 +317,12 @@ class _ReportsPageState extends State<ReportsPage> {
           kind: kind,
           state: reports.ranking(kind),
           showAmounts: !reports.ocultarImportes,
+          showMargin: !reports.ocultarMargen,
+          marginVisible: _marginVisible,
+          onToggleMargin: () => setState(() => _marginVisible = !_marginVisible),
+          onBack: reports.availableKinds.contains(ReportKind.general)
+              ? () => reports.selectKind(ReportKind.general)
+              : null,
           onSearch: (text) => reports.setRankingSearch(kind, text),
           onRefresh: reports.refresh,
           onRetry: () => reports.retryRanking(kind),

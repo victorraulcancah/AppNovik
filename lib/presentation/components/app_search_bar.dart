@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/barcode_scanner.dart';
+
 /// Campo de búsqueda Material 3 para listas, con botón de filtros opcional a la
 /// derecha. [filterActive] marca el botón cuando hay filtros aplicados.
 class AppSearchBar extends StatelessWidget {
@@ -17,6 +19,10 @@ class AppSearchBar extends StatelessWidget {
   /// Otros botones junto al de filtros (por ejemplo, descargar el Excel).
   final List<Widget> actions;
 
+  /// Con esto el campo lleva el botón de escanear un código de barras con la cámara; recibe el
+  /// código leído.
+  final ValueChanged<String>? onScanned;
+
   const AppSearchBar({
     super.key,
     this.hint = 'Buscar',
@@ -27,6 +33,7 @@ class AppSearchBar extends StatelessWidget {
     this.filterActive = false,
     this.filterCount = 0,
     this.actions = const [],
+    this.onScanned,
   });
 
   @override
@@ -41,6 +48,9 @@ class AppSearchBar extends StatelessWidget {
               hintText: hint,
               elevation: const WidgetStatePropertyAll(0),
               leading: const Icon(Icons.search),
+              trailing: [
+                if (onScanned != null) BarcodeScanButton(onScanned: onScanned!),
+              ],
               padding: const WidgetStatePropertyAll(
                 EdgeInsets.symmetric(horizontal: 16),
               ),
@@ -65,6 +75,25 @@ class AppSearchBar extends StatelessWidget {
           ...actions,
         ],
       ),
+    );
+  }
+}
+
+/// Botón de la cámara para escanear un código de barras (ícono de código de barras).
+class BarcodeScanButton extends StatelessWidget {
+  final ValueChanged<String> onScanned;
+
+  const BarcodeScanButton({super.key, required this.onScanned});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Escanear código de barras',
+      icon: const Icon(Icons.barcode_reader),
+      onPressed: () async {
+        final code = await BarcodeScanner.scan(context);
+        if (code != null && code.isNotEmpty) onScanned(code);
+      },
     );
   }
 }

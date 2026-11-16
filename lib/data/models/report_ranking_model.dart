@@ -4,6 +4,8 @@ double _double(dynamic v) => v is num ? v.toDouble() : (v is String ? double.try
 
 int? _int(dynamic v) => v is num ? v.toInt() : (v is String ? int.tryParse(v) : null);
 
+String? _clean(dynamic v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
+
 /// En qué campo trae cada reporte el nombre de la fila.
 String _nameKey(ReportKind kind) => switch (kind) {
   ReportKind.departamentos => 'departamento',
@@ -30,6 +32,12 @@ RankingReport rankingFromJson(ReportKind kind, dynamic body) {
           id: _int(e['id']),
           name: (e[key] is String && (e[key] as String).trim().isNotEmpty) ? (e[key] as String).trim() : '-',
           venta: _double(e['venta_total']),
+          nVentas: _int(e['n_de_ventas'] ?? e['numero_ventas']) ?? 0,
+          subtotal: _double(e['subtotal']),
+          descuento: _double(e['descuento']),
+          margen: _double(e['margen']),
+          documento: _clean(e['documento']),
+          categoria: _clean(e['categoria']),
         ),
   ];
 

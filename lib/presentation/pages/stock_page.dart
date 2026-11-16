@@ -70,6 +70,23 @@ class _StockPageState extends State<StockPage> {
     context.read<StockProvider>().addSearchTerm(text);
   }
 
+  /// Código de barras leído con la cámara: se busca el producto y su código pasa a ser el término.
+  Future<void> _onScanned(String barcode) async {
+    final stock = context.read<StockProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final codigo = await stock.codigoDeBarras(barcode);
+    if (!mounted) return;
+    if (codigo == null) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('No hay un producto con el código de barras $barcode')));
+      return;
+    }
+    _debounce?.cancel();
+    _searchController.clear();
+    stock.addSearchTerm(codigo);
+  }
+
   Future<void> _openFilters() async {
     final stock = context.read<StockProvider>();
     final result = await showAppFilterSheet(
@@ -311,6 +328,7 @@ class _StockPageState extends State<StockPage> {
                 controller: _searchController,
                 onChanged: _onSearchChanged,
                 onSubmitted: _onSearchSubmitted,
+                onScanned: _onScanned,
                 onFilter: _openFilters,
                 filterCount: _activeFilters(stock).length,
               ),

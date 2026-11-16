@@ -287,6 +287,15 @@ class StockProvider extends ChangeNotifier {
     if (failure is AuthenticationFailure) _onSessionExpired?.call();
   }
 
+  /// El código (interno) del producto que tiene ese código de barras, o `null` si no hay. La lista
+  /// de existencias no busca por código de barras, por eso se resuelve primero aquí.
+  Future<String?> codigoDeBarras(String barcode) async {
+    final result = await searchProducts(barcode);
+    if (result.isLeft || result.right.isEmpty) return null;
+    final items = result.right;
+    return items.firstWhere((p) => p.codigo == barcode, orElse: () => items.first).codigo;
+  }
+
   /// Productos para armar un aumento de stock o una transferencia.
   Future<Either<Failure, List<StockProductEntity>>> searchProducts(String text) async {
     final companyId = _companyId;

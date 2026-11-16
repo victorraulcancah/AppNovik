@@ -71,6 +71,13 @@ class _ProductsPageState extends State<ProductsPage> {
     context.read<ProductsProvider>().addSearchTerm(text);
   }
 
+  /// Código de barras leído con la cámara: la lista de productos busca también por código de barras.
+  void _onScanned(String barcode) {
+    _debounce?.cancel();
+    _searchController.clear();
+    context.read<ProductsProvider>().addSearchTerm(barcode);
+  }
+
   Future<void> _openFilters() async {
     final provider = context.read<ProductsProvider>();
     final result = await showAppFilterSheet(
@@ -316,6 +323,7 @@ class _ProductsPageState extends State<ProductsPage> {
               controller: _searchController,
               onChanged: _onSearchChanged,
               onSubmitted: _onSearchSubmitted,
+              onScanned: _onScanned,
               onFilter: _openFilters,
               filterCount: _activeFilters(products).length,
             ),
