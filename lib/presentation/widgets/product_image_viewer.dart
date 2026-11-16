@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -6,8 +9,31 @@ import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../utils/share_file.dart';
 import 'product_image.dart';
 
+/// Pone la imagen sobre un fondo blanco. Las fotos sin fondo (PNG/WebP transparentes) se verían con
+/// fondo negro en WhatsApp y otras apps al compartirlas; así salen siempre sobre blanco. Devuelve los
+/// bytes de un PNG, o `null` si no se pudo leer la imagen (entonces se comparte tal cual).
+Future<Uint8List?> flattenOnWhite(Uint8List bytes) async {
+  try {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final size = Size(image.width.toDouble(), image.height.toDouble());
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    canvas.drawImage(image, Offset.zero, Paint());
+    final flat = await recorder.endRecording().toImage(image.width, image.height);
+    final data = await flat.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    flat.dispose();
+    return data?.buffer.asUint8List();
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Abre la foto de un producto a pantalla completa: se acerca con los dedos, se cierra con la X o
-/// tocando el fondo, y se puede compartir en el mismo formato en que está guardada en el servidor.
+/// tocando el fondo, y se puede compartir en una imagen con fondo blanco.
 Future<void> openProductImage(BuildContext context, {required String path, String? title}) {
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
@@ -51,7 +77,12 @@ class _ProductImageViewerState extends State<ProductImageViewer> {
       final response = await http.get(Uri.parse(ProductImage.urlOf(widget.path)), headers: _headers);
       if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
       final name = widget.path.split('/').last;
-      await shareDownloadedFile(DownloadedFile(name: name, bytes: response.bodyBytes));
+      // Con fondo blanco (las fotos sin fondo saldrían negras al compartirlas).
+      final flat = await flattenOnWhite(response.bodyBytes);
+      final file = flat == null
+          ? DownloadedFile(name: name, bytes: response.bodyBytes)
+          : DownloadedFile(name: '${name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name}.png', bytes: flat);
+      await shareDownloadedFile(file);
     } catch (_) {
       messenger
         ..hideCurrentSnackBar()

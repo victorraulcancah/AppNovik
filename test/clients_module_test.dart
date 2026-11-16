@@ -718,7 +718,9 @@ void main() {
       await _pump(tester, const {'clientes.index', 'clientes.update'});
 
       expect(find.text('Ana Pérez'), findsWidgets);
-      expect(find.text('Persona · DNI 12345678'), findsWidgets);
+      expect(find.text('DNI: 12345678'), findsWidgets);
+      expect(find.textContaining('Cód. cliente: '), findsWidgets);
+      expect(find.textContaining('Departamento: '), findsWidgets);
       expect(find.text('Distribuidor'), findsWidgets);
       expect(find.text('Activo'), findsWidgets);
       expect(find.text('Ejecutivo: Juan P.'), findsWidgets);
@@ -738,6 +740,18 @@ void main() {
       expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Todos'), matching: find.text('25')), findsOneWidget);
       expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Personas'), matching: find.text('20')), findsOneWidget);
       expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Empresas'), matching: find.text('5')), findsOneWidget);
+    });
+
+    testWidgets('las insignias de categoría y estado van a la derecha, bajo los botones de acción', (tester) async {
+      await _pump(tester, const {'clientes.index', 'clientes.update'});
+
+      final ver = tester.getRect(find.byTooltip('Ver detalle').first);
+      final estado = tester.getRect(find.text('Activo').first);
+      final dato = tester.getRect(find.textContaining('Cód. cliente: ').first);
+      // Los botones quedan donde estaban (arriba a la derecha) y las insignias debajo de ellos, a la derecha.
+      expect(estado.top, greaterThan(ver.bottom - 1));
+      expect(estado.center.dx, greaterThan(dato.right));
+      expect(estado.right, lessThanOrEqualTo(ver.right + 1));
     });
 
     testWidgets('el monto usado solo sale si hay algo usado: en 0 no dice nada (ni "Crédito")', (tester) async {

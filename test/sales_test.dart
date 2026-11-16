@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'dart:convert';
 
 import 'package:app_novik/core/errors/failures.dart';
@@ -1298,6 +1299,24 @@ void main() {
       };
       expect(y['SUBWOOFER 12"']!, lessThan(y['CABLE RCA']!));
       expect(y['CABLE RCA']!, lessThan(y['RADIO DEH']!));
+    });
+
+    testWidgets('al compartir, una foto con transparencia sale sobre fondo blanco', (tester) async {
+      await tester.runAsync(() async {
+        // Una imagen de 4x4 totalmente transparente.
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder);
+        final transparent = await recorder.endRecording().toImage(4, 4);
+        final png = (await transparent.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+
+        final flat = await flattenOnWhite(png);
+        expect(flat, isNotNull);
+        final codec = await ui.instantiateImageCodec(flat!);
+        final image = (await codec.getNextFrame()).image;
+        final raw = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        // El primer píxel es blanco y opaco, no negro ni transparente.
+        expect([raw.getUint8(0), raw.getUint8(1), raw.getUint8(2), raw.getUint8(3)], [255, 255, 255, 255]);
+      });
     });
 
     testWidgets('el nombre sale completo y la ventana no cambia de alto al buscar', (tester) async {

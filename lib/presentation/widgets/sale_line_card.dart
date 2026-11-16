@@ -379,7 +379,13 @@ class _SaleLineCardState extends State<SaleLineCard> {
         ),
         const SizedBox(width: 4),
         // Con ancho de sobra el descuento va al lado de la cantidad; si no, debajo.
-        if (compact) const Spacer() else Expanded(child: Align(alignment: Alignment.center, child: chip)),
+        // El lápiz (o el descuento) va pegado al basurero, a su izquierda; si no cabe, se achica.
+        if (compact)
+          const Spacer()
+        else ...[
+          Expanded(child: Align(alignment: Alignment.centerRight, child: chip)),
+          const SizedBox(width: 6),
+        ],
         _RoundButton(
           tooltip: 'Quitar',
           icon: Icons.delete_outline,

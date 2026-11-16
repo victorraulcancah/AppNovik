@@ -204,6 +204,85 @@ class RankingSummaryCard extends StatelessWidget {
   }
 }
 
+/// La tarjeta "Ventas por productos" de Venta general: el top 3 de la lista de productos y servicios
+/// (posición, nombre, monto, barra y %), con la flecha que abre la lista completa. Es la primera de las
+/// tarjetas, antes de la de departamentos.
+class ProductsSummaryCard extends StatelessWidget {
+  /// Los tres primeros, con lo que representan del total (de 0 a 100).
+  final List<({RankingRow row, double share})> top;
+
+  /// `false` cuando el rol no ve importes: solo el %.
+  final bool showAmounts;
+  final VoidCallback onOpen;
+
+  const ProductsSummaryCard({super.key, required this.top, required this.showAmounts, required this.onOpen});
+
+  static const color = Color(0xFFF97316);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final max = top.isEmpty ? 0.0 : top.first.row.venta;
+
+    return Material(
+      color: scheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Ventas por productos',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward, size: 20, color: scheme.primary, semanticLabel: 'Ver todos'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (top.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Sin ventas en el rango',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                )
+              else
+                Column(
+                  children: [
+                    for (var i = 0; i < top.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 12),
+                      _SummaryRow(
+                        position: i + 1,
+                        row: top[i].row,
+                        share: top[i].share,
+                        fraction: max > 0 ? top[i].row.venta / max : 0,
+                        color: color,
+                        showAmount: showAmounts,
+                      ),
+                    ],
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SummaryRow extends StatelessWidget {
   final int position;
   final RankingRow row;

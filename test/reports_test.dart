@@ -884,6 +884,42 @@ void main() {
       expect(find.byKey(const ValueKey('filtros-limpiar')), findsNothing);
     });
 
+    /// Abre la lista completa de productos y servicios desde su tarjeta de Venta general.
+    Future<void> openProducts(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('Ventas por productos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ventas por productos'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Venta general trae primero la tarjeta "Ventas por productos" (top 3 con su %) y la lista se abre con su flecha', (tester) async {
+      await pump(tester);
+
+      // La lista completa ya no sale suelta: solo la tarjeta con el top.
+      expect(find.text('Productos y servicios · 2'), findsNothing);
+      expect(find.text('Ventas por productos'), findsOneWidget);
+      expect(find.text('1. SUBWOOFER 12"'), findsOneWidget);
+      expect(find.text('S/. 290.00'), findsWidgets);
+      expect(find.text('87.7 %'), findsOneWidget); // 290 de 330.50
+
+      // Es la primera de las tarjetas, antes de la de departamentos.
+      final productos = tester.getTopLeft(find.text('Ventas por productos')).dy;
+      for (final other in ['Ventas por departamentos', 'Ventas por vendedores']) {
+        if (find.text(other).evaluate().isNotEmpty) {
+          expect(productos, lessThan(tester.getTopLeft(find.text(other)).dy), reason: other);
+        }
+      }
+
+      await openProducts(tester);
+      expect(find.text('Productos y servicios · 2'), findsOneWidget);
+      expect(find.byTooltip('Volver a Venta general'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Volver a Venta general'));
+      await tester.pumpAndSettle();
+      expect(find.text('Productos y servicios · 2'), findsNothing);
+      expect(find.text('Venta Total'), findsOneWidget);
+    });
+
     testWidgets('muestra Ventas General: las cinco cifras, la gráfica y los productos', (tester) async {
       await pump(tester);
 
@@ -898,6 +934,7 @@ void main() {
       expect(find.text('Margen Bruto'), findsOneWidget);
       expect(find.text('S/. *******'), findsWidgets); // el margen sale oculto
       expect(find.text('Ventas'), findsOneWidget); // título de la gráfica
+      await openProducts(tester);
       expect(find.text('Productos y servicios · 2'), findsOneWidget);
       expect(find.text('SUBWOOFER 12"'), findsOneWidget);
       expect(find.text('SUB-12 · PIONEER'), findsOneWidget);
@@ -941,6 +978,7 @@ void main() {
 
       // Margen bruto de la tarjeta: 330.50 - 620.50. El del producto: subtotal 300 - costo 600.
       expect(find.text('S/. -290.00'), findsOneWidget);
+      await openProducts(tester);
       expect(find.text('Margen S/. -300.00'), findsOneWidget);
       expect(find.text('S/. *******'), findsNothing);
     });
@@ -970,6 +1008,10 @@ void main() {
       expect(find.text('N° de Ventas'), findsOneWidget);
       expect(find.text('Unidades vendidas'), findsOneWidget); // la gráfica es de unidades
       expect(find.text('S/. 290.00'), findsNothing);
+      // La tarjeta de productos solo trae el %; las unidades están en la lista completa.
+      expect(find.textContaining('uds.'), findsNothing);
+      await openProducts(tester);
+      expect(find.text('S/. 290.00'), findsNothing);
       expect(find.text('6 uds.'), findsOneWidget);
     });
 
@@ -983,6 +1025,7 @@ void main() {
 
     testWidgets('Ver documentos lista las ventas que incluyen ese producto', (tester) async {
       await pump(tester);
+      await openProducts(tester);
 
       await tester.tap(find.byTooltip('Ver documentos').first);
       await tester.pumpAndSettle();

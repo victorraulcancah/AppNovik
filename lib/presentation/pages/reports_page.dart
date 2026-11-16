@@ -35,6 +35,10 @@ class _ReportsPageState extends State<ReportsPage> {
   /// El margen se muestra oculto (`S/. ****`) hasta que se toca el ojo, como en la web.
   bool _marginVisible = false;
 
+  /// La lista completa de productos y servicios: en Venta general solo sale el top 3 en una tarjeta y
+  /// la lista se abre con su flecha.
+  bool _productsView = false;
+
   @override
   void initState() {
     super.initState();
@@ -230,12 +234,31 @@ class _ReportsPageState extends State<ReportsPage> {
     }
 
     final products = report.products;
-    // Cifras, gráfica, tarjetas de los reportes por entidad (si hay) y encabezado de productos, luego
-    // cada producto y el cargando.
-    final dashboard = reports.dashboardKinds.isNotEmpty;
-    final lead = dashboard ? 4 : 3;
-    final count = lead + (products.isEmpty ? 1 : products.length) + (reports.loadingMore ? 1 : 0);
+    if (_productsView) return _productsList(reports, report, products);
 
+    // Venta general: las cifras, la gráfica y las tarjetas (productos primero, luego departamentos,
+    // vendedores, marcas, categorías y clientes). La lista de productos se abre desde su tarjeta.
+    return RefreshIndicator(
+      onRefresh: reports.refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          for (final child in [_cards(reports, report), _chart(reports, report), _dashboard(reports, report)])
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(padding: const EdgeInsets.only(bottom: 16), child: child),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// La lista completa de productos y servicios (con su flecha para volver a Venta general).
+  Widget _productsList(ReportsProvider reports, SalesReportEntity report, List<SalesReportProductEntity> products) {
+    final count = 1 + (products.isEmpty ? 1 : products.length) + (reports.loadingMore ? 1 : 0);
     return RefreshIndicator(
       onRefresh: reports.refresh,
       child: NotificationListener<ScrollNotification>(
@@ -250,12 +273,6 @@ class _ReportsPageState extends State<ReportsPage> {
           itemBuilder: (context, i) {
             Widget child;
             if (i == 0) {
-              child = _cards(reports, report);
-            } else if (i == 1) {
-              child = _chart(reports, report);
-            } else if (dashboard && i == 2) {
-              child = _dashboard(reports);
-            } else if (i == lead - 1) {
               child = _productsHeader(reports, report);
             } else if (products.isEmpty) {
               child = const AppEmptyState(
@@ -263,8 +280,8 @@ class _ReportsPageState extends State<ReportsPage> {
                 title: 'No hay ventas',
                 message: 'Prueba con otro rango de fechas o quita los filtros.',
               );
-            } else if (i - lead < products.length) {
-              child = _productCard(reports, report, products[i - lead], i - lead + 1);
+            } else if (i - 1 < products.length) {
+              child = _productCard(reports, report, products[i - 1], i);
             } else {
               child = const Padding(
                 padding: EdgeInsets.all(16),
@@ -275,7 +292,7 @@ class _ReportsPageState extends State<ReportsPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 720),
                 child: Padding(
-                  padding: EdgeInsets.only(bottom: i >= lead ? 8 : 16),
+                  padding: EdgeInsets.only(bottom: i >= 1 ? 8 : 16),
                   child: child,
                 ),
               ),
@@ -288,10 +305,29 @@ class _ReportsPageState extends State<ReportsPage> {
 
   /// Las tarjetas "Ventas por departamentos / vendedores / marcas / categorías / clientes": el top 3
   /// de cada reporte, y al tocarlas se abre la lista completa.
-  Widget _dashboard(ReportsProvider reports) {
+  Widget _dashboard(ReportsProvider reports, SalesReportEntity report) {
+    // El top 3 de productos: lo que cada uno representa de la venta total (o de las unidades, si el rol
+    // no ve importes).
+    final byAmount = !reports.ocultarImportes;
+    final base = byAmount ? report.totalVentas : report.unidades;
+    final top = [
+      for (final p in report.products.take(RankingSummaryCard.top))
+        (
+          row: RankingRow(id: p.id, name: p.name, venta: byAmount ? p.venta : p.cantidad),
+          share: base > 0 ? (byAmount ? p.venta : p.cantidad) / base * 100 : 0.0,
+        ),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        ProductsSummaryCard(
+          top: top,
+          showAmounts: byAmount,
+          onOpen: () {
+            setState(() => _productsView = true);
+          },
+        ),
+        if (reports.dashboardKinds.isNotEmpty) const SizedBox(height: 12),
         for (final kind in reports.dashboardKinds) ...[
           RankingSummaryCard(
             kind: kind,
@@ -495,6 +531,11 @@ class _ReportsPageState extends State<ReportsPage> {
 
     return Row(
       children: [
+        IconButton(
+          tooltip: 'Volver a Venta general',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => setState(() => _productsView = false),
+        ),
         Expanded(
           child: Text(
             'Productos y servicios · ${report.totalProducts}',

@@ -389,16 +389,15 @@ class _ClientsPageState extends State<ClientsPage> {
 
     // Los mismos datos que la tabla de la web: código, tipo, documento, nombre, categoría,
     // teléfono, departamento, línea de crédito, ejecutivo y estado.
-    final id = '${c.esEmpresa ? 'RUC' : 'DNI'} ${c.dniRuc}';
+    // Un dato por renglón y con su nombre: RUC (DNI en una persona), código de cliente, departamento,
+    // teléfono y ejecutivo.
     final lines = [
-      [c.esEmpresa ? 'Empresa' : 'Persona', id].join(' · '),
-      [
-        if (c.codigo != null) c.codigo!,
-        if (canSeePhone && c.telefono != null) c.telefono!,
-        if (c.departmentName != null) c.departmentName!,
-      ].join(' · '),
+      '${c.esEmpresa ? 'RUC' : 'DNI'}: ${c.dniRuc}',
+      if (c.codigo != null) 'Cód. cliente: ${c.codigo}',
+      if (c.departmentName != null) 'Departamento: ${c.departmentName}',
+      if (canSeePhone && c.telefono != null) 'Teléfono: ${c.telefono}',
       c.ejecutivoNombre == null ? 'Sin ejecutivo asignado' : 'Ejecutivo: ${shortPersonName(c.ejecutivoNombre)}',
-    ].where((t) => t.isNotEmpty).toList();
+    ];
 
     return AppListCard(
       title: c.displayName,
@@ -407,11 +406,14 @@ class _ClientsPageState extends State<ClientsPage> {
       // El monto usado; en 0 no dice nada.
       trailingCaption: c.lineaUtilizada > 0 ? 'Usado ${formatMoney(c.lineaUtilizada, symbol: 'S/.')}' : null,
       trailingCaptionColor: scheme.onSurfaceVariant,
-      footer: Wrap(
-        spacing: 6,
-        runSpacing: 4,
+      // Las insignias (categoría y estado) van a la derecha, una bajo otra, bajo los botones.
+      footerOnRight: true,
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (c.categoriaNombre != null) ClientCategoryBadge(name: c.categoriaNombre!, code: c.categoriaCodigo),
+          if (c.categoriaNombre != null) const SizedBox(height: 4),
           AppStatusBadge(
             label: c.estado ? 'Activo' : 'Inactivo',
             tone: c.estado ? AppBadgeTone.success : AppBadgeTone.neutral,

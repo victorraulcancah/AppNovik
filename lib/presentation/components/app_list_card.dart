@@ -29,6 +29,10 @@ class AppListCard extends StatelessWidget {
   /// El elemento que se está viendo en el panel de detalle (tablet): borde y fondo de la marca.
   final bool selected;
 
+  /// El [footer] (las insignias) va a la derecha, bajo los botones de acción, y no bajo el texto de la
+  /// izquierda. Conviene que sea una columna corta, alineada al final.
+  final bool footerOnRight;
+
   const AppListCard({
     super.key,
     required this.title,
@@ -42,6 +46,7 @@ class AppListCard extends StatelessWidget {
     this.leading,
     this.footer,
     this.selected = false,
+    this.footerOnRight = false,
   });
 
   @override
@@ -49,8 +54,10 @@ class AppListCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     const tabular = [FontFeature.tabularFigures()];
-    final hasTrailing =
-        trailingTitle != null || trailingCaption != null || actions.isNotEmpty;
+    final hasTrailing = trailingTitle != null ||
+        trailingCaption != null ||
+        actions.isNotEmpty ||
+        (footer != null && footerOnRight);
 
     return AppPressScale(
       enabled: onTap != null,
@@ -76,7 +83,9 @@ class AppListCard extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-                child: Row(
+                child: Column(
+                  children: [
+                    Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (leading != null) ...[leading!, const SizedBox(width: 12)],
@@ -99,7 +108,7 @@ class AppListCard extends StatelessWidget {
                                   color: scheme.onSurfaceVariant,
                                 ),
                               ),
-                            if (footer != null)
+                            if (footer != null && !footerOnRight)
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
                                 child: footer,
@@ -144,9 +153,16 @@ class AppListCard extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: actions,
                             ),
+                          if (footer != null && footerOnRight)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6, right: 8),
+                              child: footer,
+                            ),
                         ],
                       ),
                     ],
+                  ],
+                ),
                   ],
                 ),
               ),
