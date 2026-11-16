@@ -1295,21 +1295,11 @@ void main() {
       expect(find.text('Transferir stock'), findsNothing);
     });
 
-    testWidgets('el panel de filtros ofrece el tipo y lo aplica', (tester) async {
-      final repo = await pumpPage(tester, const StockPage());
+    testWidgets('la lista no tiene botón de filtros: en su lugar va el escáner de código de barras', (tester) async {
+      await pumpPage(tester, const StockPage());
 
-      await tester.tap(find.byTooltip('Filtros'));
-      await tester.pumpAndSettle();
-      expect(find.text('Tipo'), findsOneWidget);
-
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Servicios').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ver resultados'));
-      await tester.pumpAndSettle();
-
-      expect(repo.tipos.last, 's');
+      expect(find.byTooltip('Filtros'), findsNothing);
+      expect(find.byTooltip('Escanear código de barras'), findsOneWidget);
     });
 
     testWidgets('enviar la búsqueda la vuelve un chip que se puede quitar', (tester) async {
@@ -1328,72 +1318,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('chip-tubo pvc')), findsNothing);
       expect(repo.calls.last.search, isEmpty);
-    });
-
-    testWidgets('los filtros del panel salen como chips; "solo con stock" es lo normal y no cuenta', (tester) async {
-      final repo = await pumpPage(tester, const StockPage());
-      // Sin filtros no hay chips ni insignia con número.
-      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
-      expect(find.byKey(const ValueKey('filtro-sin-stock')), findsNothing);
-
-      await tester.tap(find.byTooltip('Filtros'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Servicios').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Productos'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Incluir los que no tienen stock').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ver resultados'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-      expect(find.text('Incluye sin stock'), findsOneWidget);
-      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
-
-      // Quitar "Incluye sin stock" recarga solo con stock y deja el tipo.
-      await tester.ensureVisible(find.byTooltip('Quitar Incluye sin stock'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Quitar Incluye sin stock'));
-      await tester.pumpAndSettle();
-      expect(repo.calls.last.includeZero, isFalse);
-      expect(repo.tipos.last, 's');
-      expect(find.text('Incluye sin stock'), findsNothing);
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-
-      // Quitar el tipo recarga sin tipo y ya no queda ningún chip.
-      await tester.tap(find.byTooltip('Quitar Tipo: Servicios'));
-      await tester.pumpAndSettle();
-      expect(repo.tipos.last, isNull);
-      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
-      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
-    });
-
-    testWidgets('"Limpiar" quita el tipo y el "incluye sin stock" con un solo pedido', (tester) async {
-      final repo = await pumpPage(tester, const StockPage());
-      await tester.tap(find.byTooltip('Filtros'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Servicios').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Productos'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Incluir los que no tienen stock').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ver resultados'));
-      await tester.pumpAndSettle();
-      final calls = repo.calls.length;
-
-      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
-      await tester.pumpAndSettle();
-
-      expect(repo.calls.length, calls + 1);
-      expect(repo.calls.last.includeZero, isFalse);
-      expect(repo.tipos.last, isNull);
-      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
     });
 
     testWidgets('la tarjeta ofrece Actualizar stock solo con stock.update', (tester) async {

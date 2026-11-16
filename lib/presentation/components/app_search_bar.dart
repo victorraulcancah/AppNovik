@@ -48,9 +48,6 @@ class AppSearchBar extends StatelessWidget {
               hintText: hint,
               elevation: const WidgetStatePropertyAll(0),
               leading: const Icon(Icons.search),
-              trailing: [
-                if (onScanned != null) BarcodeScanButton(onScanned: onScanned!),
-              ],
               padding: const WidgetStatePropertyAll(
                 EdgeInsets.symmetric(horizontal: 16),
               ),
@@ -58,6 +55,11 @@ class AppSearchBar extends StatelessWidget {
               onSubmitted: onSubmitted,
             ),
           ),
+          // El escáner de código de barras va a la derecha del campo, donde van los filtros.
+          if (onScanned != null) ...[
+            const SizedBox(width: 4),
+            BarcodeScanButton(onScanned: onScanned!),
+          ],
           if (onFilter != null) ...[
             const SizedBox(width: 4),
             IconButton(
@@ -89,6 +91,7 @@ class BarcodeScanButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: 'Escanear código de barras',
+      style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
       icon: const Icon(Icons.barcode_reader),
       onPressed: () async {
         final code = await BarcodeScanner.scan(context);

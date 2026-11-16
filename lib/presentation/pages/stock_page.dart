@@ -87,52 +87,6 @@ class _StockPageState extends State<StockPage> {
     stock.addSearchTerm(codigo);
   }
 
-  Future<void> _openFilters() async {
-    final stock = context.read<StockProvider>();
-    final result = await showAppFilterSheet(
-      context,
-      fields: [
-        AppFilterField(
-          id: 'tipo',
-          label: 'Tipo',
-          allLabel: 'Todos',
-          value: stock.tipo,
-          options: const [
-            AppFilterOption('p', 'Productos'),
-            AppFilterOption('s', 'Servicios'),
-          ],
-        ),
-        AppFilterField(
-          id: 'productos',
-          label: 'Productos',
-          allLabel: 'Solo con stock',
-          value: stock.includeZero ? 'todos' : null,
-          options: const [AppFilterOption('todos', 'Incluir los que no tienen stock')],
-        ),
-      ],
-    );
-    if (result != null) {
-      stock.setFilters(includeZero: result['productos'] != null, tipo: result['tipo']);
-    }
-  }
-
-  /// Los filtros del panel que están puestos, para mostrarlos como chips. "Solo con stock" es el
-  /// estado normal de la lista (como en la web), así que no cuenta como filtro.
-  List<AppActiveFilter> _activeFilters(StockProvider stock) => [
-        if (stock.tipo != null)
-          AppActiveFilter(
-            id: 'tipo',
-            label: 'Tipo: ${stock.tipo == 's' ? 'Servicios' : 'Productos'}',
-            onRemove: () => stock.setTipo(null),
-          ),
-        if (stock.includeZero)
-          AppActiveFilter(
-            id: 'sin-stock',
-            label: 'Incluye sin stock',
-            onRemove: () => stock.setIncludeZero(false),
-          ),
-      ];
-
   bool _can(String permission) =>
       context.read<AuthProvider>().session?.can(permission) ?? false;
 
@@ -328,13 +282,8 @@ class _StockPageState extends State<StockPage> {
                 controller: _searchController,
                 onChanged: _onSearchChanged,
                 onSubmitted: _onSearchSubmitted,
+                // Sin botón de filtros: en su lugar va el escáner de código de barras.
                 onScanned: _onScanned,
-                onFilter: _openFilters,
-                filterCount: _activeFilters(stock).length,
-              ),
-              AppActiveFilters(
-                filters: _activeFilters(stock),
-                onClear: () => stock.setFilters(includeZero: false, tipo: null),
               ),
               AppSearchChips(
                 terms: stock.searchTerms,
