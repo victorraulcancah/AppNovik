@@ -2662,7 +2662,7 @@ void main() {
         final card = find.byType(SaleLineCard);
         final name = tester.getRect(find.descendant(of: card, matching: find.textContaining('SUBWOOFER')));
         final total = tester.getRect(find.descendant(of: card, matching: find.byType(AppCountUp)));
-        final chip = tester.getRect(find.descendant(of: card, matching: find.text('Descuento 0 %')));
+        final chip = tester.getRect(find.descendant(of: card, matching: find.byTooltip('Precio y descuento')));
         final minus = tester.getRect(find.byTooltip('Menos'));
 
         // El total va bajo el nombre (no a su lado) y el descuento bajo la fila de la cantidad.
@@ -3576,10 +3576,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // El descuento está en un botón compacto; el campo se abre al tocarlo.
-      expect(find.text('Descuento 0 %'), findsOneWidget);
+      expect(find.byTooltip('Precio y descuento'), findsOneWidget);
       expect(_field('Descuento %'), findsNothing);
-      await tester.ensureVisible(find.text('Descuento 0 %'));
-      await tester.tap(find.text('Descuento 0 %'));
+      await tester.ensureVisible(find.byTooltip('Precio y descuento'));
+      await tester.tap(find.byTooltip('Precio y descuento'));
       await tester.pumpAndSettle();
 
       expect(find.text('Descuento %'), findsOneWidget);
@@ -3611,8 +3611,8 @@ void main() {
       sales.addProduct(_product(), cantidad: 2);
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Descuento 0 %'));
-      await tester.tap(find.text('Descuento 0 %'));
+      await tester.ensureVisible(find.byTooltip('Precio y descuento'));
+      await tester.tap(find.byTooltip('Precio y descuento'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(_field('Descuento %'));
       await tester.enterText(_field('Descuento %'), '150');
@@ -3658,7 +3658,7 @@ void main() {
         expect(find.textContaining('P. Unit.: S/ 40.00  ·  PIONEER'), findsOneWidget);
         expect(tester.widget<TextField>(inCard(find.byType(TextField)).first).controller!.text, '2');
         expect(inCard(find.text('S/ 80.00')), findsOneWidget);
-        expect(inCard(find.text('Descuento 0 %')), findsOneWidget);
+        expect(inCard(find.byTooltip('Precio y descuento')), findsOneWidget);
         expect(find.text('1 línea · 2 ítems'), findsOneWidget);
       });
 
@@ -3798,7 +3798,25 @@ void main() {
         final struck = tester.widget<Text>(inCard(find.text('S/ 80.00')));
         expect(struck.style?.decoration, TextDecoration.lineThrough);
         expect(inCard(find.text('−25 %')), findsOneWidget);
-        expect(inCard(find.text('Descuento 0 %')), findsNothing);
+        // Con descuento, el botón dice cuánto es (no el lápiz).
+        expect(inCard(find.byIcon(Icons.edit_outlined)), findsNothing);
+        expect(inCard(find.byIcon(Icons.sell_outlined)), findsOneWidget);
+      });
+
+      testWidgets('sin descuento el botón es un lápiz (sin texto) y abre el panel de precio y descuento', (tester) async {
+        final (sales, _) = await pumpSales(tester);
+        sales.selectWarehouse(1);
+        sales.addProduct(_product(), cantidad: 1);
+        await tester.pumpAndSettle();
+
+        expect(inCard(find.byIcon(Icons.edit_outlined)), findsOneWidget);
+        expect(inCard(find.textContaining('Descuento')), findsNothing);
+        expect(find.text('Descuento %', skipOffstage: false), findsNothing);
+
+        await tester.ensureVisible(inCard(find.byIcon(Icons.edit_outlined)));
+        await tester.tap(inCard(find.byIcon(Icons.edit_outlined)));
+        await tester.pumpAndSettle();
+        expect(find.text('Descuento %'), findsOneWidget);
       });
 
       testWidgets('el total de la línea corre hasta su valor al cambiar la cantidad', (tester) async {
@@ -3855,13 +3873,13 @@ void main() {
         await tester.pumpAndSettle();
         expect(inCard(_field('Precio S/')), findsNothing);
 
-        await tester.ensureVisible(find.text('Descuento 0 %'));
-        await tester.tap(find.text('Descuento 0 %'));
+        await tester.ensureVisible(find.byTooltip('Precio y descuento'));
+        await tester.tap(find.byTooltip('Precio y descuento'));
         await tester.pumpAndSettle();
         expect(inCard(_field('Precio S/')), findsOneWidget);
         expect(inCard(_field('Descuento %')), findsOneWidget);
 
-        await tester.tap(find.text('Descuento 0 %'));
+        await tester.tap(find.byTooltip('Precio y descuento'));
         await tester.pumpAndSettle();
         expect(inCard(_field('Precio S/')), findsNothing);
         expect(inCard(_field('Descuento %')), findsNothing);
@@ -3873,8 +3891,8 @@ void main() {
         sales.addProduct(_product(), cantidad: 2);
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Descuento 0 %'));
-        await tester.tap(find.text('Descuento 0 %'));
+        await tester.ensureVisible(find.byTooltip('Precio y descuento'));
+        await tester.tap(find.byTooltip('Precio y descuento'));
         await tester.pumpAndSettle();
         await tester.enterText(_field('Descuento %'), '20');
         await tester.pumpAndSettle();
@@ -3887,14 +3905,9 @@ void main() {
         expect(sales.lines.single.dto, 20);
       });
 
-      testWidgets('sin foto no dibuja recuadro; con foto pide la imagen del producto', (tester) async {
+      testWidgets('la tarjeta no muestra la foto del producto, aunque tenga', (tester) async {
         final (sales, _) = await pumpSales(tester);
         sales.selectWarehouse(1);
-        sales.addProduct(_product(), cantidad: 1);
-        await tester.pumpAndSettle();
-        expect(inCard(find.byType(ProductImage)), findsNothing);
-        expect(inCard(find.byIcon(Icons.inventory_2_outlined)), findsNothing);
-
         sales.addProduct(
           SaleProductEntity(
             id: 102,
@@ -3906,11 +3919,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(inCard(find.byType(ProductImage)), findsOneWidget);
-        expect(
-          tester.widget<ProductImage>(inCard(find.byType(ProductImage))).path,
-          '/storage/images/products/cable.png',
-        );
+        expect(inCard(find.byType(ProductImage)), findsNothing);
+        expect(inCard(find.text('CABLE RCA')), findsOneWidget);
       });
 
       testWidgets('un ítem libre lleva su insignia, el lápiz y ninguna foto ni tope', (tester) async {

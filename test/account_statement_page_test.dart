@@ -163,10 +163,13 @@ void main() {
   testWidgets('el rango de fechas se cambia con los chips', (tester) async {
     await _pump(tester, repo, withClient: true);
 
+    // Los chips se deslizan hacia un lado: el tercero queda fuera de la pantalla de 400 px.
+    await tester.drag(find.byType(ListView).first, const Offset(-300, 0));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Último mes'));
     await tester.pumpAndSettle();
 
-    expect(repo.lastQuery!.from, DateTime(DateTime.now().year, DateTime.now().month - 1));
+    expect(repo.lastQuery!.from, DateTime(2026, 10));
     expect(repo.calls.where((c) => c == 'main:1'), hasLength(2));
   });
 

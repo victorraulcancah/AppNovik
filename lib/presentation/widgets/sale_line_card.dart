@@ -5,7 +5,6 @@ import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../theme/app_theme.dart';
 import '../components/components.dart';
-import 'product_image.dart';
 
 /// Una línea de la venta como tarjeta: foto del producto, insignia con el código, nombre, precio
 /// unitario, cantidad con − / +, el total de la línea y el basurero para quitarla.
@@ -120,7 +119,6 @@ class _SaleLineCardState extends State<SaleLineCard> {
   /// Texto corto del descuento para el botón: `0 %`, `10 %` o `S/ 5.00`.
   String get _dtoLabel {
     final line = widget.line;
-    if (!line.tieneDescuento) return 'Descuento 0 %';
     return '−${line.dtoFijo ? _money(line.dto) : '${_dtoText(line.dto)} %'}';
   }
 
@@ -230,10 +228,6 @@ class _SaleLineCardState extends State<SaleLineCard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_photo(scheme) case final photo?) ...[
-          photo,
-          const SizedBox(width: 10),
-        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,28 +315,21 @@ class _SaleLineCardState extends State<SaleLineCard> {
     );
   }
 
-  /// La foto del producto. Sin foto no se dibuja nada (antes era un recuadro gris con un ícono
-  /// que le quitaba ancho al nombre y al total).
-  Widget? _photo(ColorScheme scheme) {
-    const size = 56.0;
-    final line = widget.line;
-    final path = line.product.imagen;
-    if (path == null || line.esLibre) return null;
-    return ProductImage(path: path, size: size, radius: 14, fit: BoxFit.cover);
-  }
-
   // ── Cantidad, descuento y basurero ──────────────────────────────────────────────────────
   Widget _controls(ThemeData theme, ColorScheme scheme, {required bool compact}) {
     final line = widget.line;
     final canMinus = line.cantidad > 1;
     final canPlus = !_atMax;
 
-    final chip = _DiscountChip(
-      label: _dtoLabel,
-      active: line.tieneDescuento,
-      expanded: _expanded,
-      onTap: _toggleExpanded,
-    );
+    // Sin descuento, un lápiz (editar precio y descuento); con descuento, el botón con cuánto es.
+    final Widget chip = line.tieneDescuento
+        ? _DiscountChip(label: _dtoLabel, expanded: _expanded, onTap: _toggleExpanded)
+        : _RoundButton(
+            tooltip: 'Precio y descuento',
+            icon: Icons.edit_outlined,
+            neutral: true,
+            onPressed: _toggleExpanded,
+          );
 
     final row = Row(
       children: [
@@ -630,20 +617,20 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-/// "Descuento 0 %": abre o cierra el panel de precio y descuento; con descuento puesto se pinta
-/// de color y muestra cuánto es.
+/// El botón del descuento puesto ("−10 %"): abre o cierra el panel de precio y descuento. Sin
+/// descuento, en su lugar va un lápiz (ver `_controls`).
 class _DiscountChip extends StatelessWidget {
   final String label;
-  final bool active;
   final bool expanded;
   final VoidCallback onTap;
 
   const _DiscountChip({
     required this.label,
-    required this.active,
     required this.expanded,
     required this.onTap,
   });
+
+  static const bool active = true;
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +638,9 @@ class _DiscountChip extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = active ? (dark ? scheme.primary : AppTheme.primaryButton) : scheme.onSurfaceVariant;
 
-    return Semantics(
+    return Tooltip(
+      message: 'Precio y descuento',
+      child: Semantics(
       button: true,
       expanded: expanded,
       label: 'Precio y descuento',
@@ -696,6 +685,7 @@ class _DiscountChip extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

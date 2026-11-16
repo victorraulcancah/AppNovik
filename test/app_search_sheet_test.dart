@@ -27,7 +27,7 @@ Future<void> _open(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('la ventana no se mueve ni cambia de alto al buscar, y el teclado sigue ahí', (tester) async {
+  testWidgets('la ventana no se mueve ni cambia de alto al buscar, y el teclado baja al llegar los resultados', (tester) async {
     await _open(tester);
     final topAntes = tester.getTopLeft(find.text('Producto')).dy;
     final cerrarAntes = tester.getTopLeft(find.text('Cerrar')).dy;
@@ -42,9 +42,23 @@ void main() {
     expect(find.text('evo uno'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Producto')).dy, topAntes);
     expect(tester.getTopLeft(find.text('Cerrar')).dy, cerrarAntes);
-    // El teclado no baja solo al llegar los resultados.
+    // El teclado baja al llegar los resultados, para verlos bien.
+    final field = tester.widget<EditableText>(find.byType(EditableText));
+    expect(field.focusNode.hasFocus, isFalse);
+  });
+
+  testWidgets('si se siguió escribiendo, no le quita el teclado', (tester) async {
+    await _open(tester);
+
+    await tester.enterText(find.byType(TextField), 'ev');
+    await tester.pump(const Duration(milliseconds: 500));
+    // Antes de que termine la respuesta anterior, escribe otra letra.
+    await tester.enterText(find.byType(TextField), 'evo');
+    await tester.pump();
+
     final field = tester.widget<EditableText>(find.byType(EditableText));
     expect(field.focusNode.hasFocus, isTrue);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('con muchos o pocos resultados la ventana mide lo mismo', (tester) async {

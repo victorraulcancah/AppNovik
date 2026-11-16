@@ -12,10 +12,13 @@ Color statementRose(BuildContext context) =>
 /// La cabecera del estado de cuenta: deuda total en soles y dólares siempre a la vista; tocándola
 /// se ven también la línea de crédito, el crédito disponible, la línea utilizada y la deuda anterior.
 class StatementSummaryCard extends StatefulWidget {
-  /// `null` mientras llega (la web muestra un indicador de carga).
+  /// `null` mientras llega o si no se pudo cargar.
   final StatementSummaryEntity? summary;
 
-  const StatementSummaryCard({super.key, required this.summary});
+  /// Todavía se está pidiendo: la web muestra un indicador de carga; si falló, un guion.
+  final bool loading;
+
+  const StatementSummaryCard({super.key, required this.summary, this.loading = false});
 
   @override
   State<StatementSummaryCard> createState() => _StatementSummaryCardState();
@@ -38,7 +41,9 @@ class _StatementSummaryCardState extends State<StatementSummaryCard> {
               Text(label, style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 2),
               s == null
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? (widget.loading
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('—'))
                   : Text(
                       value,
                       style: theme.textTheme.titleSmall?.copyWith(

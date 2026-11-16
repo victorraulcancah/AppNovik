@@ -22,6 +22,7 @@ Future<void> downloadFile(BuildContext context, DownloadedFile file) async {
     if (saved == null) return;
     snack(SnackBar(
       content: Text('${file.name} guardado'),
+      persist: false,
       action: SnackBarAction(label: 'Compartir', onPressed: () => shareDownloadedFile(file)),
     ));
   } catch (_) {

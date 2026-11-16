@@ -512,6 +512,8 @@ class _SalesPageState extends State<SalesPage> {
         SnackBar(
           content: Text('Quitaste "${removed.product.name}"', maxLines: 1, overflow: TextOverflow.ellipsis),
           duration: const Duration(seconds: 5),
+          // Con acción, Flutter lo deja fijo hasta cerrarlo; así se va solo a los 5 s.
+          persist: false,
           action: SnackBarAction(
             label: 'Deshacer',
             onPressed: () => sales.restoreLine(index, removed),

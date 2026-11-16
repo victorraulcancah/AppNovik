@@ -5,7 +5,6 @@ import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
 import '../providers/sales_provider.dart';
-import 'product_image.dart';
 import 'sale_free_item.dart';
 import 'sale_product_picker.dart';
 
@@ -59,8 +58,6 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
         final list = sales.priceListId;
         final stock = warehouse == null ? 0.0 : p.stockEn(warehouse);
         return AppSearchItem(
-          // La foto del producto; sin foto, un recuadro vacío para que todo quede alineado.
-          leading: p.imagen == null ? const ProductImagePlaceholder() : ProductImage(path: p.imagen!),
           title: p.name,
           subtitle: [
             p.codigo,
@@ -172,13 +169,7 @@ class _SaleProductEntryState extends State<SaleProductEntry> {
           borderRadius: BorderRadius.circular(14),
           child: InputDecorator(
             decoration: InputDecoration(
-              // Con el producto elegido, su foto (si tiene) en lugar del ícono.
-              prefixIcon: product?.imagen == null
-                  ? const Icon(Icons.inventory_2_outlined)
-                  : Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: ProductImage(path: product!.imagen!, size: 32, radius: 8),
-                    ),
+              prefixIcon: const Icon(Icons.inventory_2_outlined),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

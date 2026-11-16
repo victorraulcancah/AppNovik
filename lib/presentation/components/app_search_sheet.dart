@@ -100,6 +100,7 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
   Timer? _debounce;
   int _request = 0;
   String _query = '';
+  String _text = '';
   bool _loading = false;
   String? _error;
   String? _notice;
@@ -113,6 +114,7 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
 
   void _onChanged(String text) {
     _debounce?.cancel();
+    _text = text.trim();
     final query = text.trim();
     if (query.isEmpty) {
       _request++;
@@ -137,6 +139,9 @@ class _SearchBodyState<T> extends State<_SearchBody<T>> {
     });
     final result = await widget.search(query);
     if (!mounted || request != _request) return;
+    // Con la respuesta a la vista, el teclado baja para ver bien los resultados (la ventana tiene
+    // alto fijo, así que no se mueve). Solo si no se siguió escribiendo mientras tanto.
+    if (_text == query) FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = false;
       result.fold(

@@ -145,12 +145,30 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
     return Column(
       children: [
         header,
-        _controls(provider),
-        if (provider.hasClient) StatementSummaryCard(summary: provider.summary),
         Expanded(
           child: Stack(
             children: [
-              provider.hasClient ? _clientBody(provider) : _noClient(),
+              // Lo de arriba (cliente, fechas, cabecera, pestañas) no pasa de poco más de la mitad de la
+              // pantalla: si no cabe (letra grande, cabecera abierta) se desliza, y la lista conserva su lugar.
+              LayoutBuilder(
+                builder: (context, box) => Column(
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: box.maxHeight * 0.55),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            _controls(provider),
+                            if (provider.hasClient) StatementSummaryCard(summary: provider.summary, loading: provider.summaryLoading),
+                            if (provider.hasClient) _tabs(provider),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(child: provider.hasClient ? _list(provider) : _noClient()),
+                  ],
+                ),
+              ),
               if (provider.hasClient)
                 Positioned(
                   right: 16,
@@ -236,7 +254,8 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
     );
   }
 
-  Widget _clientBody(AccountStatementProvider provider) {
+  /// Las tres pestañas y, en la principal, el buscador de producto y el botón de agrupar.
+  Widget _tabs(AccountStatementProvider provider) {
     return Column(
       children: [
         Padding(
@@ -262,7 +281,6 @@ class _AccountStatementPageState extends State<AccountStatementPage> {
           ),
         ),
         if (provider.tab == StatementTab.estadoDeCuenta) _mainTools(provider),
-        Expanded(child: _list(provider)),
       ],
     );
   }
