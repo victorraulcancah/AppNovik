@@ -283,14 +283,6 @@ const saleExchangeRateMax = 4.3;
   return (first: today.subtract(Duration(days: back)), last: today);
 }
 
-/// Vendedor (usuario de la empresa) que se puede elegir como "vendedor encargado".
-class SellerEntity {
-  final int id;
-  final String name;
-
-  const SellerEntity({required this.id, required this.name});
-}
-
 /// Una línea de la venta: producto, cantidad y precio unitario en soles, con su descuento.
 ///
 /// Un **ítem libre** es una línea sin producto del catálogo (solo una descripción y un código

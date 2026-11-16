@@ -36,7 +36,7 @@ class _AppAreaChartState extends State<AppAreaChart> {
   static const _left = 44.0;
   static const _right = 8.0;
   static const _top = 8.0;
-  static const _bottom = 22.0;
+  static const _bottom = 36.0;
 
   int? _selected;
 
@@ -202,7 +202,7 @@ class _AreaPainter extends CustomPainter {
     required this.progress,
   }) : super(repaint: progress);
 
-  void _text(Canvas canvas, String text, Offset at, {TextAlign align = TextAlign.left}) {
+  void _text(Canvas canvas, String text, Offset at, {TextAlign align = TextAlign.left, bool below = false}) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
@@ -213,7 +213,7 @@ class _AreaPainter extends CustomPainter {
       TextAlign.center => at.dx - painter.width / 2,
       _ => at.dx,
     };
-    painter.paint(canvas, Offset(dx, at.dy - painter.height / 2));
+    painter.paint(canvas, Offset(dx, below ? at.dy : at.dy - painter.height / 2));
   }
 
   @override
@@ -239,10 +239,24 @@ class _AreaPainter extends CustomPainter {
     double xOf(int i) => n == 1 ? plot.center.dx : plot.left + plot.width * i / (n - 1);
     double yOf(double v) => plot.bottom - plot.height * (v / max).clamp(0.0, 1.0);
 
-    // Rótulos del eje X: unos cinco, repartidos.
-    final step = (n / 5).ceil().clamp(1, n);
+    // Rótulos del eje X, repartidos sin pisarse: "01-Noviembre" se parte en dos líneas (el día y
+    // abajo el mes) y se salta los que hagan falta según lo que midan.
+    final shown = [for (final l in labels) l.replaceFirst('-', '\n')];
+    var widest = 0.0;
+    for (final l in shown) {
+      final p = TextPainter(
+        text: TextSpan(text: l, style: textStyle),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+      )..layout();
+      if (p.width > widest) widest = p.width;
+    }
+    final gap = n == 1 ? plot.width : plot.width / (n - 1);
+    final step = (n / 5).ceil().clamp(1, n) > ((widest + 10) / gap).ceil()
+        ? (n / 5).ceil().clamp(1, n)
+        : ((widest + 10) / gap).ceil().clamp(1, n);
     for (var i = 0; i < n; i += step) {
-      _text(canvas, labels[i], Offset(xOf(i), size.height - bottom / 2 + 2), align: TextAlign.center);
+      _text(canvas, shown[i], Offset(xOf(i), plot.bottom + 4), align: TextAlign.center, below: true);
     }
 
     // La línea y el área se descubren de izquierda a derecha.

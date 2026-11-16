@@ -182,7 +182,6 @@ class DependencyInjection {
             searchClientsUseCase: SearchClientsUseCase(repository: _saleRepository),
             searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: _saleRepository),
             createSaleUseCase: CreateSaleUseCase(repository: _saleRepository),
-            getSellersUseCase: GetSellersUseCase(repository: _saleRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!..syncSession(auth.session),

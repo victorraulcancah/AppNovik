@@ -23,9 +23,6 @@ class SalesProvider extends ChangeNotifier {
   final SearchSaleProductsUseCase _searchProducts;
   final CreateSaleUseCase _createSale;
 
-  /// Vendedores para elegir el "vendedor encargado" de una cotización (opcional).
-  final GetSellersUseCase? _getSellers;
-
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
 
@@ -42,7 +39,6 @@ class SalesProvider extends ChangeNotifier {
     required SearchClientsUseCase searchClientsUseCase,
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
-    GetSellersUseCase? getSellersUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
@@ -55,7 +51,6 @@ class SalesProvider extends ChangeNotifier {
         _searchClients = searchClientsUseCase,
         _searchProducts = searchSaleProductsUseCase,
         _createSale = createSaleUseCase,
-        _getSellers = getSellersUseCase,
         _onSessionExpired = onSessionExpired;
 
   int? _companyId;
@@ -86,10 +81,6 @@ class SalesProvider extends ChangeNotifier {
   SaleProductFiltersEntity productFilters = const SaleProductFiltersEntity();
   bool _productFiltersLoaded = false;
 
-  /// Usuarios que se pueden elegir como "vendedor encargado" de una cotización; se piden la
-  /// primera vez que se abre el modal de la cotización.
-  List<SellerEntity> sellers = [];
-  bool _sellersLoaded = false;
   bool loading = false;
   String? error;
 
@@ -180,12 +171,12 @@ class SalesProvider extends ChangeNotifier {
     SaleCheckoutEntity? checkout,
     bool reservarStock = false,
     DateTime? vencimientoStock,
-    int? vendedorId,
   }) =>
       SaleFormEntity(
-        // La cotización lleva el vendedor que se eligió en su modal; la venta, el de la cotización
-        // que se culmina (en la web ese campo va oculto en "Crear venta").
-        vendedorId: tipoDocumento.esCotizacion ? vendedorId : fromQuote?.quoteDraft?.vendedorId,
+        // El vendedor no se elige: lo decide el servidor con el ejecutivo comercial del cliente (o,
+        // si no tiene, quien registra). Solo viaja el que ya traía la cotización que se edita o se
+        // culmina.
+        vendedorId: fromQuote?.quoteDraft?.vendedorId,
         dolares: esDolares,
         tipoCambio: checkout?.tipoCambio,
         fromQuoteId: fromQuote?.quoteDraft?.id,
@@ -226,8 +217,6 @@ class SalesProvider extends ChangeNotifier {
     paymentMethods = [];
     productFilters = const SaleProductFiltersEntity();
     _productFiltersLoaded = false;
-    sellers = [];
-    _sellersLoaded = false;
     exchangeRate = null;
     exchangeRateLoading = false;
     exchangeRateError = null;
@@ -416,23 +405,6 @@ class SalesProvider extends ChangeNotifier {
     if (result.isRight) {
       productFilters = result.right;
       _productFiltersLoaded = true;
-      notifyListeners();
-    } else {
-      _checkSession(result);
-    }
-  }
-
-  /// Los vendedores que se pueden elegir como encargados. Si fallan, la lista queda vacía y la
-  /// cotización se puede crear sin vendedor encargado.
-  Future<void> ensureSellers() async {
-    final companyId = _companyId;
-    final load = _getSellers;
-    if (companyId == null || load == null || _sellersLoaded) return;
-    final result = await load(companyId);
-    if (companyId != _companyId) return;
-    if (result.isRight) {
-      sellers = result.right;
-      _sellersLoaded = true;
       notifyListeners();
     } else {
       _checkSession(result);
@@ -874,7 +846,6 @@ class SalesProvider extends ChangeNotifier {
     SaleCheckoutEntity? checkout,
     bool reservarStock = false,
     DateTime? vencimientoStock,
-    int? vendedorId,
   }) async {
     final companyId = _companyId;
     final userId = _userId;
@@ -891,7 +862,6 @@ class SalesProvider extends ChangeNotifier {
         checkout: checkout,
         reservarStock: reservarStock,
         vencimientoStock: vencimientoStock,
-        vendedorId: vendedorId,
       ),
     );
 

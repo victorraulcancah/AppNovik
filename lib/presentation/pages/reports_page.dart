@@ -477,7 +477,8 @@ class _ReportsPageState extends State<ReportsPage> {
       title: p.name,
       lines: [
         if (detail.isNotEmpty) detail,
-        if (importes) 'Subtotal ${_soles(p.subtotal)} · Desc. ${_soles(p.descuento)}',
+        if (importes) 'Subtotal ${_soles(p.subtotal)}',
+        if (importes) 'Desc. ${_soles(p.descuento)}',
         if (showMargin) 'Margen ${_marginVisible ? _soles(p.margen) : 'S/. *******'}',
       ],
       trailingTitle: importes ? _soles(p.venta) : '${formatQuantity(p.cantidad)} uds.',

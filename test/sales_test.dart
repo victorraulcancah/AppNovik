@@ -90,18 +90,6 @@ class _FakeSaleRepository implements SaleRepository {
   bool rateFails = false;
   bool walkInFails = false;
   bool searchFails = false;
-  int sellerCalls = 0;
-  List<SellerEntity> sellers = const [
-    SellerEntity(id: 5, name: 'LUIS VENDEDOR'),
-    SellerEntity(id: 9, name: 'ANA'),
-  ];
-
-  @override
-  Future<Either<Failure, List<SellerEntity>>> getSellers(int companyId) async {
-    sellerCalls++;
-    return Either.right(sellers);
-  }
-
   @override
   Future<Either<Failure, ExchangeRateEntity>> getExchangeRate() async {
     rateCalls++;
@@ -296,7 +284,6 @@ SalesProvider _provider(_FakeSaleRepository sales) {
     searchClientsUseCase: SearchClientsUseCase(repository: sales),
     searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: sales),
     createSaleUseCase: CreateSaleUseCase(repository: sales),
-    getSellersUseCase: GetSellersUseCase(repository: sales),
   );
 }
 
@@ -1890,23 +1877,27 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Forma de pago'), findsNothing);
-      expect(find.text('Observaciones'), findsWidgets);
+      // Las observaciones se piden en el modal (como en la web), no en la pantalla del carrito.
+      expect(find.text('Observaciones'), findsNothing);
       expect(find.text('Registrar venta'), findsNothing);
 
       await tester.tap(find.text('Crear cotización'));
       await tester.pumpAndSettle();
       expect(find.text('Reservar stock'), findsOneWidget);
+      expect(find.text('Observaciones'), findsOneWidget);
       expect(find.text('Límite para reservar stock'), findsNothing);
 
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(find.text('Límite para reservar stock'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Observaciones'), 'Entregar mañana');
 
       await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
       await tester.pumpAndSettle();
 
       final sent = repo.sent!;
       expect(sent.tipoDocumento, SaleDocumentType.cotizacion);
+      expect(sent.observaciones, 'Entregar mañana');
       expect(sent.reservarStock, isTrue);
       expect(sent.vencimientoStock, isNotNull);
       expect(find.text('Cotización registrada'), findsOneWidget);
@@ -3428,23 +3419,18 @@ void main() {
         expect(p.lines.single.dto, 10);
       });
 
-      test('al editar la cotización se manda el vendedor que se eligió (o ninguno)', () async {
+      test('al editar la cotización se conserva el vendedor que ya traía', () async {
         final repo = _FakeSaleRepository();
         final p = await _ready(repo);
         await p.loadFromQuote(quoteWith([item()], vendedor: 5));
         p.selectTipoDocumento(SaleDocumentType.cotizacion);
 
-        expect(await p.submit(vendedorId: 9), isTrue);
-        expect(repo.sent!.vendedorId, 9);
-        expect(repo.sent!.fromQuoteId, 2);
-
-        await p.loadFromQuote(quoteWith([item()], vendedor: 5));
-        p.selectTipoDocumento(SaleDocumentType.cotizacion);
         expect(await p.submit(), isTrue);
-        expect(repo.sent!.vendedorId, isNull); // se quitó el vendedor encargado
+        expect(repo.sent!.vendedorId, 5);
+        expect(repo.sent!.fromQuoteId, 2);
       });
 
-      test('una cotización nueva manda el vendedor que se elige en su modal', () async {
+      test('una cotización nueva no manda vendedor: lo decide el servidor (ejecutivo del cliente o quien la crea)', () async {
         final repo = _FakeSaleRepository();
         final p = await _ready(repo);
         p.selectWarehouse(1);
@@ -3453,44 +3439,8 @@ void main() {
         p.addProduct(_product(), cantidad: 1);
         p.selectTipoDocumento(SaleDocumentType.cotizacion);
 
-        expect(await p.submit(vendedorId: 5), isTrue);
-        expect(repo.sent!.vendedorId, 5);
-      });
-    });
-
-    group('vendedores', () {
-      test('se piden una sola vez', () async {
-        final repo = _FakeSaleRepository();
-        final p = await _ready(repo);
-
-        await p.ensureSellers();
-        await p.ensureSellers();
-
-        expect(repo.sellerCalls, 1);
-        expect(p.sellers.map((s) => s.name), ['LUIS VENDEDOR', 'ANA']);
-      });
-
-      test('GET /usuarios/list pide los roles Vendedor y Admin Empresa de la empresa', () async {
-        late Uri uri;
-        final dataSource = SaleRemoteDataSourceImpl(
-          client: MockClient((request) async {
-            uri = request.url;
-            return http.Response('[{"id": 5, "name": "LUIS", "usuario": "luis"}, {"id": 6}]', 200);
-          }),
-        );
-
-        final sellers = await dataSource.getSellers('t', 3);
-
-        expect(uri.path, endsWith('/usuarios/list'));
-        expect(uri.queryParameters, {'company_id': '3', 'roles[0]': 'Vendedor', 'roles[1]': 'Admin Empresa'});
-        expect(sellers, hasLength(1)); // el que no trae nombre se descarta
-        expect(sellers.single.id, 5);
-        expect(sellers.single.name, 'LUIS');
-      });
-
-      test('sellersFromJson ignora lo que no es una lista', () {
-        expect(sellersFromJson({'message': 'x'}), isEmpty);
-        expect(sellersFromJson(null), isEmpty);
+        expect(await p.submit(), isTrue);
+        expect(repo.sent!.vendedorId, isNull);
       });
     });
   });
@@ -3673,7 +3623,7 @@ void main() {
       expect(sales.total, 0);
     });
 
-    testWidgets('la cotización pregunta por el vendedor encargado y lo manda', (tester) async {
+    testWidgets('el modal de la cotización no pregunta por el vendedor ni pide la lista de usuarios', (tester) async {
       final (sales, repo) = await pumpSales(tester);
       sales.selectWarehouse(1);
       sales.selectClient(_acme);
@@ -3683,36 +3633,13 @@ void main() {
 
       await tester.tap(find.text('Crear cotización'));
       await tester.pumpAndSettle();
+      expect(find.text('Vendedor encargado'), findsNothing);
+      expect(find.text('Sin vendedor encargado'), findsNothing);
 
-      expect(find.text('Vendedor encargado (opcional)'), findsOneWidget);
-      expect(repo.sellerCalls, 1);
-
-      // El propio usuario (Ana, id 9) no se ofrece: solo los demás.
-      await tester.tap(find.text('Sin vendedor encargado'));
-      await tester.pumpAndSettle();
-      expect(find.text('ANA'), findsNothing);
-      await tester.tap(find.text('LUIS VENDEDOR').last);
-      await tester.pumpAndSettle();
       await tester.tap(inSheet(find.text('Crear')));
       await tester.pumpAndSettle();
 
       expect(repo.sent!.tipoDocumento, SaleDocumentType.cotizacion);
-      expect(repo.sent!.vendedorId, 5);
-    });
-
-    testWidgets('el vendedor encargado es opcional', (tester) async {
-      final (sales, repo) = await pumpSales(tester);
-      sales.selectWarehouse(1);
-      sales.selectClient(_acme);
-      sales.addProduct(_product(), cantidad: 1);
-      sales.selectTipoDocumento(SaleDocumentType.cotizacion);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Crear cotización'));
-      await tester.pumpAndSettle();
-      await tester.tap(inSheet(find.text('Crear')));
-      await tester.pumpAndSettle();
-
       expect(repo.sent!.vendedorId, isNull);
     });
 
@@ -4041,19 +3968,11 @@ void main() {
     });
   });
 
-  group('Modal de la cotización: vendedor encargado', () {
-    const sellers = [
-      SellerEntity(id: 5, name: 'LUIS VENDEDOR'),
-      SellerEntity(id: 6, name: 'MARÍA'),
-      SellerEntity(id: 9, name: 'ANA'),
-    ];
-
+  group('Modal de la cotización', () {
     /// Abre el modal desde un botón; lo que devuelve al cerrarse queda en la lista.
     Future<List<QuoteOptions?>> open(
       WidgetTester tester, {
-      List<SellerEntity> sellers = const [],
-      int? initial,
-      int? exclude,
+      String observaciones = '',
       bool editing = false,
     }) async {
       _phoneScreen(tester);
@@ -4070,9 +3989,7 @@ void main() {
                     now: DateTime(2026, 10, 20),
                     client: 'ACME',
                     total: 'S/ 100.00',
-                    sellers: sellers,
-                    initialSellerId: initial,
-                    excludeSellerId: exclude,
+                    initialObservaciones: observaciones,
                     editing: editing,
                   ),
                 ),
@@ -4087,76 +4004,48 @@ void main() {
       return results;
     }
 
-    testWidgets('sin vendedores no sale el campo', (tester) async {
+    testWidgets('no tiene campo de vendedor encargado: lo decide el ejecutivo comercial del cliente', (tester) async {
       await open(tester);
 
-      expect(find.text('Vendedor encargado (opcional)'), findsNothing);
+      expect(find.text('Vendedor encargado'), findsNothing);
+      expect(find.text('Sin vendedor encargado'), findsNothing);
+      expect(find.byType(DropdownButtonFormField<int?>), findsNothing);
     });
 
-    testWidgets('el propio usuario no se ofrece y se puede elegir a otro', (tester) async {
-      final results = await open(tester, sellers: sellers, exclude: 9);
+    testWidgets('trae el campo de observaciones, con lo que ya tenía, y lo devuelve', (tester) async {
+      final results = await open(tester, observaciones: 'Entregar el lunes');
 
-      expect(find.text('Vendedor encargado (opcional)'), findsOneWidget);
-      await tester.tap(find.text('Sin vendedor encargado'));
-      await tester.pumpAndSettle();
-      expect(find.text('LUIS VENDEDOR'), findsOneWidget);
-      expect(find.text('MARÍA'), findsOneWidget);
-      expect(find.text('ANA'), findsNothing);
+      expect(find.text('Observaciones'), findsOneWidget);
+      expect(find.text('Entregar el lunes'), findsOneWidget);
 
-      await tester.tap(find.text('MARÍA'));
-      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Entregar el lunes'), '  Entregar el martes ');
       await tester.tap(find.text('Crear'));
       await tester.pumpAndSettle();
 
-      expect(results.single!.vendedorId, 6);
+      expect(results.single!.observaciones, 'Entregar el martes');
       expect(results.single!.reservarStock, isFalse);
     });
 
-    testWidgets('sin tocar nada la cotización queda sin vendedor encargado', (tester) async {
-      final results = await open(tester, sellers: sellers, exclude: 9);
+    testWidgets('el modal va en el orden de la web: reserva y observaciones', (tester) async {
+      await open(tester);
 
-      await tester.tap(find.text('Crear'));
-      await tester.pumpAndSettle();
-
-      expect(results.single!.vendedorId, isNull);
+      final reserva = tester.getTopLeft(find.text('Reservar stock')).dy;
+      final observ = tester.getTopLeft(find.text('Observaciones')).dy;
+      expect(reserva, lessThan(observ));
     });
 
-    testWidgets('al editar arranca con el vendedor que ya tenía y se puede quitar', (tester) async {
-      final results = await open(tester, sellers: sellers, initial: 6, exclude: 9, editing: true);
+    testWidgets('al editar dice "Editar"', (tester) async {
+      final results = await open(tester, editing: true);
 
       expect(find.text('Editar cotización'), findsOneWidget);
-      expect(find.text('MARÍA'), findsOneWidget);
-
-      await tester.tap(find.text('MARÍA'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sin vendedor encargado').last);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Editar'));
       await tester.pumpAndSettle();
 
-      expect(results.single!.vendedorId, isNull);
-    });
-
-    testWidgets('al editar sin tocar el campo se conserva el vendedor', (tester) async {
-      final results = await open(tester, sellers: sellers, initial: 6, exclude: 9, editing: true);
-
-      await tester.tap(find.text('Editar'));
-      await tester.pumpAndSettle();
-
-      expect(results.single!.vendedorId, 6);
-    });
-
-    testWidgets('si el vendedor de la cotización ya no se puede elegir, queda sin vendedor', (tester) async {
-      final results = await open(tester, sellers: sellers, initial: 77, exclude: 9);
-
-      await tester.tap(find.text('Crear'));
-      await tester.pumpAndSettle();
-
-      expect(results.single!.vendedorId, isNull);
+      expect(results.single!.observaciones, isEmpty);
     });
 
     testWidgets('cancelar no devuelve nada', (tester) async {
-      final results = await open(tester, sellers: sellers, exclude: 9);
+      final results = await open(tester);
 
       await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();

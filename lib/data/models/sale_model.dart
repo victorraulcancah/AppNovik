@@ -125,18 +125,6 @@ ExchangeRateEntity exchangeRateFromJson(Map<String, dynamic> json) => ExchangeRa
       margen: _double(json['margen']) ?? 0,
     );
 
-/// `GET /usuarios/list`: los usuarios de la empresa con el rol pedido (`[{id, name, ...}]`).
-List<SellerEntity> sellersFromJson(dynamic json) {
-  if (json is! List) return const [];
-  final result = <SellerEntity>[];
-  for (final e in json) {
-    if (e is! Map) continue;
-    final id = _int(e['id']);
-    final name = _text(e['name']);
-    if (id != null && name != null) result.add(SellerEntity(id: id, name: name));
-  }
-  return result;
-}
 
 String _day(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

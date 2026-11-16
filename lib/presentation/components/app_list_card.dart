@@ -88,8 +88,6 @@ class AppListCard extends StatelessWidget {
                           children: [
                             Text(
                               title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
@@ -97,8 +95,6 @@ class AppListCard extends StatelessWidget {
                             for (final line in lines)
                               Text(
                                 line,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                 ),

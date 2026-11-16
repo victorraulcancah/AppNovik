@@ -27,20 +27,12 @@ class SalesPage extends StatefulWidget {
 }
 
 class _SalesPageState extends State<SalesPage> {
-  final _observaciones = TextEditingController();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _canSell) context.read<SalesProvider>().ensureLoaded();
     });
-  }
-
-  @override
-  void dispose() {
-    _observaciones.dispose();
-    super.dispose();
   }
 
   bool get _canSell =>
@@ -124,24 +116,20 @@ class _SalesPageState extends State<SalesPage> {
 
     var ok = false;
     if (tipo.esCotizacion) {
-      // La cotización pregunta si reserva el stock y hasta cuándo, y quién es el vendedor encargado.
-      await sales.ensureSellers();
-      if (!mounted) return;
+      // La cotización pregunta si reserva el stock y hasta cuándo, y sus observaciones.
       final options = await showQuoteOptions(
         context,
         now: DateTime.now(),
         client: client.name,
         total: formatMoney(sales.total, symbol: sales.moneySymbol),
-        sellers: sales.sellers,
-        initialSellerId: sales.vendedorDeCotizacion,
-        excludeSellerId: session?.user.id,
+        initialObservaciones: sales.observaciones,
         editing: sales.fromQuote != null,
       );
       if (options == null || !mounted) return;
+      sales.setObservaciones(options.observaciones);
       ok = await sales.submit(
         reservarStock: options.reservarStock,
         vencimientoStock: options.vencimientoStock,
-        vendedorId: options.vendedorId,
       );
     } else {
       // La venta se arma y se crea en el modal "Crear venta" (fecha, entrega y pagos).
@@ -149,7 +137,6 @@ class _SalesPageState extends State<SalesPage> {
     }
     if (!mounted) return;
     if (ok) {
-      _observaciones.clear();
       await showSaleRegistered(context, sales.lastSale!);
     }
   }
@@ -224,12 +211,8 @@ class _SalesPageState extends State<SalesPage> {
                     _cliente(sales),
                     const SizedBox(height: 16),
                     _productos(sales),
-                    // En una venta, la fecha, la entrega, los pagos y las observaciones van en el
-                    // modal "Crear venta"; la cotización solo lleva observaciones.
-                    if (sales.tipoDocumento.esCotizacion) ...[
-                      const SizedBox(height: 16),
-                      _pago(sales),
-                    ],
+                    // Las observaciones, la fecha, la entrega y los pagos se piden en el modal de
+                    // "Crear cotización" o de "Crear venta", como en la web.
                   ],
                 ),
               ),
@@ -289,10 +272,7 @@ class _SalesPageState extends State<SalesPage> {
             ),
             if (quote != null || sales.quoteError != null)
               TextButton(
-                onPressed: () {
-                  sales.cancelQuote();
-                  _observaciones.clear();
-                },
+                onPressed: sales.cancelQuote,
                 child: Text(quote != null ? 'Cancelar' : 'Cerrar'),
               ),
           ],
@@ -563,20 +543,6 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
-  /// Observaciones de la cotización (la venta las pide en el modal "Crear venta").
-  Widget _pago(SalesProvider sales) {
-    return AppSection(
-      title: 'Observaciones',
-      icon: Icons.notes_outlined,
-      child: AppTextField(
-        controller: _observaciones,
-        label: 'Observaciones (opcional)',
-        maxLines: 2,
-        keyboardType: TextInputType.multiline,
-      ),
-    );
-  }
-
   Widget _bottomBar(SalesProvider sales) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -629,10 +595,7 @@ class _SalesPageState extends State<SalesPage> {
                         child: AppButton(
                           label: sales.tipoDocumento.esCotizacion ? 'Crear cotización' : 'Registrar venta',
                           loading: sales.submitting,
-                          onPressed: () {
-                            sales.setObservaciones(_observaciones.text);
-                            _submit();
-                          },
+                          onPressed: _submit,
                         ),
                       ),
                     ],

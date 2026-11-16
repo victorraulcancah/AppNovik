@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/import_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
@@ -75,7 +76,7 @@ Future<bool?> showProductDetail(
             AppDetailRow(label: 'SKU', value: p.sku),
             AppDetailRow(label: 'Proveedor', value: p.proveedor),
             AppDetailRow(label: 'Adicional', value: p.descripcion),
-            AppDetailRow(label: 'Usuario', value: p.usuario),
+            AppDetailRow(label: 'Usuario', value: shortPersonName(p.usuario)),
             AppDetailRow(label: 'Venta sin stock', valueWidget: _siNo(p.ventaSinStock)),
             AppDetailRow(label: 'Duplicar', valueWidget: _siNo(p.duplicar)),
             AppDetailRow(

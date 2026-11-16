@@ -51,14 +51,6 @@ class GetSaleProductFiltersUseCase {
   Future<Either<Failure, SaleProductFiltersEntity>> call() => repository.getProductFilters();
 }
 
-/// Los vendedores que se pueden elegir como "vendedor encargado" de una cotización.
-class GetSellersUseCase {
-  final SaleRepository repository;
-  GetSellersUseCase({required this.repository});
-
-  Future<Either<Failure, List<SellerEntity>>> call(int companyId) => repository.getSellers(companyId);
-}
-
 class GetPaymentMethodsUseCase {
   final SaleRepository repository;
   GetPaymentMethodsUseCase({required this.repository});

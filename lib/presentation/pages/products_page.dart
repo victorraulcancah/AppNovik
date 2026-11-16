@@ -424,7 +424,7 @@ class _ProductsPageState extends State<ProductsPage> {
 
     // Los mismos datos que la tabla de la web: tipo, código, descripción,
     // marca, categoría, unidad de medida y estado.
-    final detalle = [p.marca, p.categoria]
+    final detalle = [if (p.esServicio) 'Servicio', p.marca, p.categoria]
         .whereType<String>()
         .where((t) => t.isNotEmpty)
         .join(' · ');
@@ -434,8 +434,7 @@ class _ProductsPageState extends State<ProductsPage> {
       leading: p.imagen == null ? null : ProductImage(path: p.imagen!),
       title: p.name,
       lines: [
-        [p.esServicio ? 'Servicio' : 'Producto', if (p.codigo.isNotEmpty) p.codigo]
-            .join(' · '),
+        if (p.codigo.isNotEmpty) 'Código · ${p.codigo}',
         if (detalle.isNotEmpty) detalle,
       ],
       trailingTitle: p.unidadLabel,
