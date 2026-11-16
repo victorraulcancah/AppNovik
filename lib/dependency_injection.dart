@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
 // Data Layer
+import 'data/datasources/account_statement_remote_datasource.dart';
+import 'data/repositories/account_statement_repository_impl.dart';
 import 'data/datasources/auth_local_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/client_record_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
+import 'data/datasources/debt_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
 import 'data/datasources/guide_remote_datasource.dart';
 import 'data/datasources/inicio_cache_datasource.dart';
@@ -20,6 +23,7 @@ import 'data/datasources/theme_local_datasource.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/client_record_repository_impl.dart';
 import 'data/repositories/client_repository_impl.dart';
+import 'data/repositories/debt_repository_impl.dart';
 import 'data/repositories/document_repository_impl.dart';
 import 'data/repositories/guide_repository_impl.dart';
 import 'data/repositories/inicio_repository_impl.dart';
@@ -30,9 +34,12 @@ import 'data/repositories/sale_repository_impl.dart';
 import 'data/repositories/stock_repository_impl.dart';
 
 // Domain Layer
+import 'domain/repositories/account_statement_repository.dart';
+import 'domain/usecases/account_statement_usecases.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/client_record_repository.dart';
 import 'domain/repositories/client_repository.dart';
+import 'domain/repositories/debt_repository.dart';
 import 'domain/repositories/document_repository.dart';
 import 'domain/repositories/guide_repository.dart';
 import 'domain/repositories/inicio_repository.dart';
@@ -45,6 +52,7 @@ import 'domain/repositories/stock_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_record_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
+import 'domain/usecases/debt_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
 import 'domain/usecases/guide_usecases.dart';
 import 'domain/usecases/inicio_cache_usecases.dart';
@@ -57,10 +65,12 @@ import 'domain/usecases/stock_manage_usecases.dart';
 import 'domain/usecases/stock_usecases.dart';
 
 // Presentation Layer
+import 'presentation/providers/account_statement_provider.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/other_documents_provider.dart';
 import 'presentation/providers/client_list_provider.dart';
 import 'presentation/providers/clients_provider.dart';
+import 'presentation/providers/debts_provider.dart';
 import 'presentation/providers/guide_provider.dart';
 import 'presentation/providers/inicio_provider.dart';
 import 'presentation/providers/documents_provider.dart';
@@ -159,6 +169,20 @@ class DependencyInjection {
             ..prefetch(auth.pendingUser),
         ),
 
+        // El módulo Estado de cuenta (cabecera, movimientos, pedidos y pagos de un cliente).
+        ChangeNotifierProxyProvider<AuthProvider, AccountStatementProvider>(
+          create: (context) => AccountStatementProvider(
+            searchClientsUseCase: SearchStatementClientsUseCase(repository: _accountStatementRepository),
+            getStatementUseCase: GetStatementUseCase(repository: _accountStatementRepository),
+            getOrdersUseCase: GetStatementOrdersUseCase(repository: _accountStatementRepository),
+            getPaymentsUseCase: GetStatementPaymentsUseCase(repository: _accountStatementRepository),
+            exportExcelUseCase: ExportStatementExcelUseCase(repository: _accountStatementRepository),
+            exportPdfUseCase: ExportStatementPdfUseCase(repository: _accountStatementRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
         ChangeNotifierProxyProvider<AuthProvider, ReportsProvider>(
           create: (context) => ReportsProvider(
             getSalesReportUseCase: GetSalesReportUseCase(repository: _reportRepository),
@@ -209,6 +233,18 @@ class DependencyInjection {
             exportClientsUseCase: ExportClientsUseCase(repository: _clientRecordRepository),
             getCategoriesUseCase: GetClientCategoriesUseCase(repository: _clientRecordRepository),
             saveCategoriesUseCase: SaveClientCategoriesUseCase(repository: _clientRecordRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
+        // El módulo Deudas (resumen de deuda pendiente por cliente).
+        ChangeNotifierProxyProvider<AuthProvider, DebtsProvider>(
+          create: (context) => DebtsProvider(
+            getDebtsUseCase: GetDebtsUseCase(repository: _debtRepository),
+            searchClientsUseCase: SearchDebtClientsUseCase(repository: _debtRepository),
+            getSellersUseCase: GetDebtSellersUseCase(repository: _debtRepository),
+            exportDebtsUseCase: ExportDebtsUseCase(repository: _debtRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!..syncSession(auth.session),
@@ -286,6 +322,16 @@ class DependencyInjection {
       );
 
   static InicioRepository get _inicioRepository => _inicioRepo;
+
+  static DebtRepository get _debtRepository => DebtRepositoryImpl(
+        remoteDataSource: DebtRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static AccountStatementRepository get _accountStatementRepository => AccountStatementRepositoryImpl(
+        remoteDataSource: AccountStatementRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
 
   static ClientRecordRepository get _clientRecordRepository => ClientRecordRepositoryImpl(
         remoteDataSource: ClientRecordRemoteDataSourceImpl(client: _httpClient),

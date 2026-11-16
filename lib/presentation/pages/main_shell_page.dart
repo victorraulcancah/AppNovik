@@ -6,7 +6,9 @@ import '../components/components.dart';
 import '../../core/constants/app_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/shell_navigation.dart';
+import 'account_statement_page.dart';
 import 'clients_page.dart';
+import 'debts_page.dart';
 import 'documents_page.dart';
 import 'inicio_page.dart';
 import 'products_page.dart';
@@ -38,7 +40,7 @@ class _AppModulo {
 }
 
 /// Módulos ya construidos que no se muestran por ahora (para mostrarlos, quitar su slug de acá).
-const _ocultos = {'clientes'};
+const _ocultos = <String>{};
 
 const _catalogo = [
   _AppModulo('inicio', 'Inicio', Icons.home_outlined, Icons.home, siempre: true),
@@ -58,6 +60,14 @@ const _catalogo = [
   ),
   _AppModulo('productos', 'Productos', Icons.category_outlined, Icons.category),
   _AppModulo('clientes', 'Clientes', Icons.people_alt_outlined, Icons.people_alt),
+  // En la web el módulo "Pagos" se llama "Deudas".
+  _AppModulo('pagos', 'Deudas', Icons.payments_outlined, Icons.payments),
+  _AppModulo(
+    'estado-de-cuenta',
+    'Estado de cuenta',
+    Icons.account_balance_wallet_outlined,
+    Icons.account_balance_wallet,
+  ),
 ];
 
 /// Contenedor principal. Solo muestra los módulos que la empresa del usuario
@@ -179,6 +189,8 @@ class _MainShellPageState extends State<MainShellPage> {
             'reportes' => const ReportsPage(),
             'productos' => const ProductsPage(),
             'clientes' => const ClientsPage(),
+            'estado-de-cuenta' => const AccountStatementPage(),
+            'pagos' => const DebtsPage(),
             'stock' => const StockPage(),
             'documentos' => const DocumentsPage(),
             _ => _ModuloVacio(

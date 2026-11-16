@@ -101,8 +101,6 @@ Future<ShellNavigation> _pump(
 
 const _todos = ['Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos', 'Clientes'];
 
-// Clientes está construido pero oculto: no debe aparecer aunque la empresa lo tenga.
-
 void main() {
   testWidgets('Inicio siempre aparece primero, aunque la empresa no tenga módulos', (tester) async {
     await _pump(tester, const []);
@@ -137,13 +135,13 @@ void main() {
     expect(find.byIcon(Icons.description_outlined), findsOneWidget);
     expect(find.text('Documentos'), findsOneWidget);
     expect(find.text('Productos'), findsOneWidget);
-    expect(find.text('Clientes'), findsNothing);
+    expect(find.text('Clientes'), findsOneWidget);
     expect(find.text('pantalla inicio'), findsNothing);
 
     await tester.tap(find.text('Productos'));
     await tester.pumpAndSettle();
     expect(find.text('pantalla productos'), findsOneWidget);
-    // Sigue marcado "Más" porque Clientes no cabe en la barra.
+    // Sigue marcado "Más" porque Productos no cabe en la barra.
     final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(bar.selectedIndex, 4);
   });
@@ -170,16 +168,22 @@ void main() {
     await _pump(tester, _todos, size: const Size(1100, 800));
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
-    for (final t in ['Inicio', 'Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos']) {
+    for (final t in ['Inicio', 'Ventas', 'Reportes', 'Stock', 'Documentos', 'Productos', 'Clientes']) {
       expect(find.descendant(of: find.byType(NavigationRail), matching: find.text(t)), findsOneWidget);
     }
     expect(find.text('Más'), findsNothing);
-    expect(find.text('Clientes'), findsNothing);
   });
 
-  testWidgets('Clientes no aparece en el menú aunque la empresa lo tenga', (tester) async {
-    await _pump(tester, const ['Ventas', 'Clientes']);
-    expect(find.text('Clientes'), findsNothing);
-    expect(find.text('Ventas'), findsOneWidget);
+  testWidgets('Clientes, Deudas y Estado de cuenta aparecen cuando la empresa los tiene', (tester) async {
+    await _pump(tester, const ['Ventas', 'Clientes', 'Pagos', 'Estado de Cuenta'], size: const Size(1100, 800));
+    for (final t in ['Ventas', 'Clientes', 'Deudas', 'Estado de cuenta']) {
+      expect(find.descendant(of: find.byType(NavigationRail), matching: find.text(t)), findsOneWidget);
+    }
+  });
+
+  testWidgets('sin el módulo, Deudas y Estado de cuenta no aparecen', (tester) async {
+    await _pump(tester, const ['Ventas', 'Clientes'], size: const Size(1100, 800));
+    expect(find.text('Deudas'), findsNothing);
+    expect(find.text('Estado de cuenta'), findsNothing);
   });
 }

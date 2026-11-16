@@ -198,6 +198,16 @@ Reportes es el reporte **Ventas General** de la web (pestaña con permiso `repor
 - **Pendiente**: el interruptor "monto sin IGV" de la web y el punto de venta con caja.
 - La app no repite la venta si falla la red: avisa que se revise Documentos antes de reintentar, porque el servidor pudo haberla registrado.
 
+### Estado de Deudas
+Módulo **Deudas** (en la web, el módulo "Pagos" se muestra como "Deudas"; slug `pagos`, va en "Más"). Copia `pagos-y-deudas` de la web: solo la lista **Deudas Pendientes** (las pestañas Pagadas y Contraentregas están comentadas en la web y no se hicieron).
+- **Datos**: `GET /deudas/clientes/resumen` con `pagination[current]`, `pagination[pageSize]` (30) y `filters[client_id]`, `filters[vendedor_id]`, `filters[cliente]` (la búsqueda). Responde `data`, `current_page`, `last_page`, `total`, `total_soles` y `total_dolares`. El servidor ya ordena de mayor a menor deuda en soles y solo trae clientes con deuda distinta de cero.
+- **Tarjeta** (`AppListCard`, sin numeración): cliente, "Línea utilizada S/. …", "Crédito S/. …", deuda en soles destacada y, si hay, deuda en dólares debajo. Arriba, "Total soles" y "Total dólares" (`AppMetricCard`) con la suma de todo lo filtrado, no solo de lo cargado.
+- **Búsqueda y filtros**: el buscador filtra por nombre del cliente; el panel de filtros tiene **Cliente** (buscador `GET /clientes/search`, con `validar_vendedor=true` si el usuario no ve a todos) y **Ejecutivo comercial** (`GET /usuarios/list` con rol Vendedor; los nombres salen cortos, "Francis B."). Los filtros puestos salen como chips que se quitan.
+- **Permisos**: `pagos.index` para entrar (sin él, "Sin acceso" y no se pide nada). Con `pagos.todos_los_vendedores` o `deudas.todos_los_vendedores` se ve el filtro de ejecutivo; sin ellos, como en la web, la lista va siempre filtrada por el propio usuario (`filters[vendedor_id]` = su id) y el servidor limita al Vendedor a su cartera.
+- **Excel**: "Exportar Excel" en el botón de acciones; `POST /deudas/clientes/resumen/export-excel` con los filtros de cliente y ejecutivo (no la búsqueda, igual que la web); se guarda como "Deudas Pendientes.xlsx" con el mismo guardado/compartir de los demás módulos.
+- **En tablet** la lista queda centrada con ancho máximo de 720 (no hay panel de detalle porque la web no lo tiene).
+- **No se hizo**: el ícono "Ver estado de cuenta" de cada fila (abre el módulo Estado de cuenta con el cliente ya elegido; depende de que ese módulo reciba un cliente), el orden por columna de la tabla de la web (el servidor ya trae de mayor a menor deuda en soles) ni el PDF (está oculto en la web).
+
 ## 3. Preguntas abiertas
 
 1. **¿Un mismo usuario puede trabajar con más de una empresa?** Hoy el backend no lo permite (un usuario = una empresa). Si hace falta, habría que cambiar el backend o aceptar dos logins distintos en la app.
