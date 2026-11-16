@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
+import '../utils/barcode_scanner.dart';
 import '../providers/sales_provider.dart';
 import 'product_image.dart';
 import 'product_image_viewer.dart';
@@ -17,7 +18,6 @@ typedef _Pick = ({SaleProductEntity product, int cantidad});
 /// ajustan después en la tarjeta del carrito). Devuelve `true` si se agregó algo.
 Future<bool> showSaleProductPicker(BuildContext context) async {
   final sales = context.read<SalesProvider>();
-  sales.ensureProductFilters();
 
   final selection = ValueNotifier<Map<int, _Pick>>({});
   final hasSelection = ValueNotifier<bool>(false);
@@ -71,10 +71,6 @@ class _PickerBodyState extends State<_PickerBody> {
   String? _error;
   List<SaleProductEntity> _results = [];
 
-  bool _filtersOpen = false;
-  int? _categoryId;
-  int? _brandId;
-
   @override
   void dispose() {
     _debounce?.cancel();
@@ -88,14 +84,7 @@ class _PickerBodyState extends State<_PickerBody> {
     _onChanged(code);
   }
 
-  bool get _filtersActive => _categoryId != null || _brandId != null;
-
-  List<SaleProductEntity> get _visible => [
-        for (final p in _results)
-          if ((_categoryId == null || p.categoryId == _categoryId) &&
-              (_brandId == null || p.brandId == _brandId))
-            p,
-      ];
+  List<SaleProductEntity> get _visible => _results;
 
   void _onChanged(String text) {
     _debounce?.cancel();
@@ -159,82 +148,21 @@ class _PickerBodyState extends State<_PickerBody> {
                 decoration: InputDecoration(
                   hintText: 'Nombre, código, marca…',
                   prefixIcon: const Icon(Icons.search),
-                  suffixIcon: BarcodeScanButton(onScanned: _onScanned),
                 ),
                 onChanged: _onChanged,
               ),
             ),
             const SizedBox(width: 8),
+            // Sin botón de filtros: en su lugar va el escáner de código de barras.
             IconButton.filledTonal(
-              tooltip: 'Filtros',
-              isSelected: _filtersOpen,
-              onPressed: () => setState(() => _filtersOpen = !_filtersOpen),
-              icon: Badge(
-                isLabelVisible: _filtersActive,
-                smallSize: 8,
-                child: const Icon(Icons.tune),
-              ),
+              tooltip: 'Escanear código de barras',
+              onPressed: () async {
+                final code = await BarcodeScanner.scan(context);
+                if (code != null && code.isNotEmpty) _onScanned(code);
+              },
+              icon: const Icon(Icons.barcode_reader),
             ),
           ],
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          alignment: Alignment.topCenter,
-          child: !_filtersOpen
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: scheme.outlineVariant),
-                    ),
-                    child: ListenableBuilder(
-                      listenable: widget.sales,
-                      builder: (context, _) {
-                        final filters = widget.sales.productFilters;
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: AppDropdownField<int?>(
-                                label: 'Categoría',
-                                value: _categoryId,
-                                items: [
-                                  const DropdownMenuItem(value: null, child: Text('Todas')),
-                                  for (final c in filters.categorias)
-                                    DropdownMenuItem(
-                                      value: c.id,
-                                      child: Text(c.name, overflow: TextOverflow.ellipsis),
-                                    ),
-                                ],
-                                onChanged: (v) => setState(() => _categoryId = v),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: AppDropdownField<int?>(
-                                label: 'Marca',
-                                value: _brandId,
-                                items: [
-                                  const DropdownMenuItem(value: null, child: Text('Todas')),
-                                  for (final m in filters.marcas)
-                                    DropdownMenuItem(
-                                      value: m.id,
-                                      child: Text(m.name, overflow: TextOverflow.ellipsis),
-                                    ),
-                                ],
-                                onChanged: (v) => setState(() => _brandId = v),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
         ),
         const SizedBox(height: 10),
         ValueListenableBuilder<Map<int, _Pick>>(
@@ -284,7 +212,7 @@ class _PickerBodyState extends State<_PickerBody> {
     if (visible.isEmpty && !_loading) {
       return message(
         Icons.search_off,
-        _results.isEmpty ? 'Sin resultados' : 'Ningún resultado con esos filtros',
+        'Sin resultados',
       );
     }
 

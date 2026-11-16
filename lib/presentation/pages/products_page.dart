@@ -78,39 +78,6 @@ class _ProductsPageState extends State<ProductsPage> {
     context.read<ProductsProvider>().addSearchTerm(barcode);
   }
 
-  Future<void> _openFilters() async {
-    final provider = context.read<ProductsProvider>();
-    final result = await showAppFilterSheet(
-      context,
-      fields: [
-        AppFilterField(
-          id: 'tipo',
-          label: 'Tipo',
-          allLabel: 'Todos',
-          value: provider.tipo,
-          options: const [
-            AppFilterOption('p', 'Productos'),
-            AppFilterOption('s', 'Servicios'),
-          ],
-        ),
-        AppFilterField(
-          id: 'estado',
-          label: 'Estado',
-          allLabel: 'Todos',
-          value: provider.activo == null ? null : '${provider.activo}',
-          options: const [
-            AppFilterOption('true', 'Activos'),
-            AppFilterOption('false', 'Inactivos'),
-          ],
-        ),
-      ],
-    );
-    if (result != null) {
-      final estado = result['estado'];
-      provider.setFilters(tipo: result['tipo'], activo: estado == null ? null : estado == 'true');
-    }
-  }
-
   void _snack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -323,13 +290,8 @@ class _ProductsPageState extends State<ProductsPage> {
               controller: _searchController,
               onChanged: _onSearchChanged,
               onSubmitted: _onSearchSubmitted,
+              // Sin botón de filtros: en su lugar va el escáner de código de barras.
               onScanned: _onScanned,
-              onFilter: _openFilters,
-              filterCount: _activeFilters(products).length,
-            ),
-            AppActiveFilters(
-              filters: _activeFilters(products),
-              onClear: () => products.setFilters(tipo: null, activo: null),
             ),
             AppSearchChips(
               terms: products.searchTerms,
@@ -349,25 +311,8 @@ class _ProductsPageState extends State<ProductsPage> {
     );
   }
 
-  /// Los filtros del panel que están puestos (el tipo y el estado), para mostrarlos como chips.
-  List<AppActiveFilter> _activeFilters(ProductsProvider products) => [
-        if (products.tipo != null)
-          AppActiveFilter(
-            id: 'tipo',
-            label: 'Tipo: ${products.tipo == 's' ? 'Servicios' : 'Productos'}',
-            onRemove: () => products.setTipo(null),
-          ),
-        if (products.activo != null)
-          AppActiveFilter(
-            id: 'estado',
-            label: 'Estado: ${products.activo! ? 'Activos' : 'Inactivos'}',
-            onRemove: () => products.setActivo(null),
-          ),
-      ];
-
   /// Todos / Productos / Servicios en un modal de totales (como el "Totales" de Stock): son los
-  /// números del servidor para la búsqueda y los filtros que están puestos. El tipo se sigue
-  /// filtrando desde el panel de filtros.
+  /// números del servidor para la búsqueda y los filtros que están puestos. 
   void _showTotals(ProductsProvider products) {
     showAppSummary(
       context,

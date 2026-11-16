@@ -1652,39 +1652,11 @@ void main() {
       );
     });
 
-    testWidgets('el tipo se sigue filtrando desde el panel de filtros y sale como chip', (tester) async {
-      final env = await pump(tester);
+    testWidgets('no hay botón de filtros: en su lugar va el escáner de código de barras', (tester) async {
+      await pump(tester);
 
-      await tester.tap(find.byTooltip('Filtros'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Tipo'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Servicios').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ver resultados'));
-      await tester.pumpAndSettle();
-
-      expect(env.repo.calls.last.$4, 's');
-      expect(env.products.tipo, 's');
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-    });
-
-    testWidgets('el panel de filtros ofrece el estado y lo aplica', (tester) async {
-      final env = await pump(tester);
-
-      await tester.tap(find.byTooltip('Filtros'));
-      await tester.pumpAndSettle();
-      expect(find.text('Estado'), findsOneWidget);
-
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<String?>, 'Estado'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Inactivos').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Ver resultados'));
-      await tester.pumpAndSettle();
-
-      expect(env.repo.activos.last, isFalse);
-      expect(env.products.filtersActive, isTrue);
+      expect(find.byTooltip('Filtros'), findsNothing);
+      expect(find.byTooltip('Escanear código de barras'), findsOneWidget);
     });
 
     testWidgets('enviar la búsqueda la vuelve un chip que se puede quitar', (tester) async {
@@ -1705,53 +1677,6 @@ void main() {
       expect(find.byKey(const ValueKey('chip-tubo pvc')), findsNothing);
       expect(env.repo.calls.last.$3, isEmpty);
     });
-
-    testWidgets('los filtros puestos salen como chips, el botón los cuenta y cada "x" recarga', (tester) async {
-      final env = await pump(tester);
-      // Sin filtros no hay chips ni cuenta.
-      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
-      expect(find.byKey(const ValueKey('filtro-estado')), findsNothing);
-
-      await env.products.setFilters(tipo: 's', activo: false);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-      expect(find.text('Estado: Inactivos'), findsOneWidget);
-      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
-      expect(find.byKey(const ValueKey('filtros-limpiar')), findsOneWidget);
-
-      // Quitar el estado recarga sin él y deja el tipo.
-      // La fila de chips se desplaza hacia el lado: con la fuente ancha de las pruebas el chip queda fuera de vista.
-      await tester.ensureVisible(find.byTooltip('Quitar Estado: Inactivos'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Quitar Estado: Inactivos'));
-      await tester.pumpAndSettle();
-      expect(env.repo.activos.last, isNull);
-      expect(env.products.tipo, 's');
-      expect(find.text('Estado: Inactivos'), findsNothing);
-      expect(find.text('Tipo: Servicios'), findsOneWidget);
-      expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget);
-      // Con un solo filtro ya no sale "Limpiar".
-      expect(find.byKey(const ValueKey('filtros-limpiar')), findsNothing);
-    });
-
-    testWidgets('"Limpiar" quita todos los filtros con un solo pedido', (tester) async {
-      final env = await pump(tester);
-      await env.products.setFilters(tipo: 'p', activo: true);
-      await tester.pumpAndSettle();
-      final calls = env.repo.calls.length;
-
-      await tester.tap(find.byKey(const ValueKey('filtros-limpiar')));
-      await tester.pumpAndSettle();
-
-      expect(env.repo.calls.length, calls + 1);
-      expect(env.repo.calls.last.$4, isNull);
-      expect(env.repo.activos.last, isNull);
-      expect(find.byKey(const ValueKey('filtro-tipo')), findsNothing);
-      expect(find.byType(Badge), findsOneWidget);
-      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
-    });
-
   });
 
 }

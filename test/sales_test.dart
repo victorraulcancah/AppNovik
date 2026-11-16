@@ -1280,24 +1280,12 @@ void main() {
       expect(checkbox.onChanged, isNull);
     });
 
-    testWidgets('filtrar por categoría deja solo sus productos', (tester) async {
-      final sales = await open(tester);
-      await sales.ensureProductFilters();
-      await tester.pumpAndSettle();
+    testWidgets('el buscador no tiene botón de filtros: lleva el escáner de código de barras', (tester) async {
+      await open(tester);
 
-      await tester.tap(find.byIcon(Icons.tune));
-      await tester.pumpAndSettle();
-      expect(find.text('Categoría'), findsOneWidget);
-      expect(find.text('Marca'), findsOneWidget);
-
-      await tester.tap(find.text('Todas').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('ACCESORIOS').last);
-      await tester.pumpAndSettle();
-
-      expect(find.text('1 producto'), findsOneWidget);
-      expect(find.text('CABLE RCA'), findsOneWidget);
-      expect(find.text('SUBWOOFER 12"'), findsNothing);
+      expect(find.byTooltip('Filtros'), findsNothing);
+      expect(find.byIcon(Icons.tune), findsNothing);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.byTooltip('Escanear código de barras')), findsOneWidget);
     });
 
     testWidgets('el botón de agregar espera a que se marque algo', (tester) async {
