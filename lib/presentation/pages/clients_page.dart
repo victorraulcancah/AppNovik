@@ -406,14 +406,14 @@ class _ClientsPageState extends State<ClientsPage> {
       // El monto usado; en 0 no dice nada.
       trailingCaption: c.lineaUtilizada > 0 ? 'Usado ${formatMoney(c.lineaUtilizada, symbol: 'S/.')}' : null,
       trailingCaptionColor: scheme.onSurfaceVariant,
-      // Las insignias (categoría y estado) van a la derecha, una bajo otra, bajo los botones.
+      // Las insignias (categoría y estado) van en una sola fila, a la derecha, bajo los botones.
       footerOnRight: true,
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
+      footer: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        alignment: WrapAlignment.end,
         children: [
           if (c.categoriaNombre != null) ClientCategoryBadge(name: c.categoriaNombre!, code: c.categoriaCodigo),
-          if (c.categoriaNombre != null) const SizedBox(height: 4),
           AppStatusBadge(
             label: c.estado ? 'Activo' : 'Inactivo',
             tone: c.estado ? AppBadgeTone.success : AppBadgeTone.neutral,

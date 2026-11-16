@@ -29,9 +29,8 @@ class AppListCard extends StatelessWidget {
   /// El elemento que se está viendo en el panel de detalle (tablet): borde y fondo de la marca.
   final bool selected;
 
-  /// El [footer] (las insignias) va a la derecha, bajo los botones de acción, y no bajo el texto de la
-  /// izquierda. Conviene que sea una columna corta, alineada al final.
-  final bool footerOnRight;
+  /// El [footer] (las insignias) va en una sola fila, abajo y a la derecha, bajo los botones de acción,
+  /// y no a la izquierda bajo el texto.
 
   const AppListCard({
     super.key,
@@ -54,10 +53,7 @@ class AppListCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     const tabular = [FontFeature.tabularFigures()];
-    final hasTrailing = trailingTitle != null ||
-        trailingCaption != null ||
-        actions.isNotEmpty ||
-        (footer != null && footerOnRight);
+    final hasTrailing = trailingTitle != null || trailingCaption != null || actions.isNotEmpty;
 
     return AppPressScale(
       enabled: onTap != null,
@@ -153,16 +149,17 @@ class AppListCard extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: actions,
                             ),
-                          if (footer != null && footerOnRight)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6, right: 8),
-                              child: footer,
-                            ),
                         ],
                       ),
                     ],
                   ],
                 ),
+                    // Las insignias, en una sola fila abajo a la derecha, bajo los botones.
+                    if (footer != null && footerOnRight)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, right: 8),
+                        child: Align(alignment: Alignment.centerRight, child: footer),
+                      ),
                   ],
                 ),
               ),
