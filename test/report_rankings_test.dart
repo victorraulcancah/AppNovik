@@ -815,7 +815,12 @@ void main() {
 
       expect(find.text('Comparar año anterior'), findsNothing);
       expect(find.byTooltip('Descargar Excel'), findsNothing);
-      expect(find.byTooltip('Filtros avanzados'), findsOneWidget);
+      // El filtro va en la misma fila que el buscador (no en la fila de la comparación).
+      expect(find.byTooltip('Filtros avanzados'), findsNothing);
+      final bar = tester.getRect(find.byType(SearchBar));
+      final filtro = tester.getRect(find.byTooltip('Filtros'));
+      expect((filtro.center.dy - bar.center.dy).abs(), lessThan(bar.height / 2));
+      expect(filtro.left, greaterThan(bar.right - 1));
     });
 
     testWidgets('buscar por nombre filtra la lista y avisa si no hay resultados', (tester) async {

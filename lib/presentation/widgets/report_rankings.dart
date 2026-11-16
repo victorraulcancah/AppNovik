@@ -306,6 +306,10 @@ class RankingView extends StatefulWidget {
   final RankingState? state;
   final bool showAmounts;
 
+  /// El botón de filtros va en la misma fila que el buscador.
+  final VoidCallback? onFilter;
+  final int filterCount;
+
   /// ¿Se puede ver el margen? (rol con margen) y, si se puede, ¿está a la vista o tapado con "*"?
   final bool showMargin;
   final bool marginVisible;
@@ -323,6 +327,8 @@ class RankingView extends StatefulWidget {
     required this.kind,
     required this.state,
     required this.showAmounts,
+    this.onFilter,
+    this.filterCount = 0,
     this.showMargin = false,
     this.marginVisible = false,
     this.onToggleMargin,
@@ -425,6 +431,8 @@ class _RankingViewState extends State<RankingView> {
           hint: 'Buscar por nombre',
           controller: _search,
           onChanged: widget.onSearch,
+          onFilter: widget.onFilter,
+          filterCount: widget.filterCount,
         ),
         if (state.searching) const LinearProgressIndicator(minHeight: 2),
         Expanded(

@@ -165,22 +165,22 @@ class _ReportsPageState extends State<ReportsPage> {
             },
           ),
         ),
+        // Venta general: la comparación con el año anterior, los filtros y el Excel en una fila. Los
+        // reportes por entidad no tienen esa fila: su filtro va en la fila del buscador.
+        if (general)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
           child: Row(
             children: [
-              // La comparación con el año anterior y el Excel son de Venta general.
               Expanded(
-                child: general
-                    ? CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: reports.compare,
-                        onChanged: (v) => reports.setCompare(v ?? false),
-                        title: const Text('Comparar año anterior'),
-                      )
-                    : const SizedBox(height: 48),
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: reports.compare,
+                  onChanged: (v) => reports.setCompare(v ?? false),
+                  title: const Text('Comparar año anterior'),
+                ),
               ),
               IconButton(
                 tooltip: 'Filtros avanzados',
@@ -191,8 +191,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   child: Icon(Icons.filter_list, color: scheme.primary),
                 ),
               ),
-              if (general)
-                IconButton(
+              IconButton(
                   tooltip: 'Descargar Excel',
                   onPressed: reports.exporting ? null : _export,
                   icon: Icon(Icons.download_outlined, color: scheme.primary),
@@ -317,6 +316,8 @@ class _ReportsPageState extends State<ReportsPage> {
           kind: kind,
           state: reports.ranking(kind),
           showAmounts: !reports.ocultarImportes,
+          onFilter: () => showReportFilters(context),
+          filterCount: reports.advancedCount,
           showMargin: !reports.ocultarMargen,
           marginVisible: _marginVisible,
           onToggleMargin: () => setState(() => _marginVisible = !_marginVisible),

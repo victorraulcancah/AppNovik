@@ -15,6 +15,7 @@ import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/debt_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/debt_usecases.dart';
+import 'package:app_novik/presentation/components/app_summary.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
 import 'package:app_novik/presentation/components/app_pickers.dart' show AppPickerField;
 import 'package:app_novik/presentation/pages/debts_page.dart';

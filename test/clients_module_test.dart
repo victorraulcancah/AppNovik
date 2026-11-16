@@ -21,6 +21,7 @@ import 'package:app_novik/domain/repositories/client_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/client_record_usecases.dart';
 import 'package:app_novik/domain/usecases/client_usecases.dart';
+import 'package:app_novik/presentation/components/app_summary.dart';
 import 'package:app_novik/presentation/components/app_list_card.dart' show AppListCard;
 import 'package:app_novik/presentation/pages/clients_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
@@ -729,9 +730,8 @@ void main() {
     testWidgets('Acciones → Totales muestra Todos, Personas y Empresas en tarjetas informativas', (tester) async {
       await _pump(tester, const {'clientes.index'});
 
-      await tester.tap(find.text('Acciones'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Totales'));
+      // Es la única acción: sale directa, sin "Acciones".
+      await tester.tap(find.text('Totales'));
       await tester.pumpAndSettle();
 
       expect(find.byType(AppMetricCard), findsNWidgets(3));
