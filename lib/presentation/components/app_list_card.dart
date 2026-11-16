@@ -31,6 +31,7 @@ class AppListCard extends StatelessWidget {
 
   /// El [footer] (las insignias) va en una sola fila, abajo y a la derecha, bajo los botones de acción,
   /// y no a la izquierda bajo el texto.
+  final bool footerOnRight;
 
   const AppListCard({
     super.key,
