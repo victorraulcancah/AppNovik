@@ -3,6 +3,13 @@
     <!-- Escanear códigos de barras con la cámara. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Buscar hablando (reconocimiento de voz). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+    </queries>
     <application
         android:label="Novik"
         android:networkSecurityConfig="@xml/network_security_config"

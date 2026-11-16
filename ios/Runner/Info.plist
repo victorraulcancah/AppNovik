@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Novik usa el micrófono para buscar productos hablando.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Novik reconoce tu voz para buscar productos hablando.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Novik usa la cámara para escanear códigos de barras de productos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

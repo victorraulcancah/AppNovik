@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../../core/utils/format.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../components/components.dart';
-import '../utils/barcode_scanner.dart';
 import '../providers/sales_provider.dart';
 import 'product_image.dart';
 import 'product_image_viewer.dart';
@@ -18,6 +17,8 @@ typedef _Pick = ({SaleProductEntity product, int cantidad});
 /// ajustan después en la tarjeta del carrito). Devuelve `true` si se agregó algo.
 Future<bool> showSaleProductPicker(BuildContext context) async {
   final sales = context.read<SalesProvider>();
+  // Las categorías, para mostrar la de cada producto.
+  sales.ensureProductFilters();
 
   final selection = ValueNotifier<Map<int, _Pick>>({});
   final hasSelection = ValueNotifier<bool>(false);
@@ -148,20 +149,14 @@ class _PickerBodyState extends State<_PickerBody> {
                 decoration: InputDecoration(
                   hintText: 'Nombre, código, marca…',
                   prefixIcon: const Icon(Icons.search),
+                  suffixIcon: VoiceSearchButton(onResult: _onScanned),
                 ),
                 onChanged: _onChanged,
               ),
             ),
             const SizedBox(width: 8),
             // Sin botón de filtros: en su lugar va el escáner de código de barras.
-            IconButton.filledTonal(
-              tooltip: 'Escanear código de barras',
-              onPressed: () async {
-                final code = await BarcodeScanner.scan(context);
-                if (code != null && code.isNotEmpty) _onScanned(code);
-              },
-              icon: const Icon(Icons.barcode_reader),
-            ),
+            BarcodeScanButton(onScanned: _onScanned),
           ],
         ),
         const SizedBox(height: 10),

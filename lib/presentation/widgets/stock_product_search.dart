@@ -133,6 +133,13 @@ class _StockProductSearchState extends State<StockProductSearch> {
           ),
           trailing: [
             if (widget.enabled)
+              VoiceSearchButton(
+                onResult: (text) {
+                  _controller.text = text;
+                  _onChanged(text);
+                },
+              ),
+            if (widget.enabled)
               BarcodeScanButton(
                 onScanned: (code) {
                   _controller.text = code;
