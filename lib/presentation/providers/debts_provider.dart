@@ -40,6 +40,7 @@ class DebtsProvider extends ChangeNotifier {
   int _page = 0;
   int _request = 0;
   List<DebtOption>? _sellers;
+  List<DebtOption>? _clients;
 
   List<DebtClientEntity> items = [];
   bool loading = false;
@@ -195,6 +196,18 @@ class DebtsProvider extends ChangeNotifier {
         throw Exception(failure.message);
       },
       (list) => _sellers = list,
+    );
+  }
+
+  /// Todos los clientes para el filtro (se piden una vez por empresa; con "solo mi cartera" si el
+  /// usuario no ve a todos). Si fallan, lanza una excepción con el mensaje.
+  Future<List<DebtOption>> loadClients() async {
+    final cached = _clients;
+    if (cached != null) return cached;
+    final result = await searchClients('');
+    return result.fold(
+      (failure) => throw Exception(failure.message),
+      (list) => _clients = list,
     );
   }
 

@@ -43,7 +43,9 @@ class AppPickerField extends StatelessWidget {
 }
 
 /// Selector de varias opciones con búsqueda. Devuelve los ids elegidos al aplicar
-/// (vacío = todos) o `null` si se cerró sin aplicar.
+/// (vacío = todos) o `null` si se cerró sin aplicar. Con [single] solo se puede elegir una (la
+/// misma lista con casillas, pero marcar otra desmarca la anterior): para los filtros que el servidor
+/// acepta de a uno.
 Future<List<int>?> showAppMultiSelect(
   BuildContext context, {
   required String title,
@@ -51,15 +53,16 @@ Future<List<int>?> showAppMultiSelect(
   required List<int> selected,
   String? subtitle,
   IconData icon = Icons.checklist,
+  bool single = false,
 }) async {
   final chosen = ValueNotifier<Set<int>>({...selected});
   final applied = await showAppModal(
     context,
     title: title,
-    subtitle: subtitle ?? 'Sin elegir ninguno se incluyen todos',
+    subtitle: subtitle ?? (single ? 'Elige uno; sin elegir se incluyen todos' : 'Sin elegir ninguno se incluyen todos'),
     icon: icon,
     primaryLabel: 'Aplicar',
-    child: _MultiSelectBody(options: options, chosen: chosen),
+    child: _MultiSelectBody(options: options, chosen: chosen, single: single),
   );
   final result = applied == true ? chosen.value.toList() : null;
   chosen.dispose();
@@ -69,8 +72,9 @@ Future<List<int>?> showAppMultiSelect(
 class _MultiSelectBody extends StatefulWidget {
   final List<({int id, String name})> options;
   final ValueNotifier<Set<int>> chosen;
+  final bool single;
 
-  const _MultiSelectBody({required this.options, required this.chosen});
+  const _MultiSelectBody({required this.options, required this.chosen, this.single = false});
 
   @override
   State<_MultiSelectBody> createState() => _MultiSelectBodyState();
@@ -109,7 +113,7 @@ class _MultiSelectBodyState extends State<_MultiSelectBody> {
             children: [
               Expanded(
                 child: Text(
-                  chosen.isEmpty ? 'Todos' : '${chosen.length} elegidos',
+                  chosen.isEmpty ? 'Todos' : (widget.single ? '1 elegido' : '${chosen.length} elegidos'),
                   style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
@@ -142,7 +146,8 @@ class _MultiSelectBodyState extends State<_MultiSelectBody> {
                         title: Text(option.name, maxLines: 2, overflow: TextOverflow.ellipsis),
                         value: chosen.contains(option.id),
                         onChanged: (on) {
-                          final next = {...chosen};
+                          // Elegir uno: marcar otra opción reemplaza la anterior.
+                          final next = widget.single ? <int>{} : {...chosen};
                           on == true ? next.add(option.id) : next.remove(option.id);
                           widget.chosen.value = next;
                         },

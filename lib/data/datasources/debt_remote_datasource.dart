@@ -78,11 +78,18 @@ class DebtRemoteDataSourceImpl implements DebtRemoteDataSource {
       debtClientOptionsFromJson(
         await sendApiRequest(
           () => client.get(
-            _uri('/clientes/search', [
-              MapEntry('company_id', '$companyId'),
-              MapEntry('search', search),
-              if (onlyMine) const MapEntry('validar_vendedor', 'true'),
-            ]),
+            // Sin texto: la lista completa de clientes (la misma del filtro de Documentos), para
+            // elegirlos de una lista; con texto, la búsqueda en el servidor.
+            search.isEmpty
+                ? _uri('/clientes/list', [
+                    MapEntry('company_id', '$companyId'),
+                    if (onlyMine) const MapEntry('solo_mi_cartera', 'true'),
+                  ])
+                : _uri('/clientes/search', [
+                    MapEntry('company_id', '$companyId'),
+                    MapEntry('search', search),
+                    if (onlyMine) const MapEntry('validar_vendedor', 'true'),
+                  ]),
             headers: ApiConstants.authHeaders(token),
           ),
         ),

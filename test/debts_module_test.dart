@@ -329,6 +329,14 @@ void main() {
       expect(uris.first.path, '$_apiPath/clientes/search');
       expect(uris.first.queryParameters, {'company_id': '3', 'search': 'ac'});
       expect(uris.last.queryParameters, {'company_id': '3', 'search': 'ac', 'validar_vendedor': 'true'});
+
+      // Sin texto: la lista completa de clientes (la misma del filtro de Documentos).
+      await ds.searchClients('t', companyId: 3, search: '', onlyMine: false);
+      await ds.searchClients('t', companyId: 3, search: '', onlyMine: true);
+      expect(uris[uris.length - 2].path, '$_apiPath/clientes/list');
+      expect(uris[uris.length - 2].queryParameters, {'company_id': '3'});
+      expect(uris.last.path, '$_apiPath/clientes/list');
+      expect(uris.last.queryParameters, {'company_id': '3', 'solo_mi_cartera': 'true'});
     });
 
     test('los ejecutivos son los usuarios con rol Vendedor de la empresa', () async {
@@ -575,23 +583,30 @@ void main() {
       expect(r.repo.calls.last.filters.search, 'acme');
     });
 
-    testWidgets('el filtro de cliente busca, se elige y queda como chip que se quita', (tester) async {
+    testWidgets('el filtro de cliente es como el de Documentos: lista con Buscar, se elige uno y queda como chip', (tester) async {
       final r = await _pump(tester);
 
       await tester.tap(find.byTooltip('Filtros'));
       await tester.pumpAndSettle();
-      expect(find.text('Filtros'), findsWidgets);
+      expect(find.text('Filtros avanzados'), findsOneWidget);
       // Sin ver a todos no hay filtro de ejecutivo.
-      expect(find.text('Ejecutivo comercial'), findsNothing);
+      expect(find.text('Ejecutivos'), findsNothing);
 
       await tester.tap(find.widgetWithText(AppPickerField, 'Todos').first);
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).last, 'dis');
-      await tester.pump(const Duration(milliseconds: 600));
+      // La misma lista de Documentos: casillas, "Buscar" y "Quitar todos", con su cartera limitada.
+      expect(r.repo.searches.last, (search: '', onlyMine: true));
+      expect(find.text('Buscar'), findsOneWidget);
+      expect(find.text('Quitar todos'), findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsNWidgets(2));
+      await tester.enterText(find.widgetWithText(TextField, 'Buscar'), 'dis');
       await tester.pumpAndSettle();
-      // Con su cartera limitada, la búsqueda pide solo sus clientes.
-      expect(r.repo.searches.last, (search: 'dis', onlyMine: true));
+      expect(find.text('ALMACENES NORTE'), findsNothing);
+
       await tester.tap(find.text('DISTRIBUIDORA SUR'));
+      await tester.pumpAndSettle();
+      expect(find.text('1 elegido'), findsOneWidget);
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar filtros'));
       await tester.pumpAndSettle();
@@ -607,15 +622,34 @@ void main() {
       expect(r.repo.calls.last.filters.client, isNull);
     });
 
-    testWidgets('quien ve a todos elige el ejecutivo comercial (con nombre corto)', (tester) async {
+    testWidgets('elegir otro cliente reemplaza al anterior (solo se filtra por uno)', (tester) async {
+      await _pump(tester);
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppPickerField, 'Todos').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('DISTRIBUIDORA SUR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ALMACENES NORTE'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 elegido'), findsOneWidget);
+      final checked = tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile)).where((c) => c.value == true);
+      expect(checked, hasLength(1));
+    });
+
+    testWidgets('quien ve a todos elige el ejecutivo comercial de la misma lista (con nombre corto en el chip)', (tester) async {
       final r = await _pump(tester, permissions: const {'pagos.index', 'pagos.todos_los_vendedores'});
 
       await tester.tap(find.byTooltip('Filtros'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(AppPickerField, 'Todos').last);
       await tester.pumpAndSettle();
-      expect(find.text('FRANCIS B.'), findsOneWidget);
-      await tester.tap(find.text('FRANCIS B.'));
+      expect(find.text('FRANCIS BULNES GONZALES'), findsOneWidget);
+      await tester.tap(find.text('FRANCIS BULNES GONZALES'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar filtros'));
       await tester.pumpAndSettle();

@@ -52,10 +52,13 @@ class _DebtsPageState extends State<DebtsPage> {
 
   Future<void> _openFilters() async {
     final provider = context.read<DebtsProvider>();
+    // Las listas ya vienen pedidas desde que se entró; si no, se piden ahora (y se guardan).
+    provider.loadClients().then((_) {}, onError: (_) {});
+    provider.loadSellers().then((_) {}, onError: (_) {});
     final draft = ValueNotifier<DebtFiltersEntity>(provider.filters);
     final applied = await showAppModal(
       context,
-      title: 'Filtros',
+      title: 'Filtros avanzados',
       subtitle: 'Deudas pendientes',
       icon: Icons.filter_list,
       primaryLabel: 'Aplicar filtros',
@@ -255,35 +258,39 @@ class _FiltersBody extends StatelessWidget {
 
   const _FiltersBody({required this.draft, required this.provider});
 
-  Future<void> _pickClient(BuildContext context) async {
-    await showAppSearchSheet<DebtOption>(
+  /// La misma lista que el filtro de Documentos (casillas, "Buscar" y "Quitar todos"); aquí se elige
+  /// uno, porque el servidor filtra las deudas por un cliente a la vez.
+  Future<void> _pick(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Future<List<DebtOption>> Function() load,
+    required DebtOption? current,
+    required DebtFiltersEntity Function(DebtFiltersEntity, DebtOption?) apply,
+  }) async {
+    final List<DebtOption> options;
+    try {
+      options = await load();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('$e'.replaceFirst('Exception: ', ''))));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final chosen = await showAppMultiSelect(
       context,
-      title: 'Cliente',
-      subtitle: 'Busca por nombre, documento o código',
-      icon: Icons.person_search_outlined,
-      hint: 'Nombre, DNI/RUC o código',
-      search: provider.searchClients,
-      itemOf: (c) => AppSearchItem(title: c.name),
-      onSelect: (c) {
-        draft.value = draft.value.copyWith(client: c);
-        return null;
-      },
+      title: title,
+      icon: icon,
+      single: true,
+      options: [for (final o in options) (id: o.id, name: o.name)],
+      selected: [if (current != null) current.id],
     );
-  }
-
-  Future<void> _pickSeller(BuildContext context) async {
-    await showAppModal(
-      context,
-      title: 'Ejecutivo comercial',
-      icon: Icons.badge_outlined,
-      primaryLabel: null,
-      secondaryLabel: 'Cerrar',
-      child: _SellerList(
-        load: provider.loadSellers,
-        selected: draft.value.seller,
-        onPick: (s) => draft.value = draft.value.copyWith(seller: s),
-      ),
-    );
+    if (chosen == null) return;
+    final option = chosen.isEmpty ? null : options.firstWhere((o) => o.id == chosen.first);
+    draft.value = apply(draft.value, option);
   }
 
   @override
@@ -294,83 +301,38 @@ class _FiltersBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AppPickerField(
-            label: 'Cliente',
+            label: 'Clientes',
             value: f.client?.name ?? 'Todos',
             icon: Icons.person_outline,
-            onTap: () => _pickClient(context),
+            onTap: () => _pick(
+              context,
+              title: 'Clientes',
+              icon: Icons.groups_outlined,
+              load: provider.loadClients,
+              current: f.client,
+              apply: (d, o) => o == null ? d.copyWith(clearClient: true) : d.copyWith(client: o),
+            ),
             onClear: f.client == null ? null : () => draft.value = f.copyWith(clearClient: true),
           ),
           if (provider.canSeeAll) ...[
             const SizedBox(height: 16),
             AppPickerField(
-              label: 'Ejecutivo comercial',
+              label: 'Ejecutivos',
               value: f.seller == null ? 'Todos' : shortPersonName(f.seller!.name),
               icon: Icons.badge_outlined,
-              onTap: () => _pickSeller(context),
+              onTap: () => _pick(
+                context,
+                title: 'Ejecutivos',
+                icon: Icons.badge_outlined,
+                load: provider.loadSellers,
+                current: f.seller,
+                apply: (d, o) => o == null ? d.copyWith(clearSeller: true) : d.copyWith(seller: o),
+              ),
               onClear: f.seller == null ? null : () => draft.value = f.copyWith(clearSeller: true),
             ),
           ],
         ],
       ),
-    );
-  }
-}
-
-/// La lista de ejecutivos comerciales: al tocar uno se elige y se cierra.
-class _SellerList extends StatefulWidget {
-  final Future<List<DebtOption>> Function() load;
-  final DebtOption? selected;
-  final ValueChanged<DebtOption> onPick;
-
-  const _SellerList({required this.load, required this.selected, required this.onPick});
-
-  @override
-  State<_SellerList> createState() => _SellerListState();
-}
-
-class _SellerListState extends State<_SellerList> {
-  late final Future<List<DebtOption>> _future = widget.load();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<DebtOption>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: ErrorBanner(message: '${snapshot.error}'.replaceFirst('Exception: ', '')),
-          );
-        }
-        final sellers = snapshot.data ?? const [];
-        if (sellers.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text('No hay ejecutivos')),
-          );
-        }
-        return Column(
-          children: [
-            for (final s in sellers)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(shortPersonName(s.name)),
-                subtitle: shortPersonName(s.name) == s.name ? null : Text(s.name),
-                trailing: widget.selected == s ? const Icon(Icons.check) : null,
-                onTap: () {
-                  widget.onPick(s);
-                  Navigator.of(context).pop();
-                },
-              ),
-          ],
-        );
-      },
     );
   }
 }
