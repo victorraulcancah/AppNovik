@@ -29,8 +29,8 @@ class AppListCard extends StatelessWidget {
   /// El elemento que se está viendo en el panel de detalle (tablet): borde y fondo de la marca.
   final bool selected;
 
-  /// El [footer] (las insignias) va en una sola fila, abajo y a la derecha, bajo los botones de acción,
-  /// y no a la izquierda bajo el texto.
+  /// El [footer] (las insignias) va en una fila abajo, a todo lo ancho de la tarjeta, bajo los botones
+  /// de acción y el texto (por ejemplo la categoría y, a su costado, el estado).
   final bool footerOnRight;
 
   const AppListCard({
@@ -155,11 +155,12 @@ class AppListCard extends StatelessWidget {
                     ],
                   ],
                 ),
-                    // Las insignias, en una sola fila abajo a la derecha, bajo los botones.
+                    // Las insignias, en una fila abajo a todo lo ancho.
                     if (footer != null && footerOnRight)
                       Padding(
-                        padding: const EdgeInsets.only(top: 6, right: 8),
-                        child: Align(alignment: Alignment.centerRight, child: footer),
+                        padding: const EdgeInsets.only(top: 8, right: 8, bottom: 2),
+                        // A la izquierda, alineado con el texto.
+                        child: Align(alignment: Alignment.centerLeft, child: footer),
                       ),
                   ],
                 ),
