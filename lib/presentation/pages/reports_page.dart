@@ -169,21 +169,31 @@ class _ReportsPageState extends State<ReportsPage> {
             },
           ),
         ),
-        // Venta general: la comparación con el año anterior, los filtros y el Excel en una fila. Los
+        // Venta general: las fechas en consulta, los filtros (con "Comparar año anterior" dentro) y el Excel. Los
         // reportes por entidad no tienen esa fila: su filtro va en la fila del buscador.
         if (general)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
           child: Row(
             children: [
+              // Las fechas que se están consultando ("Comparar año anterior" está dentro de los filtros).
               Expanded(
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: reports.compare,
-                  onChanged: (v) => reports.setCompare(v ?? false),
-                  title: const Text('Comparar año anterior'),
+                child: Row(
+                  children: [
+                    Icon(Icons.date_range_outlined, size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '${_day.format(reports.dates.start)} – ${_day.format(reports.dates.end)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               IconButton(

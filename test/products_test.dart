@@ -970,7 +970,16 @@ void main() {
       await fill(tester, 'Descripción *', 'SUBWOOFER 12');
       await choose(tester, 'Marca *', 'PIONEER');
       await choose(tester, 'Categoría *', 'PARLANTES');
-      await choose(tester, 'Proveedor *', 'IMPORTADORA SAC');
+      // El proveedor se elige de la lista base (casillas, Buscar, Aplicar), no de un desplegable.
+      await tester.ensureVisible(inForm(find.text('Proveedor *')));
+      await tester.tap(inForm(find.text('Proveedor *')));
+      await tester.pumpAndSettle();
+      expect(find.text('Buscar'), findsOneWidget);
+      await tester.tap(find.text('IMPORTADORA SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+      expect(inForm(find.text('IMPORTADORA SAC')), findsOneWidget);
       await tester.ensureVisible(inForm(find.text('Subir foto del producto')));
       await tester.tap(inForm(find.text('Subir foto del producto')));
       await tester.pumpAndSettle();

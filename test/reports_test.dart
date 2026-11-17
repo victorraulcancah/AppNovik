@@ -985,14 +985,30 @@ void main() {
       expect(find.text('S/. *******'), findsNothing);
     });
 
+    testWidgets('en la fila de arriba salen las fechas en consulta y "Comparar año anterior" ya no está suelta', (tester) async {
+      await pump(tester);
+
+      // Este mes (el normal): del 1 al hoy de la prueba.
+      expect(find.byIcon(Icons.date_range_outlined), findsOneWidget);
+      expect(find.textContaining(' – '), findsWidgets);
+      expect(find.text('Comparar año anterior'), findsNothing);
+    });
+
     testWidgets('comparar año anterior muestra la variación de cada cifra', (tester) async {
       final repo = await pump(
         tester,
         build: (f, page) => f.desde.year == 2025 ? _report(ventas: 165.25) : salesReportFromJson(_json()),
       );
       expect(find.byType(AppVariationBadge), findsNothing);
+      // Ya no está suelta en la pantalla: va dentro de los filtros.
+      expect(find.byType(CheckboxListTile), findsNothing);
 
-      await tester.tap(find.byType(CheckboxListTile));
+      await tester.tap(find.byTooltip('Filtros avanzados'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Comparar año anterior'));
+      await tester.pumpAndSettle();
+      // Se cierra el panel para ver las cifras.
+      await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
 
       expect(repo.calls.last.filters.desde, DateTime(2025, 10));

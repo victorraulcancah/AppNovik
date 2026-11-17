@@ -379,6 +379,55 @@ class _ProductFormBodyState extends State<_ProductFormBody> {
     required ValueChanged<int?> onChanged,
     bool required = false,
   }) {
+    // El proveedor se elige de la lista base (casillas, Buscar, Aplicar), como los vendedores y los
+    // clientes de los filtros; las demás listas (marca, categoría, unidad...) siguen siendo desplegables.
+    if (kind == null) {
+      return FormField<int>(
+        key: ValueKey('$label-${items.length}-$value'),
+        initialValue: items.any((i) => i.id == value) ? value : null,
+        validator: required ? (id) => id == null ? 'Selecciona una opción' : null : null,
+        builder: (state) {
+          final name = items.where((i) => i.id == state.value).map((i) => i.name).firstOrNull;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppPickerField(
+                label: required ? '$label *' : label,
+                value: name ?? 'Sin elegir',
+                onTap: items.isEmpty
+                    ? null
+                    : () async {
+                        final result = await showAppSelectOne(
+                          context,
+                          title: label,
+                          icon: Icons.local_shipping_outlined,
+                          options: [for (final i in items) (id: i.id, name: i.name)],
+                          selected: state.value,
+                        );
+                        if (result == null) return;
+                        state.didChange(result.id);
+                        onChanged(result.id);
+                      },
+                onClear: state.value == null
+                    ? null
+                    : () {
+                        state.didChange(null);
+                        onChanged(null);
+                      },
+              ),
+              if (state.hasError)
+                Padding(
+                  padding: const EdgeInsets.only(left: 14, top: 4),
+                  child: Text(
+                    state.errorText!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
     final field = AppDropdownField<int>(
       // Al sumar un elemento nuevo la lista cambia de tamaño y el campo se rearma con él elegido.
       key: ValueKey('$label-${items.length}'),
@@ -391,7 +440,6 @@ class _ProductFormBodyState extends State<_ProductFormBody> {
       onChanged: onChanged,
       validator: required ? (id) => id == null ? 'Selecciona una opción' : null : null,
     );
-    if (kind == null) return field;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

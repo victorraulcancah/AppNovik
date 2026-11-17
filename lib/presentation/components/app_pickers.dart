@@ -69,6 +69,31 @@ Future<List<int>?> showAppMultiSelect(
   return result;
 }
 
+/// Elegir **uno** de una lista de vendedores, proveedores, clientes...: el mismo modal de los filtros
+/// (casillas, "Buscar", "Quitar todos", Cancelar / Aplicar), con una sola casilla marcada. Es la base de
+/// todos los selectores de esas personas. Devuelve `null` si se cerró sin aplicar; si se aplicó, un
+/// registro con el id elegido o `id: null` si se dejó sin elegir.
+Future<({int? id})?> showAppSelectOne(
+  BuildContext context, {
+  required String title,
+  required List<({int id, String name})> options,
+  int? selected,
+  String? subtitle,
+  IconData icon = Icons.checklist,
+}) async {
+  final chosen = await showAppMultiSelect(
+    context,
+    title: title,
+    subtitle: subtitle ?? 'Elige uno',
+    icon: icon,
+    single: true,
+    options: options,
+    selected: [?selected],
+  );
+  if (chosen == null) return null;
+  return (id: chosen.isEmpty ? null : chosen.first);
+}
+
 class _MultiSelectBody extends StatefulWidget {
   final List<({int id, String name})> options;
   final ValueNotifier<Set<int>> chosen;

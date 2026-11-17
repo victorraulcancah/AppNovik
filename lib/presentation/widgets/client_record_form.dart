@@ -841,71 +841,17 @@ Future<int?> showClientOptionPicker(
   required List<ClientOption> options,
   int? selected,
 }) async {
-  final result = await showModalBottomSheet<int>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => _SingleSelectSheet(title: title, options: options, selected: selected),
+  // El mismo modal de los filtros (casillas, Buscar, Aplicar). -1 = se dejó sin elegir.
+  final result = await showAppSelectOne(
+    context,
+    title: title,
+    subtitle: 'Elige uno',
+    icon: Icons.person_search_outlined,
+    options: [for (final o in options) (id: o.id, name: o.name)],
+    selected: selected,
   );
-  return result;
-}
-
-class _SingleSelectSheet extends StatefulWidget {
-  final String title;
-  final List<ClientOption> options;
-  final int? selected;
-
-  const _SingleSelectSheet({required this.title, required this.options, this.selected});
-
-  @override
-  State<_SingleSelectSheet> createState() => _SingleSelectSheetState();
-}
-
-class _SingleSelectSheetState extends State<_SingleSelectSheet> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final q = _query.trim().toLowerCase();
-    final visible = [
-      for (final o in widget.options)
-        if (q.isEmpty || o.name.toLowerCase().contains(q)) o,
-    ];
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(widget.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              onChanged: (v) => setState(() => _query = v),
-              decoration: const InputDecoration(hintText: 'Buscar', prefixIcon: Icon(Icons.search)),
-            ),
-          ),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final o in visible)
-                  ListTile(
-                    title: Text(o.name),
-                    trailing: o.id == widget.selected ? const Icon(Icons.check) : null,
-                    onTap: () => Navigator.of(context).pop(o.id),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  if (result == null) return null;
+  return result.id ?? -1;
 }
 
 class _AddressesTab extends StatelessWidget {

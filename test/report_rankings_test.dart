@@ -808,13 +808,23 @@ void main() {
 
     testWidgets('los reportes por entidad no ofrecen comparar el año anterior ni el Excel', (tester) async {
       await pump(tester);
-      expect(find.text('Comparar año anterior'), findsOneWidget);
+      // En Venta general, "Comparar año anterior" está dentro de los filtros y el Excel en la fila.
       expect(find.byTooltip('Descargar Excel'), findsOneWidget);
+      await tester.tap(find.byTooltip('Filtros avanzados'));
+      await tester.pumpAndSettle();
+      expect(find.text('Comparar año anterior'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
 
       await choose(tester, 'Marcas');
 
-      expect(find.text('Comparar año anterior'), findsNothing);
       expect(find.byTooltip('Descargar Excel'), findsNothing);
+      // En los reportes por entidad tampoco se ofrece comparar dentro de los filtros.
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      expect(find.text('Comparar año anterior'), findsNothing);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
       // El filtro va en la misma fila que el buscador (no en la fila de la comparación).
       expect(find.byTooltip('Filtros avanzados'), findsNothing);
       final bar = tester.getRect(find.byType(SearchBar));

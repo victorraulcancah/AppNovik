@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../domain/entities/report_entity.dart';
+import '../../domain/entities/report_ranking_entity.dart';
 import '../components/components.dart';
 import '../providers/reports_provider.dart';
 import 'document_filters.dart';
@@ -188,6 +189,16 @@ class _FiltersBody extends StatelessWidget {
                 label: const Text('Restablecer'),
               ),
             ),
+            // Comparar con el año anterior es de Venta general y se aplica de una vez.
+            if (reports.kind == ReportKind.general)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: reports.compare,
+                onChanged: (v) => reports.setCompare(v ?? false),
+                title: const Text('Comparar año anterior'),
+              ),
             if (reports.catalogsLoading && !reports.catalogsLoaded)
               const Padding(
                 padding: EdgeInsets.only(bottom: 12),
