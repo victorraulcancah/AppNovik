@@ -1360,6 +1360,19 @@ void main() {
       expect(heights.single, greaterThanOrEqualTo(100));
     });
 
+    testWidgets('en el buscador, un producto sin precio en soles ya muestra el de la lista en dólares (no "Sin precio")', (tester) async {
+      final soloDolares = _product(id: 300, name: 'KIT USB', codigo: 'USB-1', prices: const {12: 15});
+      final sinPrecioEnNinguna = _product(id: 301, name: 'CABLE X', codigo: 'CAB-X', prices: const {});
+      await open(tester, products: [soloDolares, sinPrecioEnNinguna, audio]);
+
+      // Con precio en la lista actual: el de esa lista, en soles.
+      expect(find.text('S/ 40.00'), findsOneWidget);
+      // Sin precio en soles pero con él en dólares: el de dólares, de una.
+      expect(find.text(r'$ 15.00'), findsOneWidget);
+      // Sin precio en ninguna lista: sigue diciendo "Sin precio".
+      expect(find.text('Sin precio'), findsOneWidget);
+    });
+
     testWidgets('al agregar un producto que solo tiene precio en dólares, la venta pasa a esa lista y avisa', (tester) async {
       final soloDolares = _product(id: 300, name: 'KIT USB', codigo: 'USB-1', prices: const {12: 15});
       final sales = await open(tester, products: [soloDolares]);

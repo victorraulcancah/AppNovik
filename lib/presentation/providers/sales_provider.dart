@@ -476,7 +476,10 @@ class SalesProvider extends ChangeNotifier {
   /// Se prefiere la "pareja" de la lista actual (mismo nombre sin SOLES/USD) y, si no, cualquier lista
   /// en dólares. Si otro producto del carrito no tiene precio en esa lista no se cambia (quedaría él en
   /// 0): solo se avisa. Devuelve el aviso, o `null` si no hizo falta nada.
-  String? _pasarADolaresSiNoTienePrecio(SaleProductEntity product) {
+  /// La lista en dólares a la que pasaría la venta si se agrega [product] sin precio en la lista en
+  /// soles actual (la "pareja" de la actual y, si no, cualquiera con precio); `null` si no hace falta o
+  /// no hay. El buscador de productos muestra ahí el precio, antes de agregarlo.
+  PriceListEntity? listaEnDolaresConPrecio(SaleProductEntity product) {
     final actual = priceList;
     if (actual == null || actual.esDolares) return null;
     if (product.precioEn(actual.id) > 0) return null;
@@ -490,7 +493,13 @@ class SalesProvider extends ChangeNotifier {
 
     final candidatas = [for (final l in priceLists) if (l.esDolares && product.precioEn(l.id) > 0) l];
     if (candidatas.isEmpty) return null;
-    final destino = candidatas.firstWhere((l) => base(l.name) == base(actual.name), orElse: () => candidatas.first);
+    return candidatas.firstWhere((l) => base(l.name) == base(actual.name), orElse: () => candidatas.first);
+  }
+
+  String? _pasarADolaresSiNoTienePrecio(SaleProductEntity product) {
+    final actual = priceList;
+    final destino = listaEnDolaresConPrecio(product);
+    if (actual == null || destino == null) return null;
 
     final sinPrecio = [
       for (final l in lines)

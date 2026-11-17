@@ -298,7 +298,12 @@ class _ProductCardState extends State<_ProductCard> {
     final warehouse = sales.warehouseId;
     final list = sales.priceListId;
     final stock = warehouse == null ? 0.0 : _product.stockEn(warehouse);
-    final price = list == null ? 0.0 : _product.precioEn(list);
+    final ownPrice = list == null ? 0.0 : _product.precioEn(list);
+    // Sin precio en la lista en soles pero con él en la de dólares: se muestra ya el de dólares (a esa
+    // lista pasará la venta al agregarlo), en vez de "Sin precio".
+    final alt = ownPrice > 0 ? null : sales.listaEnDolaresConPrecio(_product);
+    final price = alt != null ? _product.precioEn(alt.id) : ownPrice;
+    final symbol = alt != null ? alt.simboloMoneda : widget.sales.moneySymbol;
     final inSale = sales.cantidadEnVenta(_product.id);
 
     final String stockText;
@@ -350,7 +355,7 @@ class _ProductCardState extends State<_ProductCard> {
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: Text(
-                            price > 0 ? formatMoney(price, symbol: widget.sales.moneySymbol) : 'Sin precio',
+                            price > 0 ? formatMoney(price, symbol: symbol) : 'Sin precio',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: price > 0 ? scheme.onSurface : scheme.error,
