@@ -646,6 +646,47 @@ void main() {
       expect(provider.items, isEmpty);
     });
 
+    test('al volver a Documentos, una venta nueva se trae sola (se marca vieja y se actualiza sin vaciar la lista)', () async {
+      final repo = _FakeDocumentRepository();
+      final provider = _provider(repo);
+      await provider.ensureLoaded();
+      await Future<void>.delayed(Duration.zero);
+      final antes = provider.items.length;
+      final llamadas = repo.calls.length;
+
+      // Recién cargada: volver a entrar no pide nada.
+      await provider.ensureLoaded();
+      expect(repo.calls.length, llamadas);
+
+      // Se registró una venta en Ventas: al volver se pide de nuevo, en segundo plano.
+      provider.markStale();
+      final entrando = provider.ensureLoaded();
+      expect(provider.loading, isFalse); // sin "cargando": se sigue viendo la lista
+      expect(provider.items.length, antes);
+      await entrando;
+      expect(repo.calls.length, llamadas + 1);
+
+      // Ya actualizada: otra vez no pide.
+      await provider.ensureLoaded();
+      expect(repo.calls.length, llamadas + 1);
+    });
+
+    test('si falla la actualización en segundo plano, se queda la lista que había', () async {
+      final repo = _FakeDocumentRepository();
+      final provider = _provider(repo);
+      await provider.ensureLoaded();
+      await Future<void>.delayed(Duration.zero);
+      final antes = provider.items.length;
+      expect(antes, greaterThan(0));
+
+      repo.next = Either.left(const NetworkFailure('Sin conexión a internet'));
+      provider.markStale();
+      await provider.ensureLoaded();
+
+      expect(provider.items.length, antes);
+      expect(provider.error, isNull);
+    });
+
     test('los catálogos se piden una vez', () async {
       final repo = _FakeDocumentRepository();
       final provider = _provider(repo);

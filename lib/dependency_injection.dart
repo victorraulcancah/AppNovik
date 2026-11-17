@@ -208,6 +208,8 @@ class DependencyInjection {
             searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: _saleRepository),
             createSaleUseCase: CreateSaleUseCase(repository: _saleRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+            // Una venta o cotización nueva: Documentos la trae al entrar, sin tener que refrescar a mano.
+            onDocumentsChanged: () => context.read<DocumentsProvider>().markStale(),
           ),
           update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),

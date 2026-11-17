@@ -113,11 +113,34 @@ class DocumentsProvider extends ChangeNotifier {
     exporting = false;
     _page = 0;
     _loadedOnce = false;
+    _loadedAt = null;
+    _stale = false;
     _logo = null;
     _request++;
   }
 
+  DateTime? _loadedAt;
+  bool _stale = false;
+
+  /// Algo cambió fuera de esta pantalla (por ejemplo, se registró una venta): la lista se vuelve a
+  /// pedir la próxima vez que se entra.
+  void markStale() => _stale = true;
+
+  /// La lista ya cargada se considera vieja pasado este tiempo.
+  static const _maxAge = Duration(seconds: 20);
+
+  bool get _needsRefresh {
+    final at = _loadedAt;
+    return _stale || at == null || _now().difference(at) > _maxAge;
+  }
+
   Future<void> ensureLoaded() async {
+    // Ya cargada pero vieja (o se registró algo desde Ventas): se muestra lo que hay y se actualiza en
+    // segundo plano, sin vaciar la lista ni mostrar "cargando".
+    if (_companyId != null && _loadedOnce && !loading && _needsRefresh) {
+      await _fetch(page: 1, background: true);
+      return;
+    }
     if (_companyId != null && !_loadedOnce && !loading) {
       // Las listas del panel de filtros (sucursales, ejecutivos y clientes) se piden de una vez, en
       // paralelo con los documentos, para que estén listas cuando se abra el panel (antes salían
@@ -259,13 +282,16 @@ class DocumentsProvider extends ChangeNotifier {
     if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
   }
 
-  Future<void> _fetch({required int page}) async {
+  Future<void> _fetch({required int page, bool background = false}) async {
     final companyId = _companyId;
     if (companyId == null) return;
 
     final request = ++_request;
     final first = page == 1;
-    if (first) {
+    if (background) {
+      // Se queda lo que se ve; solo se reemplaza cuando llega lo nuevo.
+      _stale = false;
+    } else if (first) {
       loading = true;
       error = null;
     } else {
@@ -287,11 +313,13 @@ class DocumentsProvider extends ChangeNotifier {
 
     result.fold(
       (failure) {
-        if (first) {
+        if (first && !background) {
           items = [];
           hasMore = false;
           error = failure.message;
         }
+        // Si la actualización en segundo plano falla, se queda la lista que había.
+        if (background) _stale = true;
         if (failure is AuthenticationFailure) _onSessionExpired?.call();
       },
       (data) {
@@ -302,6 +330,7 @@ class DocumentsProvider extends ChangeNotifier {
         totalSoles = data.totalSoles;
         totalDolares = data.totalDolares;
         error = null;
+        _loadedAt = _now();
       },
     );
     _loadedOnce = true;

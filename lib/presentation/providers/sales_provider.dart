@@ -26,6 +26,10 @@ class SalesProvider extends ChangeNotifier {
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
 
+  /// Se llama cuando se registró (o pudo registrarse) una venta o cotización: la lista de Documentos
+  /// queda desactualizada y se vuelve a pedir al entrar.
+  final VoidCallback? _onDocumentsChanged;
+
   /// Hora actual; se puede reemplazar en pruebas.
   final DateTime Function() _now;
 
@@ -40,6 +44,7 @@ class SalesProvider extends ChangeNotifier {
     required SearchSaleProductsUseCase searchSaleProductsUseCase,
     required CreateSaleUseCase createSaleUseCase,
     VoidCallback? onSessionExpired,
+    VoidCallback? onDocumentsChanged,
     DateTime Function()? now,
   })  : _now = now ?? DateTime.now,
         _getWarehouses = getWarehousesUseCase,
@@ -51,7 +56,8 @@ class SalesProvider extends ChangeNotifier {
         _searchClients = searchClientsUseCase,
         _searchProducts = searchSaleProductsUseCase,
         _createSale = createSaleUseCase,
-        _onSessionExpired = onSessionExpired;
+        _onSessionExpired = onSessionExpired,
+        _onDocumentsChanged = onDocumentsChanged;
 
   int? _companyId;
   int? _userId;
@@ -948,10 +954,13 @@ class SalesProvider extends ChangeNotifier {
             ? '${failure.message}. Antes de reintentar, revisa en Documentos si ${tipoDocumento.esCotizacion ? 'la cotización' : 'la venta'} ya quedó registrada.'
             : failure.message;
         if (failure is AuthenticationFailure) _onSessionExpired?.call();
+        // Si no se sabe si quedó registrada, la lista de Documentos también se vuelve a pedir.
+        if (incierto) _onDocumentsChanged?.call();
       },
       (sale) {
         lastSale = sale;
         ok = true;
+        _onDocumentsChanged?.call();
       },
     );
     if (ok) clearDraft();

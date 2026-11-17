@@ -274,7 +274,7 @@ SessionContextEntity _session({
       defaultListPriceId: 11,
     );
 
-SalesProvider _provider(_FakeSaleRepository sales) {
+SalesProvider _provider(_FakeSaleRepository sales, {VoidCallback? onDocumentsChanged}) {
   final stock = _FakeStockRepository();
   return SalesProvider(
     getWarehousesUseCase: GetWarehousesUseCase(repository: stock),
@@ -286,6 +286,7 @@ SalesProvider _provider(_FakeSaleRepository sales) {
     searchClientsUseCase: SearchClientsUseCase(repository: sales),
     searchSaleProductsUseCase: SearchSaleProductsUseCase(repository: sales),
     createSaleUseCase: CreateSaleUseCase(repository: sales),
+    onDocumentsChanged: onDocumentsChanged,
   );
 }
 
@@ -759,6 +760,22 @@ void main() {
         expect(p.priceListId, 12);
         expect(p.takeListNotice(), isNull);
       });
+    });
+
+    test('al registrar una venta o cotización se avisa a Documentos para que la traiga al entrar', () async {
+      var avisos = 0;
+      final repo = _FakeSaleRepository();
+      final p = _provider(repo, onDocumentsChanged: () => avisos++)..syncSession(_session());
+      await p.ensureLoaded();
+      p.selectWarehouse(1);
+      p.selectClient(_acme);
+      p.selectPriceList(11);
+      p.addProduct(_product(), cantidad: 1);
+      p.selectTipoDocumento(SaleDocumentType.cotizacion);
+
+      expect(await p.submit(), isTrue);
+
+      expect(avisos, 1);
     });
 
     test('al cambiar de lista las líneas toman el precio de la nueva', () async {
