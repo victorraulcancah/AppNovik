@@ -480,17 +480,29 @@ class SalesProvider extends ChangeNotifier {
     return left < 0 ? 0 : left;
   }
 
+  /// "Stock insuficiente. Disponible: 144 unidades." (la unidad es la del producto; sin ella,
+  /// "unidades"). Con [product] la frase lleva antes su nombre, para cuando se agregan varios.
+  static String stockInsuficiente(double disponible, SaleProductEntity product, {bool conNombre = false}) {
+    final unit = (product.unidad ?? '').trim().toLowerCase();
+    final cantidad = formatQuantity(disponible < 0 ? 0 : disponible);
+    final String texto;
+    if (unit.isEmpty || unit == 'unidad') {
+      texto = '$cantidad ${disponible == 1 ? 'unidad' : 'unidades'}';
+    } else {
+      texto = '$cantidad $unit';
+    }
+    final frase = 'Stock insuficiente. Disponible: $texto.';
+    return conNombre ? '"${product.name}": $frase' : frase;
+  }
+
   /// Motivo por el que no se pueden agregar [cantidad] unidades más de [product].
-  String? _problemaAlAgregar(SaleProductEntity product, int cantidad) {
+  String? _problemaAlAgregar(SaleProductEntity product, int cantidad, {bool conNombre = false}) {
     if (cantidad < 1) return '"${product.name}": la cantidad mínima es 1';
     final available = disponibleParaAgregar(product);
     if (available == null || cantidad <= available) return null;
 
-    final enVenta = cantidadEnVenta(product.id);
-    final max = product.maximoEn(warehouseId!)!;
-    if (max <= 0) return '"${product.name}" no tiene stock en este almacén';
-    return 'Solo hay ${formatQuantity(max)} de "${product.name}" en este almacén'
-        '${enVenta > 0 ? ' (ya hay $enVenta en la venta)' : ''}';
+    // Lo que todavía se puede agregar (el stock menos lo que ya está en la venta).
+    return stockInsuficiente(available, product, conNombre: conNombre);
   }
 
   /// Agrega el producto, o suma [cantidad] si ya estaba. Con [precio] la línea queda con ese
@@ -519,7 +531,7 @@ class SalesProvider extends ChangeNotifier {
 
     final problems = <String>[];
     for (final e in entries) {
-      final problem = _problemaAlAgregar(e.product, e.cantidad);
+      final problem = _problemaAlAgregar(e.product, e.cantidad, conNombre: entries.length > 1);
       if (problem != null) problems.add(problem);
     }
     if (problems.isNotEmpty || entries.isEmpty) return problems;
@@ -552,7 +564,7 @@ class SalesProvider extends ChangeNotifier {
     final max = warehouseId == null ? null : line.product.maximoEn(warehouseId!);
     if (max != null && value > max) {
       value = max.floor() < 1 ? 1 : max.floor();
-      aviso = 'Solo hay ${formatQuantity(max)} de "${line.product.name}" en este almacén';
+      aviso = stockInsuficiente(max, line.product);
     }
     lines = [...lines]..[index] = line.copyWith(cantidad: value);
     submitError = null;
@@ -712,9 +724,7 @@ class SalesProvider extends ChangeNotifier {
     final warehouse = warehouseId;
     final max = warehouse == null ? null : line.product.maximoEn(warehouse);
     if (max != null && line.cantidad > max) {
-      return max <= 0
-          ? 'Sin stock en este almacén'
-          : 'Solo hay ${formatQuantity(max)} en este almacén';
+      return stockInsuficiente(max, line.product);
     }
     return null;
   }

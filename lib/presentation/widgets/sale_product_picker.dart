@@ -262,6 +262,15 @@ class _ProductCardState extends State<_ProductCard> {
 
   bool get _blocked => _limit != null && _limit! < 1;
 
+  /// "50 unidades", "1 unidad", "12 set": la cantidad con la unidad del producto.
+  String _stockWithUnit(double stock) {
+    final unit = (_product.unidad ?? '').trim().toLowerCase();
+    final quantity = formatQuantity(stock);
+    if (unit.isEmpty) return quantity;
+    if (unit == 'unidad') return '$quantity ${stock == 1 ? 'unidad' : 'unidades'}';
+    return '$quantity $unit';
+  }
+
   void _select(bool on) {
     final next = {...widget.selection.value};
     if (on) {
@@ -283,7 +292,6 @@ class _ProductCardState extends State<_ProductCard> {
     final stock = warehouse == null ? 0.0 : _product.stockEn(warehouse);
     final price = list == null ? 0.0 : _product.precioEn(list);
     final inSale = sales.cantidadEnVenta(_product.id);
-    final category = sales.productFilters.categoriaName(_product.categoryId);
 
     final String stockText;
     if (_product.esServicio) {
@@ -293,7 +301,7 @@ class _ProductCardState extends State<_ProductCard> {
     } else if (_product.ventaSinStock && stock <= 0) {
       stockText = 'Sin tope';
     } else {
-      stockText = '${formatQuantity(stock)}${_product.unidad != null ? ' ${_product.unidad}' : ''}';
+      stockText = _stockWithUnit(stock);
     }
 
     return ValueListenableBuilder<Map<int, _Pick>>(
@@ -315,109 +323,104 @@ class _ProductCardState extends State<_ProductCard> {
               borderRadius: BorderRadius.circular(14),
               onTap: _blocked ? null : () => _select(!checked),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 10, 8),
-                // Todas las tarjetas miden lo mismo como mínimo (la altura de una de tres líneas de texto), con
-                // el contenido centrado; solo una de nombre larguísimo crece.
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 100),
-                  child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Arriba: el código, grande, y el precio.
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Checkbox(
-                          value: checked,
-                          onChanged: _blocked ? null : (v) => _select(v ?? false),
-                        ),
-                        // La foto del producto (o un recuadro vacío): al tocarla se abre a pantalla completa.
-                        Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: _product.imagen == null
-                              ? const ProductImagePlaceholder(size: 52)
-                              : Semantics(
-                                  button: true,
-                                  label: 'Ver la imagen de ${_product.name}',
-                                  child: GestureDetector(
-                                    onTap: () => openProductImage(
-                                      context,
-                                      path: _product.imagen!,
-                                      title: _product.name,
-                                    ),
-                                    child: ProductImage(path: _product.imagen!, size: 52),
-                                  ),
-                                ),
-                        ),
                         Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.zero,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _product.name,
-                                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                                Text(
-                                  [
-                                    _product.codigo,
-                                    ?_product.marca,
-                                    ?category,
-                                  ].join(' · '),
-                                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                                ),
-                                if (inSale > 0)
-                                  Text(
-                                    'Ya en la venta: $inSale',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: scheme.onSurfaceVariant,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                          child: Text(
+                            _product.codigo,
+                            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Padding(
-                          padding: EdgeInsets.zero,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 110),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: _blocked ? scheme.errorContainer : scheme.surfaceContainerHigh,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    stockText,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: _blocked ? scheme.onErrorContainer : scheme.onSurface,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                price > 0 ? formatMoney(price, symbol: widget.sales.moneySymbol) : 'Sin precio',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: price > 0 ? scheme.onSurface : scheme.error,
-                                ),
-                              ),
-                            ],
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Text(
+                            price > 0 ? formatMoney(price, symbol: widget.sales.moneySymbol) : 'Sin precio',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: price > 0 ? scheme.onSurface : scheme.error,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    // En medio: la foto (o un recuadro vacío), el nombre completo y la casilla.
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _product.imagen == null
+                            ? const ProductImagePlaceholder(size: 64, radius: 12)
+                            : Semantics(
+                                button: true,
+                                label: 'Ver la imagen de ${_product.name}',
+                                child: GestureDetector(
+                                  onTap: () => openProductImage(
+                                    context,
+                                    path: _product.imagen!,
+                                    title: _product.name,
+                                  ),
+                                  child: ProductImage(path: _product.imagen!, size: 64, radius: 12),
+                                ),
+                              ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_product.name, style: theme.textTheme.bodyMedium),
+                              if (inSale > 0)
+                                Text(
+                                  'Ya en la venta: $inSale',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Checkbox(
+                          value: checked,
+                          onChanged: _blocked ? null : (v) => _select(v ?? false),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Abajo: el stock con su unidad y la marca.
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _blocked ? scheme.errorContainer : scheme.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            stockText,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: _blocked ? scheme.onErrorContainer : scheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_product.marca != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Text(_product.marca!, style: theme.textTheme.bodyMedium),
+                          ),
+                      ],
+                    ),
                   ],
-                ),
                 ),
               ),
             ),

@@ -313,7 +313,12 @@ class _ReportsPageState extends State<ReportsPage> {
     final top = [
       for (final p in report.products.take(RankingSummaryCard.top))
         (
-          row: RankingRow(id: p.id, name: p.name, venta: byAmount ? p.venta : p.cantidad),
+          // Solo el código del producto (el nombre largo no cabe en la tarjeta).
+          row: RankingRow(
+            id: p.id,
+            name: p.codigo.trim().isEmpty ? p.name : p.codigo,
+            venta: byAmount ? p.venta : p.cantidad,
+          ),
           share: base > 0 ? (byAmount ? p.venta : p.cantidad) / base * 100 : 0.0,
         ),
     ];

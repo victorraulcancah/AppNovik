@@ -898,7 +898,9 @@ void main() {
       // La lista completa ya no sale suelta: solo la tarjeta con el top.
       expect(find.text('Productos y servicios · 2'), findsNothing);
       expect(find.text('Ventas por productos'), findsOneWidget);
-      expect(find.text('1. SUBWOOFER 12"'), findsOneWidget);
+      // Solo el código del producto, no el nombre largo.
+      expect(find.text('1. SUB-12'), findsOneWidget);
+      expect(find.text('1. SUBWOOFER 12"'), findsNothing);
       expect(find.text('S/. 290.00'), findsWidgets);
       expect(find.text('87.7 %'), findsOneWidget); // 290 de 330.50
 

@@ -1202,21 +1202,27 @@ void main() {
       return sales;
     }
 
-    testWidgets('muestra stock, unidad, precio y categoría de cada producto', (tester) async {
-      final sales = await open(tester);
-      await sales.ensureProductFilters();
-      await tester.pumpAndSettle();
+    testWidgets('cada tarjeta trae el código grande, el precio, el nombre, el stock con su unidad y la marca', (tester) async {
+      await open(tester);
 
       expect(find.text('3 productos'), findsOneWidget);
-      expect(find.text('5 Unidad'), findsOneWidget);
-      expect(find.text('40 Unidad'), findsOneWidget);
+      // Arriba el código y el precio; abajo la cantidad con su unidad y la marca.
+      expect(find.text('SUB-12'), findsOneWidget);
+      expect(find.text('CAB-1'), findsOneWidget);
+      expect(find.text('5 unidades'), findsOneWidget);
+      expect(find.text('40 unidades'), findsOneWidget);
       expect(find.text('Sin stock'), findsOneWidget);
       expect(find.text('S/ 40.00'), findsNWidgets(2)); // el subwoofer y el radio
       expect(find.text('S/ 12.50'), findsOneWidget);
-      expect(find.text('SUB-12 · PIONEER · AUDIO'), findsOneWidget);
+      expect(find.text('PIONEER'), findsWidgets);
       // Sin campos de Unidad ni de cantidad en las tarjetas: se agrega de a 1.
       expect(find.text('Unidad'), findsNothing);
       expect(find.text('Cant.'), findsNothing);
+      // El código va arriba del nombre.
+      expect(
+        tester.getTopLeft(find.text('SUB-12')).dy,
+        lessThan(tester.getTopLeft(find.text('SUBWOOFER 12"')).dy),
+      );
     });
 
     testWidgets('marcar varios los agrega de una vez, de a 1 cada uno', (tester) async {
