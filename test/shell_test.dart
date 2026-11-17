@@ -50,7 +50,7 @@ class _FakeAuthRepository implements AuthRepository {
   Future<Either<Failure, void>> clearSavedCredentials() async => Either.rightVoid();
 }
 
-AuthProvider _auth(List<String> modules) {
+AuthProvider _auth(List<String> modules, {Set<String> permissions = const {}}) {
   final repo = _FakeAuthRepository();
   return AuthProvider(
     loginUseCase: LoginUseCase(repository: repo),
@@ -65,7 +65,7 @@ AuthProvider _auth(List<String> modules) {
       modules: [
         for (var i = 0; i < modules.length; i++) ModuleEntity(id: i + 1, name: modules[i]),
       ],
-      permissions: const {},
+      permissions: permissions,
       roles: const [],
       warehouses: const [],
     );
@@ -75,6 +75,7 @@ Future<ShellNavigation> _pump(
   WidgetTester tester,
   List<String> modules, {
   Size size = const Size(400, 800),
+  Set<String> permissions = const {},
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -83,7 +84,7 @@ Future<ShellNavigation> _pump(
   await tester.pumpWidget(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider<AuthProvider>.value(value: _auth(modules)),
+        ChangeNotifierProvider<AuthProvider>.value(value: _auth(modules, permissions: permissions)),
         ChangeNotifierProvider<ShellNavigation>.value(value: navigation),
         ChangeNotifierProvider<ThemeProvider>(
           create: (_) => ThemeProvider(storage: _FakeThemeStorage()),
@@ -179,6 +180,16 @@ void main() {
     for (final t in ['Ventas', 'Clientes', 'Deudas', 'Estado de cuenta']) {
       expect(find.descendant(of: find.byType(NavigationRail), matching: find.text(t)), findsOneWidget);
     }
+  });
+
+  testWidgets('el vendedor que solo puede ver stock (stock.show) tiene Stock aunque no tenga el módulo', (tester) async {
+    await _pump(tester, const ['Ventas', 'Clientes'], size: const Size(1100, 800), permissions: const {'stock.show'});
+    expect(find.descendant(of: find.byType(NavigationRail), matching: find.text('Stock')), findsOneWidget);
+  });
+
+  testWidgets('sin el módulo ni stock.show, Stock no aparece', (tester) async {
+    await _pump(tester, const ['Ventas', 'Clientes'], size: const Size(1100, 800));
+    expect(find.text('Stock'), findsNothing);
   });
 
   testWidgets('sin el módulo, Deudas y Estado de cuenta no aparecen', (tester) async {

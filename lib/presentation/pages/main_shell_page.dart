@@ -27,12 +27,17 @@ class _AppModulo {
   /// Sin módulo contratado de por medio: lo ven todos los usuarios (como el Dashboard de la web).
   final bool siempre;
 
+  /// Permiso que también lo muestra aunque el usuario no tenga el módulo completo (p. ej. el Ejecutivo Comercial
+  /// solo puede ver el stock: `stock.show`, sin el módulo Stock, que es el de agregar).
+  final String? permiso;
+
   const _AppModulo(
     this.slug,
     this.titulo,
     this.icono,
     this.iconoActivo, {
     this.siempre = false,
+    this.permiso,
   });
 
   AppDestination get destino =>
@@ -51,7 +56,13 @@ const _catalogo = [
     Icons.point_of_sale,
   ),
   _AppModulo('reportes', 'Reportes', Icons.bar_chart_outlined, Icons.bar_chart),
-  _AppModulo('stock', 'Stock', Icons.inventory_2_outlined, Icons.inventory_2),
+  _AppModulo(
+    'stock',
+    'Stock',
+    Icons.inventory_2_outlined,
+    Icons.inventory_2,
+    permiso: 'stock.show',
+  ),
   _AppModulo(
     'documentos',
     'Documentos',
@@ -101,7 +112,9 @@ class _MainShellPageState extends State<MainShellPage> {
         .where(
           (m) =>
               !_ocultos.contains(m.slug) &&
-              (m.siempre || session.hasModule(m.slug)),
+              (m.siempre ||
+                  session.hasModule(m.slug) ||
+                  (m.permiso != null && session.can(m.permiso!))),
         )
         .toList();
     // Otra pantalla pidió pasar a un módulo (por ejemplo, Documentos → Ventas al culminar una
