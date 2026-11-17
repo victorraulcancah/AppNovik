@@ -279,6 +279,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
           children: [
             AppSearchBar(
               hint: 'Buscar por número de documento',
+              // Los números de documento se escriben: sin micrófono en Documentos.
+              voice: false,
               onChanged: _onSearchChanged,
               onFilter: () => showDocumentFilters(context),
               filterCount: documentActiveFilters(documents).length,

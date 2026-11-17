@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
+import '../../core/constants/app_constants.dart';
 import 'app_modal.dart';
 
 /// Campo que muestra un valor y abre un selector al tocarlo (rango de fechas, lista
@@ -62,6 +65,8 @@ Future<List<int>?> showAppMultiSelect(
     subtitle: subtitle ?? (single ? 'Elige uno; sin elegir se incluyen todos' : 'Sin elegir ninguno se incluyen todos'),
     icon: icon,
     primaryLabel: 'Aplicar',
+    // Alto fijo: la ventana mide siempre lo mismo, haya 2 resultados o 200, y no salta al buscar.
+    fixedHeight: true,
     child: _MultiSelectBody(options: options, chosen: chosen, single: single),
   );
   final result = applied == true ? chosen.value.toList() : null;
@@ -107,6 +112,25 @@ class _MultiSelectBody extends StatefulWidget {
 
 class _MultiSelectBodyState extends State<_MultiSelectBody> {
   String _query = '';
+  Timer? _typing;
+
+  @override
+  void dispose() {
+    _typing?.cancel();
+    super.dispose();
+  }
+
+  void _onQuery(String v) {
+    setState(() => _query = v);
+    // Con resultados a la vista y sin seguir escribiendo, el teclado baja (como en el buscador de Ventas).
+    _typing?.cancel();
+    _typing = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      final q = _query.trim().toLowerCase();
+      final hay = q.isEmpty || widget.options.any((o) => o.name.toLowerCase().contains(q));
+      if (hay && q.isNotEmpty) FocusManager.instance.primaryFocus?.unfocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,9 +140,11 @@ class _MultiSelectBodyState extends State<_MultiSelectBody> {
     final visible = q.isEmpty
         ? widget.options
         : [for (final o in widget.options) if (o.name.toLowerCase().contains(q)) o];
-    // Alto según las opciones (cada una mide ~48), con tope para que la lista haga scroll.
-    final maxHeight = math.min(360.0, MediaQuery.sizeOf(context).height * 0.45);
-    final height = math.min(maxHeight, math.max(96.0, visible.length * 48.0 + 8));
+    // Alto fijo: lo que queda de la ventana (el 85 % de la pantalla; el 80 % en tablet) bajo el título, el
+    // buscador y los botones. No depende de cuántos resultados hay.
+    final size = MediaQuery.sizeOf(context);
+    final tablet = size.width >= AppConstants.tabletBreakpoint;
+    final height = math.max(200.0, size.height * (tablet ? 0.8 : 0.85) - 340);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,7 +155,7 @@ class _MultiSelectBodyState extends State<_MultiSelectBody> {
             prefixIcon: Icon(Icons.search),
             isDense: true,
           ),
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: _onQuery,
         ),
         const SizedBox(height: 8),
         ValueListenableBuilder<Set<int>>(

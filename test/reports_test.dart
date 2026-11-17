@@ -981,7 +981,8 @@ void main() {
       // Margen bruto de la tarjeta: 330.50 - 620.50. El del producto: subtotal 300 - costo 600.
       expect(find.text('S/. -290.00'), findsOneWidget);
       await openProducts(tester);
-      expect(find.text('Margen S/. -300.00'), findsOneWidget);
+      // La venta del producto es 290: el margen de -300 es -103.4 % de ella.
+      expect(find.text('Margen S/. -300.00 (-103.4 %)'), findsOneWidget);
       expect(find.text('S/. *******'), findsNothing);
     });
 

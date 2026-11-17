@@ -1454,6 +1454,17 @@ void main() {
       expect(find.text('V001-0001'), findsNothing);
     });
 
+    testWidgets('ninguna lista de Documentos tiene micrófono en el buscador (ventas, cotizaciones ni otros documentos)', (tester) async {
+      await pump(tester, permissions: todas);
+      expect(find.byTooltip('Buscar por voz'), findsNothing);
+
+      await tester.tap(find.text('Ventas').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Entrada de Stock').last);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Buscar por voz'), findsNothing);
+    });
+
     testWidgets('volver a Ventas muestra otra vez sus documentos y sus Acciones', (tester) async {
       await pump(tester, permissions: todas);
 

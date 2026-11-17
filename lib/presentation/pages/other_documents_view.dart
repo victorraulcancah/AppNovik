@@ -135,6 +135,8 @@ class _OtherDocumentsViewState extends State<OtherDocumentsView> {
       children: [
         AppSearchBar(
           hint: 'Buscar por número de documento',
+          // Los números de documento se escriben: sin micrófono en Documentos.
+          voice: false,
           controller: _search,
           onChanged: _onSearchChanged,
           onFilter: _openFilters,

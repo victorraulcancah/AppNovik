@@ -794,15 +794,18 @@ void main() {
       await choose(tester, 'Marcas');
 
       // Con el margen tapado (como en Venta general) se ve "S/. *******"; el ojo lo destapa.
-      expect(find.textContaining('Subtotal'), findsWidgets);
-      expect(find.textContaining('Desc.'), findsWidgets);
-      expect(find.textContaining('ventas · Ticket prom.'), findsWidgets);
-      expect(find.text('Margen S/. *******'), findsWidgets);
+      expect(find.textContaining('Subtotal: '), findsWidgets);
+      expect(find.textContaining('N° de ventas: '), findsWidgets);
+      expect(find.textContaining('Ticket promedio: '), findsWidgets);
+      expect(find.textContaining('Descuento: '), findsWidgets);
+      // Un solo concepto por línea: nada de "Subtotal … · Desc. …" juntos.
+      expect(find.textContaining(' · Desc.'), findsNothing);
+      expect(find.text('Margen: S/. *******'), findsWidgets);
 
       await tester.tap(find.byTooltip('Ver el margen'));
       await tester.pumpAndSettle();
-      expect(find.text('Margen S/. *******'), findsNothing);
-      expect(find.textContaining('Margen S/.'), findsWidgets);
+      expect(find.text('Margen: S/. *******'), findsNothing);
+      expect(find.textContaining('Margen: S/.'), findsWidgets);
       expect(find.textContaining(RegExp('unidad', caseSensitive: false)), findsNothing);
     });
 

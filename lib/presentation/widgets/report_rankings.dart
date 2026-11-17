@@ -432,7 +432,7 @@ class _RankingViewState extends State<RankingView> {
   }
 
   /// Los detalles de una fila bajo su nombre (sin unidades): documento y categoría del cliente,
-  /// número de ventas con su ticket promedio, subtotal con descuento y margen.
+  /// número de ventas, ticket promedio, subtotal, descuento y margen (cada uno en su línea).
   List<String> _details(RankingRow row) {
     final margin = widget.marginVisible
         ? '${_soles(row.margen)}${row.venta > 0 ? ' (${rankingPercent(row.margen / row.venta * 100)})' : ''}'
@@ -440,10 +440,12 @@ class _RankingViewState extends State<RankingView> {
     return [
       if (row.documento != null || row.categoria != null)
         [?row.documento, ?row.categoria].join(' · '),
-      if (widget.showAmounts && row.nVentas > 0)
-        '${row.nVentas} ${row.nVentas == 1 ? 'venta' : 'ventas'} · Ticket prom. ${_soles(row.ticketPromedio!)}',
-      if (widget.showAmounts) 'Subtotal ${_soles(row.subtotal)} · Desc. ${_soles(row.descuento)}',
-      if (widget.showAmounts && widget.showMargin) 'Margen $margin',
+      // Una línea por concepto.
+      if (widget.showAmounts && row.nVentas > 0) 'N° de ventas: ${row.nVentas}',
+      if (widget.showAmounts && row.nVentas > 0) 'Ticket promedio: ${_soles(row.ticketPromedio!)}',
+      if (widget.showAmounts) 'Subtotal: ${_soles(row.subtotal)}',
+      if (widget.showAmounts) 'Descuento: ${_soles(row.descuento)}',
+      if (widget.showAmounts && widget.showMargin) 'Margen: $margin',
     ];
   }
 

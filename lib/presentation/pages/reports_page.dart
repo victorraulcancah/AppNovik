@@ -595,7 +595,9 @@ class _ReportsPageState extends State<ReportsPage> {
         if (detail.isNotEmpty) detail,
         if (importes) 'Subtotal ${_soles(p.subtotal)}',
         if (importes) 'Desc. ${_soles(p.descuento)}',
-        if (showMargin) 'Margen ${_marginVisible ? _soles(p.margen) : 'S/. *******'}',
+        // El margen con su porcentaje de la venta (la ganancia).
+        if (showMargin)
+          'Margen ${_marginVisible ? '${_soles(p.margen)}${p.venta > 0 ? ' (${rankingPercent(p.margen / p.venta * 100)})' : ''}' : 'S/. *******'}',
       ],
       trailingTitle: importes ? _soles(p.venta) : '${formatQuantity(p.cantidad)} uds.',
       trailingCaption: importes ? 'Cant. ${formatQuantity(p.cantidad)}' : null,
