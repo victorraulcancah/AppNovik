@@ -110,4 +110,38 @@ void main() {
       expect(find.byTooltip('Buscar por voz'), findsNothing);
     });
   });
+
+  group('lo dicho se transcribe tal como se buscaría (números en dígitos)', () {
+    test('un número dicho en palabras sale en dígitos', () {
+      expect(spokenToSearchText('cien'), '100');
+      expect(spokenToSearchText('ciento veinte'), '120');
+      expect(spokenToSearchText('treinta y cinco'), '35');
+      expect(spokenToSearchText('mil quinientos'), '1500');
+      expect(spokenToSearchText('dos mil veintiuno'), '2021');
+      expect(spokenToSearchText('cinco'), '5');
+    });
+
+    test('lo que ya viene en dígitos no se toca', () {
+      expect(spokenToSearchText('100'), '100');
+      expect(spokenToSearchText('V001-7435'), 'V001-7435');
+    });
+
+    test('dígitos dichos uno a uno se pegan (series y códigos)', () {
+      expect(spokenToSearchText('cero cero uno'), '001');
+      expect(spokenToSearchText('siete cuatro tres cinco'), '7435');
+    });
+
+    test('una serie con su letra y su guion', () {
+      expect(spokenToSearchText('cero cero uno guion siete cuatro tres cinco'), '001-7435');
+      expect(spokenToSearchText('be cero cero uno guion doscientos'), 'B001-200');
+      expect(spokenToSearchText('ve cero cero uno menos siete mil cuatrocientos treinta y cinco'), 'V001-7435');
+    });
+
+    test('el texto normal queda como está y los números van en medio', () {
+      expect(spokenToSearchText('amplificador'), 'amplificador');
+      expect(spokenToSearchText('amplificador cuatro canales'), 'amplificador 4 canales');
+      expect(spokenToSearchText('Un amplificador'), 'Un amplificador');
+      expect(spokenToSearchText('  '), '');
+    });
+  });
 }
