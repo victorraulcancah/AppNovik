@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
@@ -30,6 +32,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
   String? _error;
   bool _listening = false;
   bool _closed = false;
+  Timer? _silence;
 
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
 
   @override
   void dispose() {
+    _silence?.cancel();
     _speech.cancel();
     super.dispose();
   }
@@ -65,9 +69,24 @@ class _VoiceSheetState extends State<_VoiceSheet> {
     });
     await _speech.listen(
       onResult: (SpeechRecognitionResult r) {
-        if (mounted) setState(() => _text = r.recognizedWords);
+        if (!mounted) return;
+        setState(() => _text = r.recognizedWords);
+        // El resultado final cierra la ventana de una vez y lo dicho pasa al buscador. Por si el
+        // reconocedor no avisa que terminó, un momento sin palabras nuevas también lo cierra.
+        _silence?.cancel();
+        if (r.finalResult) {
+          _finish();
+        } else {
+          _silence = Timer(const Duration(milliseconds: 1600), _finish);
+        }
       },
-      listenOptions: SpeechListenOptions(partialResults: true, cancelOnError: true, localeId: 'es_PE'),
+      listenOptions: SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+        localeId: 'es_PE',
+        listenFor: const Duration(seconds: 20),
+        pauseFor: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -79,6 +98,8 @@ class _VoiceSheetState extends State<_VoiceSheet> {
       return;
     }
     _closed = true;
+    _silence?.cancel();
+    _speech.stop();
     Navigator.of(context).pop(said);
   }
 
@@ -95,7 +116,8 @@ class _VoiceSheetState extends State<_VoiceSheet> {
             button: true,
             label: _listening ? 'Escuchando' : 'Hablar',
             child: GestureDetector(
-              onTap: _listening ? _speech.stop : _start,
+              // Tocar el micrófono mientras escucha entrega lo que se alcanzó a decir.
+              onTap: _listening ? _finish : _start,
               child: Container(
                 width: 72,
                 height: 72,

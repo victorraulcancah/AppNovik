@@ -56,6 +56,82 @@ class AppListCard extends StatelessWidget {
     const tabular = [FontFeature.tabularFigures()];
     final hasTrailing = trailingTitle != null || trailingCaption != null || actions.isNotEmpty;
 
+    // Con imagen a la izquierda, esta queda centrada a lo alto de la tarjeta y el resto sigue arriba.
+    final rowCore = Row(
+      crossAxisAlignment: leading != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+      children: [
+        if (leading != null) ...[Center(child: leading!), const SizedBox(width: 12)],
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                for (final line in lines)
+                  Text(
+                    line,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (footer != null && !footerOnRight)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: footer,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (hasTrailing) ...[
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (trailingTitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 8),
+                  child: Text(
+                    trailingTitle!,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: tabular,
+                      color: trailingTitleColor,
+                    ),
+                  ),
+                ),
+              if (trailingCaption != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    trailingCaption!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color:
+                          trailingCaptionColor ??
+                          scheme.onSurfaceVariant,
+                      fontFeatures: tabular,
+                    ),
+                  ),
+                ),
+              if (actions.isNotEmpty)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: actions,
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+    final cardRow = leading != null ? IntrinsicHeight(child: rowCore) : rowCore;
+
     return AppPressScale(
       enabled: onTap != null,
       scale: 0.985,
@@ -82,79 +158,7 @@ class AppListCard extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Column(
                   children: [
-                    Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (leading != null) ...[leading!, const SizedBox(width: 12)],
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            for (final line in lines)
-                              Text(
-                                line,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            if (footer != null && !footerOnRight)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: footer,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (hasTrailing) ...[
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (trailingTitle != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2, right: 8),
-                              child: Text(
-                                trailingTitle!,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontFeatures: tabular,
-                                  color: trailingTitleColor,
-                                ),
-                              ),
-                            ),
-                          if (trailingCaption != null)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Text(
-                                trailingCaption!,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color:
-                                      trailingCaptionColor ??
-                                      scheme.onSurfaceVariant,
-                                  fontFeatures: tabular,
-                                ),
-                              ),
-                            ),
-                          if (actions.isNotEmpty)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: actions,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
+                    cardRow,
                     // Las insignias, en una fila abajo a todo lo ancho.
                     if (footer != null && footerOnRight)
                       Padding(
