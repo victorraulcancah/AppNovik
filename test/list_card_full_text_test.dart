@@ -40,12 +40,15 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: AppListCard(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: AppListCard(
             leading: const SizedBox(key: Key('foto'), width: 48, height: 48),
             title: 'CABLE DE ALIMENTACIÓN CCA CALIBRE 0GA 15 METROS',
             lines: const ['Código · 0GA', '7POWER · ROLLO CABLE'],
             trailingTitle: 'UNIDAD (4 c/u)',
             actions: const [Icon(Icons.edit), Icon(Icons.delete)],
+          ),
           ),
         ),
       ),

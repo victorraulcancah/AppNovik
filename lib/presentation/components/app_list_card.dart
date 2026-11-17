@@ -157,6 +157,7 @@ class AppListCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     cardRow,
                     // Las insignias, en una fila abajo a todo lo ancho.

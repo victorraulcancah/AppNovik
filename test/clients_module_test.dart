@@ -752,20 +752,21 @@ void main() {
       expect(find.descendant(of: find.widgetWithText(AppMetricCard, 'Empresas'), matching: find.text('5')), findsOneWidget);
     });
 
-    testWidgets('abajo, el estado va al costado de la categoría, juntos a la izquierda', (tester) async {
+    testWidgets('abajo, en una fila: la categoría a la izquierda y el estado a la derecha, bajo los botones', (tester) async {
       await _pump(tester, const {'clientes.index', 'clientes.update'});
 
       final ver = tester.getRect(find.byTooltip('Ver detalle').first);
+      final editar = tester.getRect(find.byTooltip('Editar').first);
       final categoria = tester.getRect(find.text('Distribuidor').first);
       final estado = tester.getRect(find.text('Activo').first);
       final dato = tester.getRect(find.textContaining('Cód. cliente: ').first);
-      // Los botones quedan arriba a la derecha y las insignias debajo.
+      // Los botones quedan arriba a la derecha y las insignias debajo de ellos.
       expect(estado.top, greaterThan(ver.bottom - 1));
-      // Misma fila: la categoría alineada con el texto de la izquierda y el estado justo a su costado.
+      // Misma fila: la categoría con el texto de la izquierda y el estado pegado a la derecha.
       expect((categoria.center.dy - estado.center.dy).abs(), lessThan(estado.height));
       expect(categoria.left, lessThan(dato.left + 20));
-      expect(estado.left, greaterThan(categoria.right));
-      expect(estado.left - categoria.right, lessThan(40));
+      expect(estado.right, lessThanOrEqualTo(editar.right + 1));
+      expect(estado.left - categoria.right, greaterThan(20));
     });
 
     testWidgets('el monto usado solo sale si hay algo usado: en 0 no dice nada (ni "Crédito")', (tester) async {
