@@ -657,6 +657,21 @@ void main() {
       expect(provider.catalogs.vendedores, hasLength(2));
     });
 
+    test('al entrar a Documentos los catálogos del panel de filtros ya se piden (no salen "Cargando…" al abrirlo)', () async {
+      final repo = _FakeDocumentRepository();
+      final provider = _provider(repo);
+
+      await provider.ensureLoaded();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repo.actions, contains('catalogs'));
+      expect(provider.catalogsLoaded, isTrue);
+      expect(provider.catalogs.vendedores, isNotEmpty);
+      // Abrir el panel después no los vuelve a pedir.
+      await provider.ensureCatalogs();
+      expect(repo.actions.where((a) => a == 'catalogs'), hasLength(1));
+    });
+
     test('un vendedor sin permiso para ver a los demás solo se ve a sí mismo', () async {
       final repo = _FakeDocumentRepository();
       final provider = _provider(repo, session: _session(roles: ['Vendedor']));

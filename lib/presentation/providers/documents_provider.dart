@@ -118,7 +118,13 @@ class DocumentsProvider extends ChangeNotifier {
   }
 
   Future<void> ensureLoaded() async {
-    if (_companyId != null && !_loadedOnce && !loading) await refresh();
+    if (_companyId != null && !_loadedOnce && !loading) {
+      // Las listas del panel de filtros (sucursales, ejecutivos y clientes) se piden de una vez, en
+      // paralelo con los documentos, para que estén listas cuando se abra el panel (antes salían
+      // "Cargando…").
+      ensureCatalogs();
+      await refresh();
+    }
   }
 
   Future<void> refresh() => _fetch(page: 1);
@@ -165,7 +171,8 @@ class DocumentsProvider extends ChangeNotifier {
   /// Vuelve a como se entra: los documentos de hoy, sin otros filtros.
   Future<void> resetFilters() => applyFilters(DocumentFilters.hoy(_now()));
 
-  /// Sucursales, ejecutivos y clientes del panel de filtros; se piden una vez, al abrirlo.
+  /// Sucursales, ejecutivos y clientes del panel de filtros; se piden una vez, apenas se entra a
+  /// Documentos (y, si no llegaron, al abrir el panel).
   Future<void> ensureCatalogs() async {
     final companyId = _companyId;
     if (companyId == null || catalogsLoaded || catalogsLoading) return;
