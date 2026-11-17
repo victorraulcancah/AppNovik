@@ -461,6 +461,52 @@ class SalesProvider extends ChangeNotifier {
     lines = [for (final l in lines) l.esLibre ? l : l.copyWith(precio: l.product.precioEn(list))];
   }
 
+  String? _listNotice;
+
+  /// El aviso del último cambio automático de lista de precios (o de por qué no se cambió), para que
+  /// quien agregó el producto lo muestre. Se entrega una sola vez.
+  String? takeListNotice() {
+    final notice = _listNotice;
+    _listNotice = null;
+    return notice;
+  }
+
+  /// Igual que la web (`pasarADolaresSiNoTienePrecio`): un producto que no tiene precio en la lista
+  /// en soles elegida (saldría en S/ 0) pasa la venta, sola, a la lista en dólares donde sí lo tiene.
+  /// Se prefiere la "pareja" de la lista actual (mismo nombre sin SOLES/USD) y, si no, cualquier lista
+  /// en dólares. Si otro producto del carrito no tiene precio en esa lista no se cambia (quedaría él en
+  /// 0): solo se avisa. Devuelve el aviso, o `null` si no hizo falta nada.
+  String? _pasarADolaresSiNoTienePrecio(SaleProductEntity product) {
+    final actual = priceList;
+    if (actual == null || actual.esDolares) return null;
+    if (product.precioEn(actual.id) > 0) return null;
+
+    String base(String nombre) => nombre
+        .toUpperCase()
+        .split(RegExp(r'\s+'))
+        .where((w) => !const {'SOLES', 'SOL', 'PEN', 'USD', 'DOLARES', 'DÓLARES'}.contains(w))
+        .map((w) => w.replaceFirst(RegExp(r'S$'), ''))
+        .join(' ');
+
+    final candidatas = [for (final l in priceLists) if (l.esDolares && product.precioEn(l.id) > 0) l];
+    if (candidatas.isEmpty) return null;
+    final destino = candidatas.firstWhere((l) => base(l.name) == base(actual.name), orElse: () => candidatas.first);
+
+    final sinPrecio = [
+      for (final l in lines)
+        if (!l.esLibre && l.product.id != product.id && l.product.precioEn(destino.id) <= 0) l.product.codigo,
+    ];
+    if (sinPrecio.isNotEmpty) {
+      return '${product.codigo} no tiene precio en ${actual.name}, solo en ${destino.name}. No se cambió la lista '
+          'porque ${sinPrecio.join(', ')} no tiene precio en ${destino.name}.';
+    }
+
+    priceListId = destino.id;
+    _listaElegidaAMano = true;
+    _repriceLines();
+    return '${product.codigo} no tiene precio en ${actual.name}: se cambió la lista a ${destino.name}.';
+  }
+
   /// Unidades de [productId] que ya están en la venta.
   int cantidadEnVenta(int productId) {
     for (final l in lines) {
@@ -551,6 +597,13 @@ class SalesProvider extends ChangeNotifier {
     }
     lines = next;
     submitError = null;
+    // Un producto sin precio en la lista en soles pasa la venta a la lista en dólares donde sí lo tiene.
+    final avisos = <String>[];
+    for (final e in entries) {
+      final aviso = _pasarADolaresSiNoTienePrecio(e.product);
+      if (aviso != null) avisos.add(aviso);
+    }
+    if (avisos.isNotEmpty) _listNotice = avisos.join('\n');
     notifyListeners();
     return const [];
   }

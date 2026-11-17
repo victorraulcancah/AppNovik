@@ -684,17 +684,81 @@ void main() {
     test('no agrega más unidades que el stock del almacén', () async {
       final p = await _ready(_FakeSaleRepository());
       p.selectWarehouse(2); // sin stock
-      expect(p.addProduct(_product()), contains('no tiene stock'));
+      expect(p.addProduct(_product()), 'Stock insuficiente. Disponible: 0 unidades.');
       expect(p.lines, isEmpty);
 
       p.selectWarehouse(1); // 5 disponibles
       for (var i = 0; i < 5; i++) {
         expect(p.addProduct(_product()), isNull);
       }
-      expect(p.addProduct(_product()), contains('Solo hay 5'));
+      // Ya hay 5 en la venta: no queda nada por agregar. Mensaje corto, sin nombre ni explicaciones.
+      expect(p.addProduct(_product()), 'Stock insuficiente. Disponible: 0 unidades.');
       expect(p.lines.single.cantidad, 5);
-      expect(p.setCantidad(0, 9), contains('Solo hay 5'));
+      expect(p.setCantidad(0, 9), 'Stock insuficiente. Disponible: 5 unidades.');
       expect(p.lines.single.cantidad, 5);
+    });
+
+    group('lista de precios automática (como la web)', () {
+      // Solo se vende en dólares: no tiene precio en las listas en soles (10 y 11), sí en la 12.
+      final soloDolares = _product(id: 300, name: 'KIT USB', codigo: 'USB-1', prices: const {12: 15});
+
+      test('un producto sin precio en la lista en soles pasa la venta a la lista en dólares donde sí lo tiene', () async {
+        final p = await _ready(_FakeSaleRepository());
+        p.selectWarehouse(1);
+        expect(p.priceListId, 11);
+
+        expect(p.addProduct(soloDolares), isNull);
+
+        expect(p.priceListId, 12);
+        expect(p.esDolares, isTrue);
+        expect(p.lines.single.precio, 15);
+        expect(p.takeListNotice(), 'USB-1 no tiene precio en MAYORISTA: se cambió la lista a DÓLARES.');
+        // El aviso se entrega una sola vez.
+        expect(p.takeListNotice(), isNull);
+      });
+
+      test('si otro producto del carrito no tiene precio en esa lista, no se cambia y solo se avisa', () async {
+        final p = await _ready(_FakeSaleRepository());
+        p.selectWarehouse(1);
+        expect(p.addProduct(_product(prices: const {10: 50, 11: 40})), isNull); // SUB-12, solo en soles
+
+        expect(p.addProduct(soloDolares), isNull);
+
+        expect(p.priceListId, 11);
+        expect(p.lines.last.precio, 0);
+        expect(p.takeListNotice(), contains('No se cambió la lista porque SUB-12 no tiene precio en DÓLARES'));
+      });
+
+      test('con precio en la lista elegida no se toca nada', () async {
+        final p = await _ready(_FakeSaleRepository());
+        p.selectWarehouse(1);
+
+        expect(p.addProduct(_product()), isNull);
+
+        expect(p.priceListId, 11);
+        expect(p.takeListNotice(), isNull);
+      });
+
+      test('un producto sin precio en ninguna lista no cambia la lista', () async {
+        final p = await _ready(_FakeSaleRepository());
+        p.selectWarehouse(1);
+
+        expect(p.addProduct(_product(id: 301, prices: const {})), isNull);
+
+        expect(p.priceListId, 11);
+        expect(p.takeListNotice(), isNull);
+      });
+
+      test('estando ya en la lista en dólares no cambia nada', () async {
+        final p = await _ready(_FakeSaleRepository());
+        p.selectWarehouse(1);
+        p.selectPriceList(12);
+
+        expect(p.addProduct(_product(id: 302, prices: const {10: 50})), isNull);
+
+        expect(p.priceListId, 12);
+        expect(p.takeListNotice(), isNull);
+      });
     });
 
     test('al cambiar de lista las líneas toman el precio de la nueva', () async {
@@ -810,7 +874,7 @@ void main() {
       expect(p.total, 70);
 
       // Si no se puede agregar (sin stock), el precio tampoco se toca.
-      expect(p.addProduct(_product(), cantidad: 99, precio: 1), contains('Solo hay 5'));
+      expect(p.addProduct(_product(), cantidad: 99, precio: 1), 'Stock insuficiente. Disponible: 3 unidades.');
       expect(p.lines.single.precio, 35);
     });
 
@@ -823,7 +887,8 @@ void main() {
         (product: _product(), cantidad: 2),
         (product: amp, cantidad: 3), // solo hay 2
       ]);
-      expect(problems.single, contains('Solo hay 2 de "AMPLIFICADOR"'));
+      // Al agregar varios, el mensaje lleva el nombre para saber de cuál se habla.
+      expect(problems.single, '"AMPLIFICADOR": Stock insuficiente. Disponible: 2 unidades.');
       expect(p.lines, isEmpty);
 
       expect(
@@ -1293,6 +1358,20 @@ void main() {
       // El de nombre corto y el de uno normal miden lo mismo (el mínimo común).
       expect(heights.length, 1);
       expect(heights.single, greaterThanOrEqualTo(100));
+    });
+
+    testWidgets('al agregar un producto que solo tiene precio en dólares, la venta pasa a esa lista y avisa', (tester) async {
+      final soloDolares = _product(id: 300, name: 'KIT USB', codigo: 'USB-1', prices: const {12: 15});
+      final sales = await open(tester, products: [soloDolares]);
+
+      await tester.tap(find.text('KIT USB'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Agregar a la venta'));
+      await tester.pumpAndSettle();
+
+      expect(sales.priceListId, 12);
+      expect(sales.lines.single.precio, 15);
+      expect(find.text('USB-1 no tiene precio en MAYORISTA: se cambió la lista a DÓLARES.'), findsOneWidget);
     });
 
     testWidgets('los "Sin stock" van al final de la lista', (tester) async {

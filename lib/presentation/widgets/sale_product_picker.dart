@@ -20,6 +20,8 @@ Future<bool> showSaleProductPicker(BuildContext context) async {
   // Las categorías, para mostrar la de cada producto.
   sales.ensureProductFilters();
 
+  // El aviso de un cambio de lista de precios se muestra aunque el modal ya se haya cerrado.
+  final messenger = ScaffoldMessenger.of(context);
   final selection = ValueNotifier<Map<int, _Pick>>({});
   final hasSelection = ValueNotifier<bool>(false);
   final error = ValueNotifier<String?>(null);
@@ -41,6 +43,12 @@ Future<bool> showSaleProductPicker(BuildContext context) async {
     onPrimary: () {
       error.value = null;
       final problems = sales.addProducts(selection.value.values.toList());
+      final listNotice = sales.takeListNotice();
+      if (listNotice != null) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(listNotice), persist: false, duration: const Duration(seconds: 6)));
+      }
       if (problems.isNotEmpty) {
         // El modal sigue abierto con los motivos (por ejemplo, falta de stock).
         error.value = problems.join('\n');

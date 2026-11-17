@@ -372,6 +372,16 @@ void main() {
       expect(bodies[1]['tipo'], 'mensual');
     });
 
+    test('un celular repetido muestra el mensaje del servidor, con el cliente que ya lo tiene', () {
+      final message = apiErrorMessage(json.encode({
+        'error': 'El celular +51987654321 ya está registrado en el cliente CLI00042 – Ana Pérez. '
+            'No se pueden registrar dos clientes con el mismo celular.',
+        'campo': 'telefono',
+      }));
+      expect(message, contains('ya está registrado en el cliente CLI00042'));
+      expect(message, contains('No se pueden registrar dos clientes con el mismo celular'));
+    });
+
     test('un DNI repetido se dice como la web', () {
       final message = apiErrorMessage(json.encode({
         'error': {'dni_ruc': ['The dni ruc has already been taken.']},
