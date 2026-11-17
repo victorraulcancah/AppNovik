@@ -4,6 +4,119 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+/// Lo que dijo el reconocedor, tal como se escribiría en un buscador: los números dichos en palabras
+/// pasan a dígitos y las series a su forma escrita. "cien" → "100", "mil quinientos" → "1500",
+/// "cero cero uno guion siete cuatro tres cinco" → "001-7435", "be cero cero uno guion doscientos" →
+/// "B001-200". La búsqueda por voz solo transcribe: lo que se dice es lo que se busca.
+String spokenToSearchText(String input) {
+  const units = {
+    'cero': 0, 'uno': 1, 'dos': 2, 'tres': 3, 'cuatro': 4, 'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8,
+    'nueve': 9, 'diez': 10, 'once': 11, 'doce': 12, 'trece': 13, 'catorce': 14, 'quince': 15,
+    'dieciseis': 16, 'diecisiete': 17, 'dieciocho': 18, 'diecinueve': 19, 'veinte': 20, 'veintiuno': 21,
+    'veintiun': 21, 'veintidos': 22, 'veintitres': 23, 'veinticuatro': 24, 'veinticinco': 25,
+    'veintiseis': 26, 'veintisiete': 27, 'veintiocho': 28, 'veintinueve': 29,
+  };
+  const tens = {
+    'treinta': 30, 'cuarenta': 40, 'cincuenta': 50, 'sesenta': 60, 'setenta': 70, 'ochenta': 80,
+    'noventa': 90,
+  };
+  const hundreds = {
+    'cien': 100, 'ciento': 100, 'doscientos': 200, 'trescientos': 300, 'cuatrocientos': 400,
+    'quinientos': 500, 'seiscientos': 600, 'setecientos': 700, 'ochocientos': 800, 'novecientos': 900,
+  };
+  const letters = {
+    've': 'V', 'be': 'B', 'efe': 'F', 'ese': 'S', 'ce': 'C', 'te': 'T', 'pe': 'P', 'eme': 'M', 'a': 'A',
+  };
+  const dashes = {'guion', 'menos', 'raya'};
+
+  String plain(String w) => w
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u')
+      .replaceAll(RegExp(r'[.,;:!?¿¡]'), '');
+
+  bool isNumberWord(String w) =>
+      units.containsKey(w) || tens.containsKey(w) || hundreds.containsKey(w) || w == 'mil';
+
+  final words = input.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  final out = <String>[];
+  var i = 0;
+  while (i < words.length) {
+    final w = plain(words[i]);
+
+    // Un guion dicho: "-" pegado a lo de los lados.
+    if (dashes.contains(w)) {
+      out.add('-');
+      i++;
+      continue;
+    }
+
+    // La letra de una serie ("be cero cero uno"): solo si lo que sigue es un número.
+    if (letters.containsKey(w) && i + 1 < words.length) {
+      final next = plain(words[i + 1]);
+      if (isNumberWord(next) || RegExp(r'^\d').hasMatch(next)) {
+        out.add(letters[w]!);
+        i++;
+        continue;
+      }
+    }
+
+    if (!isNumberWord(w)) {
+      out.add(words[i]);
+      i++;
+      continue;
+    }
+
+    // Una racha de números dichos ("treinta y cinco", "cero cero uno", "mil quinientos").
+    final run = <String>[];
+    while (i < words.length) {
+      final x = plain(words[i]);
+      if (isNumberWord(x) || (x == 'y' && run.isNotEmpty && i + 1 < words.length && isNumberWord(plain(words[i + 1])))) {
+        if (x != 'y') run.add(x);
+        i++;
+      } else if ((x == 'un' || x == 'una') && run.isNotEmpty) {
+        run.add('uno');
+        i++;
+      } else {
+        break;
+      }
+    }
+    final onlyDigits = run.length > 1 && run.every((x) => units.containsKey(x) && units[x]! <= 9);
+    if (onlyDigits) {
+      out.add(run.map((x) => '${units[x]}').join());
+      continue;
+    }
+    var total = 0;
+    var current = 0;
+    for (final x in run) {
+      if (x == 'mil') {
+        total += (current == 0 ? 1 : current) * 1000;
+        current = 0;
+      } else {
+        current += units[x] ?? tens[x] ?? hundreds[x] ?? 0;
+      }
+    }
+    out.add('${total + current}');
+  }
+
+  // Une lo que va pegado: letra + número ("B 001") y el guion con sus lados ("001 - 7435").
+  final text = StringBuffer();
+  for (var k = 0; k < out.length; k++) {
+    final token = out[k];
+    final glue = k > 0 &&
+        (token == '-' ||
+            out[k - 1] == '-' ||
+            (RegExp(r'^[A-Z]$').hasMatch(out[k - 1]) && RegExp(r'^\d').hasMatch(token)));
+    if (k > 0 && !glue) text.write(' ');
+    text.write(token);
+  }
+  return text.toString();
+}
+
 /// Búsqueda por voz: abre una hoja que escucha y devuelve lo que se dijo (o `null` si se cerró sin
 /// decir nada). [listen] se puede cambiar en las pruebas (el micrófono no corre en ellas).
 class VoiceSearch {
@@ -70,7 +183,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
     await _speech.listen(
       onResult: (SpeechRecognitionResult r) {
         if (!mounted) return;
-        setState(() => _text = r.recognizedWords);
+        setState(() => _text = spokenToSearchText(r.recognizedWords));
         // El resultado final cierra la ventana de una vez y lo dicho pasa al buscador. Por si el
         // reconocedor no avisa que terminó, un momento sin palabras nuevas también lo cierra.
         _silence?.cancel();
@@ -84,6 +197,8 @@ class _VoiceSheetState extends State<_VoiceSheet> {
         partialResults: true,
         cancelOnError: true,
         localeId: 'es_PE',
+        // Dictado libre: acepta números, series y códigos, no solo nombres de cosas.
+        listenMode: ListenMode.dictation,
         listenFor: const Duration(seconds: 20),
         pauseFor: const Duration(seconds: 2),
       ),
