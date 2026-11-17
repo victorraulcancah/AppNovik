@@ -13,10 +13,16 @@ String _dateTime(DateTime? d) =>
     d == null ? '-' : DateFormat(AppConstants.dateTimeFormat).format(d);
 
 /// Estado del documento como badge: en ventas, activo o eliminado; en
-/// cotizaciones, usada, reservada o sin reserva.
+/// cotizaciones, eliminada, usada, reservada o sin reserva.
 ({String label, AppBadgeTone tone}) documentStatus(DocumentEntity d) {
   if (d.kind == DocumentKind.cotizacion) {
-    if (!d.activo) return (label: 'Usada', tone: AppBadgeTone.neutral);
+    if (!d.activo) {
+      // Una cotización inactiva es "Usada" (pasó a venta) o "Eliminada": al eliminarla el servidor deja
+      // quién la eliminó y cuándo; la usada no lo tiene.
+      return d.anuladoPor != null || d.anuladoAt != null
+          ? (label: 'Eliminada', tone: AppBadgeTone.danger)
+          : (label: 'Usada', tone: AppBadgeTone.neutral);
+    }
     return d.reservado == true
         ? (label: 'Reservada', tone: AppBadgeTone.success)
         : (label: 'Sin reserva', tone: AppBadgeTone.warning);

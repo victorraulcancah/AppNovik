@@ -31,6 +31,7 @@ import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/shell_navigation.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/widgets/document_filters.dart';
+import 'package:app_novik/presentation/widgets/document_modals.dart' show documentStatus;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -1456,6 +1457,28 @@ void main() {
       );
 
       expect(find.byTooltip('Culminar venta o editar cotización'), findsNothing);
+    });
+
+    test('el estado de una cotización: usada si pasó a venta, eliminada si la eliminaron', () {
+      DocumentEntity quote({required bool activo, String? anuladoPor, DateTime? anuladoAt, bool? reservado}) => DocumentEntity(
+            id: 1,
+            kind: DocumentKind.cotizacion,
+            numero: 'C001-0001',
+            comprobante: 'Cotización',
+            activo: activo,
+            anuladoPor: anuladoPor,
+            anuladoAt: anuladoAt,
+            reservado: reservado,
+          );
+
+      // Inactiva sin registro de quién la eliminó: se usó (pasó a venta).
+      expect(documentStatus(quote(activo: false)).label, 'Usada');
+      // Inactiva con quien la eliminó (o cuándo): eliminada.
+      expect(documentStatus(quote(activo: false, anuladoPor: 'ANA')).label, 'Eliminada');
+      expect(documentStatus(quote(activo: false, anuladoAt: DateTime(2026, 11, 17))).label, 'Eliminada');
+      // Activas: como siempre.
+      expect(documentStatus(quote(activo: true, reservado: true)).label, 'Reservada');
+      expect(documentStatus(quote(activo: true, reservado: false)).label, 'Sin reserva');
     });
 
     testWidgets('una cotización ya procesada o eliminada no se puede culminar', (tester) async {
