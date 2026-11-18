@@ -1063,7 +1063,7 @@ class InicioDepartments extends StatelessWidget {
   const InicioDepartments({super.key, required this.departments, this.help});
 
   @override
-    final theme = Theme.of(context);
+  Widget build(BuildContext context) {
     return InicioSection(
       title: 'Ventas por departamento',
       icon: Icons.map_outlined,
