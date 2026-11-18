@@ -630,29 +630,7 @@ class _IncomesState extends State<_Incomes> {
                 [
                   InicioCell(m.metodo),
                   InicioCell(money(pick(m))),
-                  // Si la celda no alcanza (letra grande, pantalla angosta) se achica en vez de desbordar.
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 28,
-                          child: InicioProgressBar(
-                            percent: total > 0 ? pick(m) / total * 100 : 0,
-                            color: const Color(0xFF2563EB),
-                            height: 6,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${(total > 0 ? pick(m) / total * 100 : 0).toStringAsFixed(1)}%',
-                          style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular),
-                        ),
-                      ],
-                    ),
-                  ),
+                  InicioShareBar(percent: total > 0 ? pick(m) / total * 100 : 0, color: const Color(0xFF2563EB)),
                 ],
             ],
           ),

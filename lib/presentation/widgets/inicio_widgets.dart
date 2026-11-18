@@ -1022,6 +1022,39 @@ class InicioSellerGoals extends StatelessWidget {
   }
 }
 
+/// Barra de participación con su porcentaje a la derecha. La barra y el texto miden siempre lo mismo
+/// para que las barras de todas las filas queden alineadas, sea "2.0%" o "68.6%".
+class InicioShareBar extends StatelessWidget {
+  final num percent;
+  final Color color;
+
+  /// Decimales del porcentaje que se escribe.
+  final int decimals;
+
+  const InicioShareBar({super.key, required this.percent, required this.color, this.decimals = 1});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(fontFeatures: _tabular);
+    // Si la celda no alcanza (letra grande, pantalla angosta) se achica en vez de desbordar.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 30, child: InicioProgressBar(percent: percent.toDouble(), color: color, height: 6)),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 46,
+            child: Text('${percent.toStringAsFixed(decimals)}%', textAlign: TextAlign.right, maxLines: 1, style: style),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Ventas por departamento: monto y participación con su barra.
 class InicioDepartments extends StatelessWidget {
   final List<DepartmentEntity> departments;
@@ -1030,7 +1063,6 @@ class InicioDepartments extends StatelessWidget {
   const InicioDepartments({super.key, required this.departments, this.help});
 
   @override
-  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InicioSection(
       title: 'Ventas por departamento',
@@ -1044,18 +1076,7 @@ class InicioDepartments extends StatelessWidget {
             [
               InicioCell(d.nombre),
               InicioCell(thousands(d.monto)),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(width: 30, child: InicioProgressBar(percent: d.participacion, color: _blue, height: 6)),
-                    const SizedBox(width: 6),
-                    Text('${d.participacion}%', style: theme.textTheme.bodySmall?.copyWith(fontFeatures: _tabular)),
-                  ],
-                ),
-              ),
+              InicioShareBar(percent: d.participacion, color: _blue),
             ],
         ],
       ),
