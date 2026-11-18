@@ -10,6 +10,9 @@ import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/client_record_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
 import 'data/datasources/debt_remote_datasource.dart';
+import 'data/datasources/price_list_remote_datasource.dart';
+import 'data/datasources/seller_payment_remote_datasource.dart';
+import 'data/datasources/user_record_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
 import 'data/datasources/guide_remote_datasource.dart';
 import 'data/datasources/inicio_cache_datasource.dart';
@@ -24,6 +27,9 @@ import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/client_record_repository_impl.dart';
 import 'data/repositories/client_repository_impl.dart';
 import 'data/repositories/debt_repository_impl.dart';
+import 'data/repositories/price_list_repository_impl.dart';
+import 'data/repositories/seller_payment_repository_impl.dart';
+import 'data/repositories/user_record_repository_impl.dart';
 import 'data/repositories/document_repository_impl.dart';
 import 'data/repositories/guide_repository_impl.dart';
 import 'data/repositories/inicio_repository_impl.dart';
@@ -40,6 +46,9 @@ import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/client_record_repository.dart';
 import 'domain/repositories/client_repository.dart';
 import 'domain/repositories/debt_repository.dart';
+import 'domain/repositories/price_list_repository.dart';
+import 'domain/repositories/seller_payment_repository.dart';
+import 'domain/repositories/user_record_repository.dart';
 import 'domain/repositories/document_repository.dart';
 import 'domain/repositories/guide_repository.dart';
 import 'domain/repositories/inicio_repository.dart';
@@ -53,6 +62,9 @@ import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_record_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
 import 'domain/usecases/debt_usecases.dart';
+import 'domain/usecases/price_list_usecases.dart';
+import 'domain/usecases/seller_payment_usecases.dart';
+import 'domain/usecases/user_record_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
 import 'domain/usecases/guide_usecases.dart';
 import 'domain/usecases/inicio_cache_usecases.dart';
@@ -71,6 +83,9 @@ import 'presentation/providers/other_documents_provider.dart';
 import 'presentation/providers/client_list_provider.dart';
 import 'presentation/providers/clients_provider.dart';
 import 'presentation/providers/debts_provider.dart';
+import 'presentation/providers/price_lists_provider.dart';
+import 'presentation/providers/seller_payments_provider.dart';
+import 'presentation/providers/users_provider.dart';
 import 'presentation/providers/guide_provider.dart';
 import 'presentation/providers/inicio_provider.dart';
 import 'presentation/providers/documents_provider.dart';
@@ -253,6 +268,58 @@ class DependencyInjection {
           update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),
 
+        // El módulo Pagos vendedores (Registro de Pagos de la web).
+        ChangeNotifierProxyProvider<AuthProvider, SellerPaymentsProvider>(
+          create: (context) => SellerPaymentsProvider(
+            getPaymentsUseCase: GetSellerPaymentsUseCase(repository: _sellerPaymentRepository),
+            exportPaymentsUseCase: ExportSellerPaymentsUseCase(repository: _sellerPaymentRepository),
+            getMethodsUseCase: GetSellerPaymentMethodsUseCase(repository: _sellerPaymentRepository),
+            getClientsUseCase: GetSellerPaymentClientsUseCase(repository: _sellerPaymentRepository),
+            getSellersUseCase: GetSellerPaymentSellersUseCase(repository: _sellerPaymentRepository),
+            getClientDebtUseCase: GetSellerClientDebtUseCase(repository: _sellerPaymentRepository),
+            createUseCase: CreateSellerPaymentUseCase(repository: _sellerPaymentRepository),
+            approveUseCase: ApproveSellerPaymentUseCase(repository: _sellerPaymentRepository),
+            editInstallmentUseCase: EditSellerInstallmentPaymentUseCase(repository: _sellerPaymentRepository),
+            editUseCase: EditSellerPaymentUseCase(repository: _sellerPaymentRepository),
+            deleteUseCase: DeleteSellerPaymentUseCase(repository: _sellerPaymentRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
+        // El módulo Usuarios (lista, formulario con foto y gestión de roles).
+        ChangeNotifierProxyProvider<AuthProvider, UsersProvider>(
+          create: (context) => UsersProvider(
+            getUsersUseCase: GetUsersUseCase(repository: _userRecordRepository),
+            getCatalogsUseCase: GetUserCatalogsUseCase(repository: _userRecordRepository),
+            saveUserUseCase: SaveUserUseCase(repository: _userRecordRepository),
+            uploadPhotoUseCase: UploadUserPhotoUseCase(repository: _userRecordRepository),
+            getPhotoUseCase: GetUserPhotoUseCase(repository: _userRecordRepository),
+            getRolesUseCase: GetRolesUseCase(repository: _userRecordRepository),
+            saveRoleUseCase: SaveRoleUseCase(repository: _userRecordRepository),
+            deleteRoleUseCase: DeleteRoleUseCase(repository: _userRecordRepository),
+            getDepartmentsUseCase: GetUserDepartmentsUseCase(repository: _userRecordRepository),
+            getProvincesUseCase: GetUserProvincesUseCase(repository: _userRecordRepository),
+            getDistrictsUseCase: GetUserDistrictsUseCase(repository: _userRecordRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
+        // El módulo Lista de precios.
+        ChangeNotifierProxyProvider<AuthProvider, PriceListsProvider>(
+          create: (context) => PriceListsProvider(
+            getPriceListsUseCase: GetPriceListPageUseCase(repository: _priceListRepository),
+            savePriceListUseCase: SavePriceListUseCase(repository: _priceListRepository),
+            getProductsUseCase: GetPriceListProductsUseCase(repository: _priceListRepository),
+            updatePriceUseCase: UpdatePriceListPriceUseCase(repository: _priceListRepository),
+            exportTemplateUseCase: ExportPriceListTemplateUseCase(repository: _priceListRepository),
+            importPricesUseCase: ImportPriceListUseCase(repository: _priceListRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncCompany(auth.session?.company.id),
+        ),
+
         ChangeNotifierProxyProvider<AuthProvider, GuideProvider>(
           create: (context) => GuideProvider(
             getDefaultsUseCase: GetGuideDefaultsUseCase(repository: _guideRepository),
@@ -328,6 +395,21 @@ class DependencyInjection {
 
   static DebtRepository get _debtRepository => DebtRepositoryImpl(
         remoteDataSource: DebtRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static PriceListRepository get _priceListRepository => PriceListRepositoryImpl(
+        remoteDataSource: PriceListRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static SellerPaymentRepository get _sellerPaymentRepository => SellerPaymentRepositoryImpl(
+        remoteDataSource: SellerPaymentRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static UserRecordRepository get _userRecordRepository => UserRecordRepositoryImpl(
+        remoteDataSource: UserRecordRemoteDataSourceImpl(client: _httpClient),
         authLocalDataSource: _authLocalDataSource,
       );
 

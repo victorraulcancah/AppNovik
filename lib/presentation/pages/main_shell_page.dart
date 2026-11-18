@@ -11,10 +11,13 @@ import 'clients_page.dart';
 import 'debts_page.dart';
 import 'documents_page.dart';
 import 'inicio_page.dart';
+import 'price_lists_page.dart';
 import 'products_page.dart';
 import 'reports_page.dart';
 import 'sales_page.dart';
+import 'seller_payments_page.dart';
 import 'stock_page.dart';
+import 'users_page.dart';
 
 /// Módulo que la app sabe mostrar. `slug` coincide con el nombre del módulo
 /// en el backend (`Module.name` pasado por `convertToSlug`).
@@ -78,6 +81,24 @@ const _catalogo = [
     'Estado de cuenta',
     Icons.account_balance_wallet_outlined,
     Icons.account_balance_wallet,
+  ),
+  _AppModulo(
+    'usuarios',
+    'Usuarios',
+    Icons.manage_accounts_outlined,
+    Icons.manage_accounts,
+  ),
+  _AppModulo(
+    'pagos-vendedores',
+    'Pagos vendedores',
+    Icons.savings_outlined,
+    Icons.savings,
+  ),
+  _AppModulo(
+    'lista-de-precios',
+    'Lista de precios',
+    Icons.attach_money_outlined,
+    Icons.attach_money,
   ),
 ];
 
@@ -204,6 +225,9 @@ class _MainShellPageState extends State<MainShellPage> {
             'clientes' => const ClientsPage(),
             'estado-de-cuenta' => const AccountStatementPage(),
             'pagos' => const DebtsPage(),
+            'usuarios' => const UsersPage(),
+            'pagos-vendedores' => const SellerPaymentsPage(),
+            'lista-de-precios' => const PriceListsPage(),
             'stock' => const StockPage(),
             'documentos' => const DocumentsPage(),
             _ => _ModuloVacio(
