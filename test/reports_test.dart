@@ -1110,7 +1110,7 @@ void main() {
         'Fechas',
         'Sucursales',
         'Clientes',
-        'Vendedores',
+        'Ejecutivo comercial',
         'Marcas',
         'Categoría',
         'Departamentos',

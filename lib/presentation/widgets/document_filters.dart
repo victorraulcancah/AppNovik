@@ -52,7 +52,7 @@ List<AppActiveFilter> documentActiveFilters(DocumentsProvider documents) {
     if (f.vendedores.isNotEmpty)
       AppActiveFilter(
         id: 'vendedores',
-        label: names('Ejecutivo', 'Ejecutivos', f.vendedores, catalogs.vendedores),
+        label: names('Ejecutivo comercial', 'Ejecutivos comerciales', f.vendedores, catalogs.vendedores),
         onRemove: () => change(f.copyWith(vendedores: const <int>[])),
       ),
     if (f.clientes.isNotEmpty)
@@ -241,12 +241,12 @@ class _FiltersBody extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             AppPickerField(
-              label: 'Ejecutivos',
+              label: 'Ejecutivo comercial',
               value: catalogs.vendedores.isEmpty && documents.catalogsLoading
                   ? 'Cargando…'
                   : summary(f.vendedores, catalogs.vendedores, 'Todos'),
               onTap: () => pickIds(
-                title: 'Ejecutivos',
+                title: 'Ejecutivo comercial',
                 icon: Icons.badge_outlined,
                 options: catalogs.vendedores,
                 current: f.vendedores,

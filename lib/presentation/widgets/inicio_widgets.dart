@@ -686,6 +686,9 @@ class InicioTable extends StatefulWidget {
   /// Cuánto ancho se lleva la primera columna frente a cada una de las demás.
   final int firstFlex;
 
+  /// El ancho de cada columna, una por una; si se da, manda sobre [firstFlex].
+  final List<int>? flexes;
+
   /// Al tocar una fila (con su posición); `null`: filas sin acción.
   final ValueChanged<int>? onTap;
 
@@ -698,6 +701,7 @@ class InicioTable extends StatefulWidget {
     required this.rows,
     required this.emptyText,
     this.firstFlex = 4,
+    this.flexes,
     this.onTap,
     this.collapsedRows = 6,
   });
@@ -721,7 +725,7 @@ class _InicioTableState extends State<InicioTable> {
         children: [
           for (var i = 0; i < cells.length; i++)
             Expanded(
-              flex: i == 0 ? widget.firstFlex : 3,
+              flex: widget.flexes != null && i < widget.flexes!.length ? widget.flexes![i] : (i == 0 ? widget.firstFlex : 3),
               child: Align(alignment: i == 0 ? Alignment.centerLeft : Alignment.centerRight, child: cells[i]),
             ),
         ],
@@ -956,17 +960,23 @@ class InicioGoalProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = goalColor(light);
     // Si la celda no alcanza (letra grande, pantalla angosta) se achica en vez de desbordar.
+    // La barra y el porcentaje miden siempre lo mismo para que queden alineados en todas las filas.
     return FittedBox(
       fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.centerRight,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(width: 38, child: InicioProgressBar(percent: percent, color: color, height: 6)),
           const SizedBox(width: 6),
-          Text(
-            '${percent.round()}%',
-            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12, fontFeatures: _tabular),
+          SizedBox(
+            width: 38,
+            child: Text(
+              '${percent.round()}%',
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12, fontFeatures: _tabular),
+            ),
           ),
         ],
       ),
@@ -994,7 +1004,8 @@ class InicioSellerGoals extends StatelessWidget {
       child: InicioTable(
         columns: const ['Vendedor', 'Ventas (S/)', 'Meta (S/)', 'Avance'],
         emptyText: 'Sin ventas en el rango',
-        firstFlex: 4,
+        // La columna de avance (barra + porcentaje) lleva más ancho para que no se pise con la meta.
+        flexes: const [7, 6, 6, 9],
         rows: [
           for (var i = 0; i < sellers.length; i++)
             [

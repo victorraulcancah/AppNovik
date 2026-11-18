@@ -88,7 +88,7 @@ class _DebtsPageState extends State<DebtsPage> {
       if (f.seller != null)
         AppActiveFilter(
           id: 'ejecutivo',
-          label: 'Ejecutivo: ${shortPersonName(f.seller!.name)}',
+          label: 'Ejecutivo comercial: ${shortPersonName(f.seller!.name)}',
           onRemove: () => provider.setFilters(f.copyWith(clearSeller: true)),
         ),
     ];
@@ -317,12 +317,12 @@ class _FiltersBody extends StatelessWidget {
           if (provider.canSeeAll) ...[
             const SizedBox(height: 16),
             AppPickerField(
-              label: 'Ejecutivos',
+              label: 'Ejecutivo comercial',
               value: f.seller == null ? 'Todos' : shortPersonName(f.seller!.name),
               icon: Icons.badge_outlined,
               onTap: () => _pick(
                 context,
-                title: 'Ejecutivos',
+                title: 'Ejecutivo comercial',
                 icon: Icons.badge_outlined,
                 load: provider.loadSellers,
                 current: f.seller,

@@ -41,7 +41,7 @@ List<AppActiveFilter> reportActiveFilters(ReportsProvider reports) {
     if (f.vendedores.isNotEmpty)
       AppActiveFilter(
         id: 'vendedores',
-        label: label('Vendedor', 'Vendedores', f.vendedores, c.vendedores),
+        label: label('Ejecutivo comercial', 'Ejecutivos comerciales', f.vendedores, c.vendedores),
         onRemove: () => change(f.copyWith(vendedores: const <String>[])),
       ),
     if (f.marcas.isNotEmpty)
@@ -269,7 +269,7 @@ class _FiltersBody extends StatelessWidget {
               apply: (v) => f.copyWith(clientes: v),
             ),
             field(
-              label: 'Vendedores',
+              label: 'Ejecutivo comercial',
               icon: Icons.badge_outlined,
               ids: f.vendedores,
               options: catalogs.vendedores,

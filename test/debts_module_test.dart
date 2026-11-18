@@ -590,7 +590,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Filtros avanzados'), findsOneWidget);
       // Sin ver a todos no hay filtro de ejecutivo.
-      expect(find.text('Ejecutivos'), findsNothing);
+      expect(find.text('Ejecutivo comercial'), findsNothing);
 
       await tester.tap(find.widgetWithText(AppPickerField, 'Todos').first);
       await tester.pumpAndSettle();
@@ -654,7 +654,7 @@ void main() {
       await tester.tap(find.text('Aplicar filtros'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ejecutivo: FRANCIS B.'), findsOneWidget);
+      expect(find.text('Ejecutivo comercial: FRANCIS B.'), findsOneWidget);
       expect(r.repo.calls.last.filters.seller!.id, 4);
     });
 

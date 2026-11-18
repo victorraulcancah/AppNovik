@@ -1330,7 +1330,14 @@ void main() {
       await documents.applyFilters(documents.filters.copyWith(vendedores: [3], clientes: [5, 6]));
       await tester.pumpAndSettle();
 
-      expect(find.text('Clientes: 2 elegidos'), findsOneWidget);
+      // Los chips van en una fila que se desliza: el de ejecutivo (más largo) puede dejar fuera de vista al otro.
+      expect(find.text('Clientes: 2 elegidos', skipOffstage: false), findsOneWidget);
+      // El chip largo del ejecutivo comercial queda más allá del borde: se desliza la fila hasta verlo.
+      await tester.drag(
+        find.descendant(of: find.byType(AppActiveFilters), matching: find.byType(ListView)),
+        const Offset(-400, 0),
+      );
+      await tester.pumpAndSettle();
       expect(find.textContaining('Ejecutivo'), findsOneWidget);
 
       await tester.ensureVisible(find.byTooltip('Quitar Clientes: 2 elegidos'));

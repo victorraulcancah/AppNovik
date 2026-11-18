@@ -397,7 +397,7 @@ class _ClientFiltersBodyState extends State<_ClientFiltersBody> {
           ),
           const SizedBox(height: 8),
           AppPickerField(
-            label: 'Ejecutivos',
+            label: 'Ejecutivo comercial',
             value: _summary(
               f.ejecutivos,
               catalogs.ejecutivos,
@@ -407,7 +407,7 @@ class _ClientFiltersBodyState extends State<_ClientFiltersBody> {
             ),
             onTap: () async {
               final result = await _pick(
-                title: 'Ejecutivos',
+                title: 'Ejecutivo comercial',
                 options: catalogs.ejecutivos,
                 chosen: f.ejecutivos.where((c) => c != clientFilterNone && c != clientFilterAny).toSet(),
               );

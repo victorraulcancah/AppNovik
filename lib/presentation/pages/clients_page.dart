@@ -117,7 +117,7 @@ class _ClientsPageState extends State<ClientsPage> {
         AppActiveFilter(
           id: 'ejecutivos',
           label: chosen(
-            'Ejecutivo',
+            'Ejecutivo comercial',
             f.ejecutivos,
             catalogs?.ejecutivos ?? const [],
             none: 'Sin ejecutivo',
