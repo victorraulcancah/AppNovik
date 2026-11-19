@@ -7,6 +7,7 @@ import '../../domain/entities/seller_payment_entity.dart';
 import '../components/components.dart';
 import '../providers/seller_payments_provider.dart';
 import 'seller_payment_filters.dart' show sellerPaymentMoney;
+import 'seller_payment_notes.dart';
 
 /// La insignia de estado de un pago (Aprobado, Pendiente, Cancelado).
 AppBadgeTone sellerPaymentTone(SellerPaymentStatus status) => switch (status) {
@@ -35,16 +36,20 @@ String? _validateAmount(String? v) {
 // Detalle
 // ---------------------------------------------------------------------------------------------
 
-/// Todo lo que muestra la fila de la tabla de la web: cliente, ejecutivo, descripción, fecha, monto,
-/// método de pago y estado.
+/// Todo lo que muestra la fila de la tabla de la web (cliente, ejecutivo, fecha, monto, método de pago y
+/// estado) y, debajo, el historial de notas del pago (la "Descripción adicional"), donde se puede
+/// agregar una nota si el servidor lo permite. Al cerrarse, si hubo cambios en las notas, la lista se
+/// vuelve a pedir (la columna muestra la última nota).
 Future<bool?> showSellerPaymentDetail(
   BuildContext context,
   SellerPaymentEntity p, {
   required bool showExecutive,
   AppPaneController? pane,
-}) {
+}) async {
+  final payments = context.read<SellerPaymentsProvider>();
   final status = p.status;
-  return showAppModal(
+  var changed = false;
+  final result = await showAppModal(
     context,
     pane: pane,
     paneId: p.id,
@@ -53,6 +58,8 @@ Future<bool?> showSellerPaymentDetail(
     icon: Icons.payments_outlined,
     primaryLabel: null,
     secondaryLabel: 'Cerrar',
+    // Las notas crecen: la ventana mide siempre lo mismo.
+    fixedHeight: true,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -64,14 +71,17 @@ Future<bool?> showSellerPaymentDetail(
         ),
         AppDetailRow(label: 'Monto', value: sellerPaymentMoney(p.montoTotal, p.moneda)),
         AppDetailRow(label: 'Método de pago', value: p.metodos.isEmpty ? null : p.metodos.join(' / ')),
-        AppDetailRow(label: 'Descripción adicional', value: p.descripcion),
         AppDetailRow(
           label: 'Estado',
           valueWidget: AppStatusBadge(label: status.label, tone: sellerPaymentTone(status)),
         ),
+        const SizedBox(height: 16),
+        SellerPaymentNotesSection(payments: payments, paymentId: p.id, onChanged: () => changed = true),
       ],
     ),
   );
+  if (changed) await payments.refresh();
+  return result;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -479,7 +489,11 @@ class _LineCard extends StatelessWidget {
             controller: line.descripcion,
             maxLines: 2,
             keyboardType: TextInputType.multiline,
-            decoration: const InputDecoration(labelText: 'Descripción adicional'),
+            // El servidor la guarda como la primera nota del pago (con tu nombre y la fecha).
+            decoration: const InputDecoration(
+              labelText: 'Descripción adicional',
+              helperText: 'Queda como la primera nota del pago.',
+            ),
           ),
         ],
       ),
@@ -491,9 +505,10 @@ class _LineCard extends StatelessWidget {
 // Editar pago
 // ---------------------------------------------------------------------------------------------
 
-/// "Editar Pago de Cuota" (o "Editar Pago (Saldo a Favor)"): el método de pago, el monto y la
-/// descripción. Un saldo a favor solo deja editar el método y la descripción; un pago ya confirmado,
-/// todo menos el monto. Devuelve `true` si se guardó.
+/// "Editar Pago de Cuota" (o "Editar Pago (Saldo a Favor)"): el método de pago, el monto (bloqueado si
+/// el pago ya está aprobado) y la sección "Notas del pago", que reemplaza a la descripción editable:
+/// notas con autor y fecha que se agregan y se eliminan (quedan tachadas). Un saldo a favor solo deja
+/// editar el método de pago. Devuelve `true` si se guardó.
 Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity payment) async {
   final payments = context.read<SellerPaymentsProvider>();
   final List<SellerPaymentOption> methods;
@@ -513,24 +528,23 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
   final saldoAFavor = allocation == null;
   final confirmed = allocation?.confirmed ?? false;
 
-  // Como la web: el monto de un pago agrupado es el total del pago; el método y la descripción, los de
-  // la parte que se edita (o los del propio pago si es un saldo a favor).
+  // Como la web: el monto de un pago agrupado es el total del pago; el método, el de la parte que se
+  // edita (o el del propio pago si es un saldo a favor).
   final currentAmount = saldoAFavor ? payment.montoTotal : (allocation.paymentTotal ?? allocation.monto);
   final currentMethod = saldoAFavor ? payment.paymentMethodId : allocation.paymentMethodId;
-  final currentDescription = saldoAFavor ? payment.descripcion : allocation.descripcionAdicional;
 
   final formKey = GlobalKey<FormState>();
   final monto = TextEditingController(
     text: currentAmount == currentAmount.roundToDouble() ? '${currentAmount.toInt()}' : '$currentAmount',
   );
-  final descripcion = TextEditingController(text: currentDescription ?? '');
   final error = ValueNotifier<String?>(null);
   // El método actual puede no estar en la lista (Crédito, Contraentrega y Puntos no se ofrecen).
   int? methodId = methods.any((m) => m.id == currentMethod) ? currentMethod : null;
+  var notesChanged = false;
 
   final theme = Theme.of(context);
 
-  return showAppModal(
+  final result = await showAppModal(
     context,
     title: saldoAFavor ? 'Editar Pago (Saldo a Favor)' : 'Editar Pago de Cuota',
     subtitle: payment.cliente,
@@ -538,8 +552,10 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
     primaryLabel: 'Editar',
     formKey: formKey,
     error: error,
+    // Las notas crecen: la ventana mide siempre lo mismo.
+    fixedHeight: true,
     child: AppDisposer(
-      onDispose: [monto.dispose, descripcion.dispose, error.dispose],
+      onDispose: [monto.dispose, error.dispose],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -557,7 +573,7 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Este es un pago de saldo a favor. Solo puedes editar el método de pago y la descripción.',
+                      'Este es un pago de saldo a favor. Solo puedes editar el método de pago; la descripción son las notas del pago.',
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -589,14 +605,12 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
               ),
               validator: confirmed ? null : _validateAmount,
             ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: descripcion,
-            maxLines: 3,
-            keyboardType: TextInputType.multiline,
-            decoration: const InputDecoration(labelText: 'Descripción adicional'),
-            // El servidor limita la descripción de un saldo a favor a 255 caracteres.
-            validator: (v) => saldoAFavor && (v ?? '').trim().length > 255 ? 'Máximo 255 caracteres' : null,
+          const SizedBox(height: 20),
+          // La descripción ya no es un texto que cualquiera cambia: son notas con autor y fecha.
+          SellerPaymentNotesSection(
+            payments: payments,
+            paymentId: payment.id,
+            onChanged: () => notesChanged = true,
           ),
         ],
       ),
@@ -607,7 +621,6 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
         payment,
         paymentMethodId: methodId!,
         monto: saldoAFavor || confirmed ? null : _parseMoney(monto.text),
-        descripcion: _text(descripcion.text),
       );
       if (result.isLeft) {
         error.value = result.left.message;
@@ -615,4 +628,7 @@ Future<bool?> showSellerPaymentEdit(BuildContext context, SellerPaymentEntity pa
       }
     },
   );
+  // Si agregó o eliminó notas y no guardó, la lista se refresca igual (la tarjeta muestra la última).
+  if (notesChanged && result != true) await payments.refresh();
+  return result;
 }

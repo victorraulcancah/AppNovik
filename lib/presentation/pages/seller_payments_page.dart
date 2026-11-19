@@ -335,7 +335,9 @@ class _SellerPaymentsPageState extends State<SellerPaymentsPage> {
         // La columna "Ejecutivo" solo la ve quien ve los pagos de todos.
         if (payments.canSeeOthers && p.ejecutivo != null) 'Ejecutivo comercial: ${p.ejecutivo}',
         if (p.metodos.isNotEmpty) 'Método: ${p.metodos.join(' / ')}',
-        if (p.descripcion != null) p.descripcion!,
+        // La columna "Descripción Adicional" de la web: la última nota y, con más de una, cuántas hay.
+        if (p.ultimaNota != null)
+          'Nota: ${p.ultimaNota!.texto}${p.notasCount > 1 ? ' (${p.notasCount} notas)' : ''}',
       ],
       trailingTitle: sellerPaymentMoney(p.montoTotal, p.moneda),
       footer: AppStatusBadge(label: status.label, tone: sellerPaymentTone(status)),

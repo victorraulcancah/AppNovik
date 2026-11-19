@@ -44,14 +44,17 @@ Map<String, dynamic> _installmentPaymentJson({int id = 1, int estado = 2, bool c
       'created_at': '2026-11-10T12:00:00.000000Z',
       'payment_method_id': null,
       'payment_method': null,
-      'descripcion': null,
+      'ultima_nota': {
+        'texto': 'Cuota 1',
+        'user': {'id': 9, 'name': 'LUIS VENDEDOR'},
+      },
+      'notas_count': 2,
       'fee_payments_sellers': [
         {
           'id': 31,
           'payment_method_id': 2,
           'monto': 100,
           'estado': confirmedPart,
-          'descripcion_adicional': 'Cuota 1',
           'payment_method': {'id': 2, 'name': 'YAPE'},
           'payment_seller': {'id': id, 'monto_total': 150.5, 'moneda': 'soles', 'client_id': 5},
         },
@@ -60,7 +63,6 @@ Map<String, dynamic> _installmentPaymentJson({int id = 1, int estado = 2, bool c
           'payment_method_id': 3,
           'monto': 50.5,
           'estado': confirmedPart,
-          'descripcion_adicional': null,
           'payment_method': {'id': 3, 'name': 'EFECTIVO'},
           'payment_seller': {'id': id, 'monto_total': 150.5, 'moneda': 'soles', 'client_id': 5},
         },
@@ -80,7 +82,11 @@ Map<String, dynamic> _favorPaymentJson({int id = 2, int estado = 1}) => {
       'created_at': '2026-11-12T12:00:00.000000Z',
       'payment_method_id': 4,
       'payment_method': {'id': 4, 'name': 'TRANSFERENCIA'},
-      'descripcion': 'Anticipo',
+      'ultima_nota': {
+        'texto': 'Anticipo',
+        'user': {'id': 4, 'name': 'FRANCIS BULNES GONZALES'},
+      },
+      'notas_count': 1,
       'fee_payments_sellers': [],
     };
 
@@ -128,9 +134,34 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
   SellerPaymentCreate? created;
   final approved = <int>[];
   final deleted = <({int id, bool afterConfirm})>[];
-  ({int id, int method, double? monto, String? descripcion})? editedInstallment;
-  ({int id, int method, String? descripcion})? edited;
+  ({int id, int method, double? monto})? editedInstallment;
+  ({int id, int method})? edited;
   int? debtClientId;
+
+  /// El historial de notas del pago (la más reciente primero) y si el usuario puede escribir.
+  List<SellerPaymentNote> notes = [
+    SellerPaymentNote(
+      id: 11,
+      texto: 'Segunda nota',
+      creado: DateTime(2026, 11, 12, 15, 5),
+      autor: 'LUIS VENDEDOR',
+      puedeEliminar: true,
+    ),
+    SellerPaymentNote(
+      id: 10,
+      texto: 'Cuota 1',
+      creado: DateTime(2026, 11, 10, 9, 30),
+      autor: 'FRANCIS BULNES GONZALES',
+      eliminadaEn: DateTime(2026, 11, 11, 18, 45),
+      eliminadaPor: 'CEO',
+    ),
+  ];
+  bool canWriteNotes = true;
+  Failure? notesFailure;
+  Failure? noteActionFailure;
+  final notesLoadedFor = <int>[];
+  final addedNotes = <({int paymentId, String texto})>[];
+  final deletedNotes = <int>[];
 
   List<SellerPaymentOption> clients = const [
     SellerPaymentOption(id: 7, name: 'DISTRIBUIDORA SUR'),
@@ -227,9 +258,8 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   }) async {
-    editedInstallment = (id: id, method: paymentMethodId, monto: monto, descripcion: descripcionAdicional);
+    editedInstallment = (id: id, method: paymentMethodId, monto: monto);
     return _action();
   }
 
@@ -237,9 +267,8 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
   Future<Either<Failure, void>> editPayment({
     required int id,
     required int paymentMethodId,
-    String? descripcion,
   }) async {
-    edited = (id: id, method: paymentMethodId, descripcion: descripcion);
+    edited = (id: id, method: paymentMethodId);
     return _action();
   }
 
@@ -247,6 +276,37 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
   Future<Either<Failure, void>> deletePayment({required int id, required bool afterConfirm}) async {
     deleted.add((id: id, afterConfirm: afterConfirm));
     return _action();
+  }
+
+  @override
+  Future<Either<Failure, SellerPaymentNotes>> getNotes({required int paymentId}) async {
+    notesLoadedFor.add(paymentId);
+    if (notesFailure != null) return Either.left(notesFailure!);
+    return Either.right(SellerPaymentNotes(notas: notes, puedeEscribir: canWriteNotes));
+  }
+
+  @override
+  Future<Either<Failure, SellerPaymentNote>> addNote({required int paymentId, required String texto}) async {
+    addedNotes.add((paymentId: paymentId, texto: texto));
+    if (noteActionFailure != null) return Either.left(noteActionFailure!);
+    return Either.right(SellerPaymentNote(id: 100 + addedNotes.length, texto: texto, creado: DateTime(2026, 11, 17, 15, 5), autor: 'Ana', puedeEliminar: true));
+  }
+
+  @override
+  Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId}) async {
+    deletedNotes.add(noteId);
+    if (noteActionFailure != null) return Either.left(noteActionFailure!);
+    final original = notes.firstWhere((n) => n.id == noteId, orElse: () => SellerPaymentNote(id: noteId, texto: 'Nueva'));
+    return Either.right(
+      SellerPaymentNote(
+        id: noteId,
+        texto: original.texto,
+        creado: original.creado,
+        autor: original.autor,
+        eliminadaEn: DateTime(2026, 11, 17, 16, 30),
+        eliminadaPor: 'Ana',
+      ),
+    );
   }
 }
 
@@ -317,6 +377,9 @@ SellerPaymentsProvider _provider(_FakeSellerPaymentRepository repo, {SessionCont
       editInstallmentUseCase: EditSellerInstallmentPaymentUseCase(repository: repo),
       editUseCase: EditSellerPaymentUseCase(repository: repo),
       deleteUseCase: DeleteSellerPaymentUseCase(repository: repo),
+      getNotesUseCase: GetSellerPaymentNotesUseCase(repository: repo),
+      addNoteUseCase: AddSellerPaymentNoteUseCase(repository: repo),
+      deleteNoteUseCase: DeleteSellerPaymentNoteUseCase(repository: repo),
       now: () => _now,
     )..syncSession(session ?? _session());
 
@@ -388,6 +451,8 @@ void main() {
       expect(p.cliente, 'ACME SAC');
       expect(p.ejecutivo, 'LUIS VENDEDOR');
       expect(p.descripcion, 'Cuota 1');
+      expect(p.ultimaNota!.autor, 'LUIS VENDEDOR');
+      expect(p.notasCount, 2);
       expect(p.metodos, ['YAPE', 'EFECTIVO']);
       expect(p.montoTotal, 150.5);
       expect(p.simbolo, 'S/.');
@@ -663,16 +728,17 @@ void main() {
         }),
       );
 
-      await ds.editInstallmentPayment('t', id: 31, paymentMethodId: 2, monto: 80, descripcionAdicional: 'x');
+      await ds.editInstallmentPayment('t', id: 31, paymentMethodId: 2, monto: 80);
       await ds.editInstallmentPayment('t', id: 31, paymentMethodId: 3);
 
       expect(requests.first.method, 'PUT');
       expect(requests.first.url.path, '$_apiPath/pagos-vendedores/edit-pre-confirm/31');
-      expect(jsonDecode(requests.first.body), {'payment_method_id': 2, 'monto': 80.0, 'descripcion_adicional': 'x'});
-      expect(jsonDecode(requests.last.body), {'payment_method_id': 3, 'descripcion_adicional': null});
+      // La descripción ya no viaja: son las notas del pago.
+      expect(jsonDecode(requests.first.body), {'payment_method_id': 2, 'monto': 80.0});
+      expect(jsonDecode(requests.last.body), {'payment_method_id': 3});
     });
 
-    test('editar un saldo a favor es PUT edit-payment-seller/{id} con método y descripción', () async {
+    test('editar un saldo a favor es PUT edit-payment-seller/{id} solo con el método', () async {
       late http.Request req;
       final ds = SellerPaymentRemoteDataSourceImpl(
         client: MockClient((request) async {
@@ -681,11 +747,89 @@ void main() {
         }),
       );
 
-      await ds.editPayment('t', id: 2, paymentMethodId: 4, descripcion: 'Anticipo');
+      await ds.editPayment('t', id: 2, paymentMethodId: 4);
 
       expect(req.method, 'PUT');
       expect(req.url.path, '$_apiPath/pagos-vendedores/edit-payment-seller/2');
-      expect(jsonDecode(req.body), {'payment_method_id': 4, 'descripcion': 'Anticipo'});
+      expect(jsonDecode(req.body), {'payment_method_id': 4});
+    });
+
+    test('las notas: GET con el historial, POST con el texto y DELETE devuelve la nota eliminada', () async {
+      final requests = <http.Request>[];
+      final ds = SellerPaymentRemoteDataSourceImpl(
+        client: MockClient((request) async {
+          requests.add(request);
+          if (request.method == 'GET') {
+            return http.Response(
+              jsonEncode({
+                'puede_escribir': true,
+                'notas': [
+                  {
+                    'id': 11,
+                    'texto': 'Segunda',
+                    'created_at': '2026-11-12T20:05:00.000000Z',
+                    'user': {'id': 9, 'name': 'LUIS'},
+                    'eliminada_at': null,
+                    'eliminada_por': null,
+                    'puede_eliminar': true,
+                  },
+                  {
+                    'id': 10,
+                    'texto': 'Primera',
+                    'created_at': '2026-11-10T14:30:00.000000Z',
+                    'user': null,
+                    'eliminada_at': '2026-11-11T23:45:00.000000Z',
+                    'eliminada_por': {'id': 1, 'name': 'CEO'},
+                    'puede_eliminar': false,
+                  },
+                ],
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'id': 12,
+              'texto': 'Nueva',
+              'created_at': '2026-11-17T20:00:00.000000Z',
+              'user': {'id': 9, 'name': 'LUIS'},
+              'eliminada_at': request.method == 'DELETE' ? '2026-11-17T21:00:00.000000Z' : null,
+              'eliminada_por': request.method == 'DELETE' ? {'id': 9, 'name': 'LUIS'} : null,
+              'puede_eliminar': request.method != 'DELETE',
+            }),
+            request.method == 'POST' ? 201 : 200,
+          );
+        }),
+      );
+
+      final notes = await ds.getNotes('t', paymentId: 7);
+      final added = await ds.addNote('t', paymentId: 7, texto: 'Nueva');
+      final removed = await ds.deleteNote('t', noteId: 12);
+
+      expect(requests.map((r) => r.method), ['GET', 'POST', 'DELETE']);
+      expect(requests[0].url.path, '$_apiPath/pagos-vendedores/7/notas');
+      expect(requests[1].url.path, '$_apiPath/pagos-vendedores/7/notas');
+      expect(jsonDecode(requests[1].body), {'texto': 'Nueva'});
+      expect(requests[2].url.path, '$_apiPath/pagos-vendedores/notas/12');
+      expect(notes.puedeEscribir, isTrue);
+      expect(notes.notas.map((n) => n.id), [11, 10]);
+      expect(notes.notas.first.autor, 'LUIS');
+      expect(notes.notas.first.puedeEliminar, isTrue);
+      expect(notes.notas.last.autor, isNull);
+      expect(notes.notas.last.eliminada, isTrue);
+      expect(notes.notas.last.eliminadaPor, 'CEO');
+      expect(added.texto, 'Nueva');
+      expect(added.eliminada, isFalse);
+      expect(removed.eliminada, isTrue);
+      expect(removed.eliminadaPor, 'LUIS');
+    });
+
+    test('un 403 al agregar una nota llega con el mensaje del servidor', () async {
+      final ds = SellerPaymentRemoteDataSourceImpl(
+        client: MockClient((request) async => http.Response('{"message": "No tienes permiso para agregar notas"}', 403)),
+      );
+
+      expect(() => ds.addNote('t', paymentId: 1, texto: 'x'), throwsA(predicate((e) => '$e'.contains('permiso'))));
     });
 
     test('eliminar un pago pendiente y uno confirmado usan rutas distintas, con type=payment_seller', () async {
@@ -888,8 +1032,8 @@ void main() {
       final repo = _FakeSellerPaymentRepository();
       final p = _provider(repo);
 
-      await p.editPayment(_payment(), paymentMethodId: 3, monto: 80, descripcion: 'x');
-      expect(repo.editedInstallment, (id: 31, method: 3, monto: 80.0, descripcion: 'x'));
+      await p.editPayment(_payment(), paymentMethodId: 3, monto: 80);
+      expect(repo.editedInstallment, (id: 31, method: 3, monto: 80.0));
       expect(repo.edited, isNull);
 
       await p.editPayment(_payment(estado: 1, confirmedPart: true), paymentMethodId: 3, monto: 80);
@@ -900,10 +1044,39 @@ void main() {
       final repo = _FakeSellerPaymentRepository();
       final p = _provider(repo);
 
-      await p.editPayment(_payment(id: 2, favor: true), paymentMethodId: 4, descripcion: 'Otro');
+      await p.editPayment(_payment(id: 2, favor: true), paymentMethodId: 4);
 
-      expect(repo.edited, (id: 2, method: 4, descripcion: 'Otro'));
+      expect(repo.edited, (id: 2, method: 4));
       expect(repo.editedInstallment, isNull);
+    });
+
+    test('las notas se piden, se agregan (sin espacios sobrantes) y se eliminan', () async {
+      final repo = _FakeSellerPaymentRepository();
+      final p = _provider(repo);
+
+      final notes = await p.loadNotes(1);
+      final added = await p.addNote(1, '  Pagó por Yape  ');
+      final removed = await p.deleteNote(11);
+
+      expect(notes.right.notas.map((n) => n.id), [11, 10]);
+      expect(notes.right.puedeEscribir, isTrue);
+      expect(repo.notesLoadedFor, [1]);
+      expect(repo.addedNotes, [(paymentId: 1, texto: 'Pagó por Yape')]);
+      expect(added.right.autor, 'Ana');
+      expect(repo.deletedNotes, [11]);
+      expect(removed.right.eliminada, isTrue);
+      expect(removed.right.eliminadaPor, 'Ana');
+    });
+
+    test('si las notas fallan devuelve el error del servidor', () async {
+      final repo = _FakeSellerPaymentRepository()
+        ..notesFailure = const ServerFailure('Sin conexión')
+        ..noteActionFailure = const ValidationFailure('Escribe la nota');
+      final p = _provider(repo);
+
+      expect((await p.loadNotes(1)).left.message, 'Sin conexión');
+      expect((await p.addNote(1, 'x')).left.message, 'Escribe la nota');
+      expect((await p.deleteNote(1)).left.message, 'Escribe la nota');
     });
 
     test('aprobar y eliminar recargan; un pago aprobado se elimina por la ruta post-confirmación', () async {
@@ -961,11 +1134,12 @@ void main() {
       expect(find.text('S/. 150.50'), findsOneWidget);
       expect(find.text('10/11/2026'), findsOneWidget);
       expect(find.text('Método: YAPE / EFECTIVO'), findsOneWidget);
-      expect(find.text('Cuota 1'), findsOneWidget);
+      // La última nota y, con más de una, cuántas hay.
+      expect(find.text('Nota: Cuota 1 (2 notas)'), findsOneWidget);
       expect(find.text('Pendiente'), findsOneWidget);
       expect(find.text('Ana Pérez'), findsOneWidget);
       expect(find.text(r'$. 250.00'), findsOneWidget);
-      expect(find.text('Anticipo'), findsOneWidget);
+      expect(find.text('Nota: Anticipo'), findsOneWidget);
       expect(find.text('Aprobado'), findsOneWidget);
     });
 
@@ -1029,8 +1203,128 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Pago 1'), findsOneWidget);
-      expect(find.text('Descripción adicional'), findsOneWidget);
+      expect(find.text('Notas del pago'), findsOneWidget);
       expect(find.text('Cerrar'), findsOneWidget);
+    });
+
+    testWidgets('el detalle muestra el historial de notas con autor, fecha y las eliminadas tachadas', (tester) async {
+      final r = await _pump(tester);
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.notesLoadedFor, [1]);
+      expect(find.text('Segunda nota'), findsOneWidget);
+      expect(find.textContaining('LUIS VENDEDOR', findRichText: true), findsWidgets);
+      expect(find.textContaining('12/11/2026 03:05 pm', findRichText: true), findsOneWidget);
+      // La nota eliminada queda tachada con quién y cuándo.
+      final removed = tester.widget<Text>(find.text('Cuota 1').last);
+      expect(removed.style!.decoration, TextDecoration.lineThrough);
+      expect(find.text('Eliminada por CEO el 11/11/2026 06:45 pm'), findsOneWidget);
+      // Solo las que el servidor deja eliminar tienen el botón.
+      expect(find.byTooltip('Eliminar nota'), findsOneWidget);
+    });
+
+    testWidgets('sin pagos-vendedores.notas (puede_escribir falso) no hay caja para escribir', (tester) async {
+      await _pump(tester, setUp: (r) => r.canWriteNotes = false);
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Segunda nota'), findsOneWidget);
+      expect(find.byKey(const ValueKey('nota-texto')), findsNothing);
+      expect(find.text('Agregar nota'), findsNothing);
+    });
+
+    testWidgets('un pago sin notas dice "Sin notas"', (tester) async {
+      await _pump(tester, setUp: (r) => r.notes = []);
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sin notas'), findsOneWidget);
+    });
+
+    testWidgets('si las notas no cargan muestra el error en el detalle', (tester) async {
+      await _pump(tester, setUp: (r) => r.notesFailure = const ServerFailure('No autorizado'));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No autorizado'), findsOneWidget);
+    });
+
+    testWidgets('agregar una nota la pone primera y al cerrar se refresca la lista', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      final add = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Agregar nota'));
+      expect(add.onPressed, isNull);
+
+      await tester.enterText(find.byKey(const ValueKey('nota-texto')), '  Llamar el lunes ');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar nota'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.addedNotes, [(paymentId: 1, texto: 'Llamar el lunes')]);
+      expect(find.text('Llamar el lunes'), findsOneWidget);
+      // La nota nueva sale con el nombre de quien la escribió y la fecha.
+      expect(find.textContaining('Ana  17/11/2026 03:05 pm', findRichText: true), findsOneWidget);
+      // La caja queda vacía y la lista aún no se pidió de nuevo (se hace al cerrar).
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('nota-texto'))).controller!.text, isEmpty);
+      expect(r.repo.calls, hasLength(1));
+
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(r.repo.calls, hasLength(2));
+    });
+
+    testWidgets('si el servidor rechaza la nota muestra el motivo', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+      r.repo.noteActionFailure = const ValidationFailure('Escribe la nota');
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('nota-texto')), 'Hola');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar nota'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escribe la nota'), findsOneWidget);
+      expect(find.text('Hola'), findsOneWidget);
+    });
+
+    testWidgets('eliminar una nota pide confirmación y queda tachada con quién la eliminó', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Eliminar nota'));
+      await tester.pumpAndSettle();
+      expect(find.text('¿Eliminar esta nota? Quedará en el historial como eliminada por ti.'), findsOneWidget);
+      expect(r.repo.deletedNotes, isEmpty);
+
+      await tester.tap(find.text('Eliminar'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.deletedNotes, [11]);
+      expect(find.text('Eliminada por Ana el 17/11/2026 04:30 pm'), findsOneWidget);
+      // Ya no se puede eliminar de nuevo.
+      expect(find.byTooltip('Eliminar nota'), findsNothing);
+    });
+
+    testWidgets('cancelar la confirmación no elimina la nota', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Eliminar nota'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.deletedNotes, isEmpty);
     });
 
     testWidgets('sin permisos de acción no hay botones en las filas', (tester) async {
@@ -1145,15 +1439,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Editar Pago de Cuota'), findsOneWidget);
-      expect(find.text('Este es un pago de saldo a favor. Solo puedes editar el método de pago y la descripción.'), findsNothing);
+      expect(find.textContaining('Este es un pago de saldo a favor'), findsNothing);
       expect(find.widgetWithText(TextFormField, '150.5'), findsOneWidget);
+      // La descripción ya no es un campo editable: son las notas del pago.
+      expect(find.widgetWithText(TextFormField, 'Descripción adicional'), findsNothing);
+      expect(find.text('Notas del pago'), findsOneWidget);
+      expect(find.text('Segunda nota'), findsOneWidget);
+      expect(r.repo.notesLoadedFor, [1]);
 
       await tester.enterText(find.widgetWithText(TextFormField, '150.5'), '120');
       await tester.tap(find.text('Editar').last);
       await tester.pumpAndSettle();
 
-      expect(r.repo.editedInstallment, (id: 31, method: 2, monto: 120.0, descripcion: 'Cuota 1'));
+      expect(r.repo.editedInstallment, (id: 31, method: 2, monto: 120.0));
       expect(find.text('Pago editado'), findsOneWidget);
+    });
+
+    testWidgets('en el modal de editar se agrega una nota sin guardar el pago y la lista se refresca al cerrar', (tester) async {
+      final r = await _pump(tester, permissions: _allPermissions, size: const Size(400, 1600));
+
+      await tester.tap(find.byTooltip('Editar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('nota-texto')), 'Nota desde editar');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar nota'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.addedNotes, [(paymentId: 1, texto: 'Nota desde editar')]);
+      expect(r.repo.editedInstallment, isNull);
+      expect(r.repo.calls, hasLength(1));
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(r.repo.calls, hasLength(2));
+      expect(r.repo.editedInstallment, isNull);
+    });
+
+    testWidgets('en el modal de editar se elimina una nota con confirmación', (tester) async {
+      final r = await _pump(tester, permissions: _allPermissions, size: const Size(400, 1600));
+
+      await tester.tap(find.byTooltip('Editar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Eliminar nota'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Eliminar'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.deletedNotes, [11]);
+      expect(find.text('Editar Pago de Cuota'), findsOneWidget);
     });
 
     testWidgets('el monto es obligatorio y mayor a cero al editar', (tester) async {
@@ -1198,13 +1531,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Editar Pago (Saldo a Favor)'), findsOneWidget);
-      expect(find.text('Este es un pago de saldo a favor. Solo puedes editar el método de pago y la descripción.'), findsOneWidget);
+      expect(find.textContaining('Este es un pago de saldo a favor. Solo puedes editar el método de pago'), findsOneWidget);
       expect(find.text(r'$. 250.00'), findsWidgets);
 
       await tester.tap(find.text('Editar').last);
       await tester.pumpAndSettle();
 
-      expect(r.repo.edited, (id: 2, method: 4, descripcion: 'Anticipo'));
+      expect(r.repo.edited, (id: 2, method: 4));
     });
 
     testWidgets('si editar falla el modal sigue abierto con el mensaje', (tester) async {
