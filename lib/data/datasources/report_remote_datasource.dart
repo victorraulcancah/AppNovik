@@ -31,6 +31,13 @@ abstract class ReportRemoteDataSource {
 
   Future<Uint8List> exportSalesReport(String token, SalesReportFilters filters);
 
+  /// Productos del catálogo cuyo código contiene [text] (las sugerencias del filtro "Código de producto").
+  Future<List<ReportProductOption>> searchProductCodes({
+    required String token,
+    required int companyId,
+    required String text,
+  });
+
   Future<SalesReportCatalogs> getCatalogs({
     required String token,
     required int companyId,
@@ -131,6 +138,8 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       if (filters.marcas.isNotEmpty) 'marcas[]': filters.marcas,
       if (filters.categorias.isNotEmpty) 'tipos_producto[]': filters.categorias,
       if (filters.departamentos.isNotEmpty) 'departamentos[]': filters.departamentos,
+      // Solo lo vendido de ese producto (el buscador "por código de producto" de la web).
+      if (filters.productCode != null && filters.productCode!.isNotEmpty) 'product_code': [filters.productCode!],
       if (kind == ReportKind.clientes && search != null && search.trim().isNotEmpty)
         'cliente_search': [search.trim()],
       'page': ['$page'],
@@ -140,6 +149,35 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       () => client.get(uri, headers: ApiConstants.authHeaders(token)),
     );
     return rankingFromJson(kind, body);
+  }
+
+  @override
+  Future<List<ReportProductOption>> searchProductCodes({
+    required String token,
+    required int companyId,
+    required String text,
+  }) async {
+    final body = await sendApiRequest(
+      () => client.get(
+        _uri('/ventas/buscar-productos-catalogo', {
+          'company_id': ['$companyId'],
+          'product_code': [text.trim()],
+          'per_page': ['30'],
+        }),
+        headers: ApiConstants.authHeaders(token),
+      ),
+    );
+    final data = body is Map ? body['data'] : null;
+    if (data is! List) return const [];
+    return [
+      for (final item in data)
+        if (item is Map && '${item['codigo'] ?? ''}'.isNotEmpty)
+          (
+            codigo: '${item['codigo']}',
+            nombre: '${item['nombre'] ?? ''}',
+            marca: '${item['marca'] ?? ''}',
+          ),
+    ];
   }
 
   @override

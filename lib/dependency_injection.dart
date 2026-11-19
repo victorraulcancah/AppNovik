@@ -205,6 +205,7 @@ class DependencyInjection {
             getCatalogsUseCase: GetReportCatalogsUseCase(repository: _reportRepository),
             getSaleUseCase: GetReportSaleUseCase(repository: _reportRepository),
             getRankingUseCase: GetRankingReportUseCase(repository: _reportRepository),
+            searchProductCodesUseCase: SearchReportProductCodesUseCase(repository: _reportRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),
           update: (context, auth, previous) => previous!..syncSession(auth.session),

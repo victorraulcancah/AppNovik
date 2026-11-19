@@ -18,7 +18,7 @@ import 'package:app_novik/domain/repositories/auth_repository.dart';
 import 'package:app_novik/domain/repositories/report_repository.dart';
 import 'package:app_novik/domain/usecases/auth_usecases.dart';
 import 'package:app_novik/domain/usecases/report_usecases.dart';
-import 'package:app_novik/presentation/components/components.dart' show AppListCard;
+import 'package:app_novik/presentation/components/components.dart' show AppListCard, AppPickerField;
 import 'package:app_novik/presentation/pages/reports_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/reports_provider.dart';
@@ -126,6 +126,21 @@ class _FakeRepo implements ReportRepository {
     return Either.right(_general());
   }
 
+  /// Lo que se buscó por código de producto y lo que se ofrece.
+  final List<String> codeSearches = [];
+
+  @override
+  Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
+    required int companyId,
+    required String text,
+  }) async {
+    codeSearches.add(text);
+    return Either.right(const [
+      (codigo: 'EVO.5', nombre: 'AMPLIFICADOR DIGITAL 4CH', marca: '7POWER'),
+      (codigo: 'EVO.4', nombre: 'AMPLIFICADOR DIGITAL 4CH 150 RMS', marca: '7POWER'),
+    ]);
+  }
+
   @override
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) async =>
       Either.right(DownloadedFile(name: 'x.xlsx', bytes: Uint8List(1)));
@@ -148,6 +163,7 @@ ReportsProvider _provider(_FakeRepo repo, {SessionContextEntity? session}) => Re
   getCatalogsUseCase: GetReportCatalogsUseCase(repository: repo),
   getSaleUseCase: GetReportSaleUseCase(repository: repo),
   getRankingUseCase: GetRankingReportUseCase(repository: repo),
+  searchProductCodesUseCase: SearchReportProductCodesUseCase(repository: repo),
   now: () => DateTime(2026, 10, 31, 10),
 )..syncSession(session ?? _session());
 
@@ -360,6 +376,39 @@ void main() {
       expect(uri.queryParametersAll['tipos_producto[]'], ['4']);
       expect(uri.queryParametersAll['departamentos[]'], ['04']);
       expect(uri.queryParameters.containsKey('warehouse_id[]'), isFalse);
+    });
+
+    test('el código de producto va como product_code (solo si hay) y no cambia el resto', () async {
+      final sin = await request(ReportKind.vendedores, filters);
+      expect(sin.queryParameters.containsKey('product_code'), isFalse);
+
+      final con = await request(ReportKind.vendedores, filters.copyWith(productCode: 'EVO.5'));
+      expect(con.queryParameters['product_code'], 'EVO.5');
+      expect(con.queryParameters['company_id'], '7');
+    });
+
+    test('las sugerencias de código vienen de /ventas/buscar-productos-catalogo', () async {
+      late Uri uri;
+      final dataSource = ReportRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          uri = r.url;
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': [
+                {'codigo': 'EVO.5', 'nombre': 'AMPLIFICADOR', 'marca': '7POWER'},
+                {'codigo': '', 'nombre': 'sin código', 'marca': null},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      final options = await dataSource.searchProductCodes(token: 't', companyId: 7, text: ' evo ');
+
+      expect(uri.path, endsWith('/ventas/buscar-productos-catalogo'));
+      expect(uri.queryParameters, {'company_id': '7', 'product_code': 'evo', 'per_page': '30'});
+      expect(options, [(codigo: 'EVO.5', nombre: 'AMPLIFICADOR', marca: '7POWER')]);
     });
 
     test('solo Clientes manda la búsqueda al servidor', () async {
@@ -849,6 +898,46 @@ void main() {
       await tester.enterText(find.byType(SearchBar), 'zzz');
       await tester.pumpAndSettle();
       expect(find.text('Sin resultados'), findsOneWidget);
+    });
+
+    testWidgets('el filtro "Código de producto" solo sale en los reportes por entidad y cuenta solo ese producto', (tester) async {
+      final repo = await pump(tester);
+
+      // Venta general no lo tiene: ahí se busca en la lista de productos.
+      await tester.tap(find.byTooltip('Filtros avanzados'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppPickerField, 'Código de producto'), findsNothing);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      await choose(tester, 'Departamentos');
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppPickerField, 'Código de producto'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(AppPickerField, 'Código de producto'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Buscar por código de producto'), 'evo');
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      expect(repo.codeSearches, contains('evo'));
+      expect(find.text('EVO.4'), findsOneWidget);
+
+      await tester.tap(find.text('EVO.5'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppPickerField, 'Código de producto'), findsOneWidget);
+      await tester.tap(find.text('Aplicar filtros'));
+      await tester.pumpAndSettle();
+
+      // El reporte se pide con el código y queda un chip para quitarlo.
+      expect(repo.calls.last.kind, ReportKind.departamentos);
+      expect(repo.calls.last.filters.productCode, 'EVO.5');
+      expect(find.text('Producto: EVO.5'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Quitar Producto: EVO.5'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.filters.productCode, isNull);
+      expect(find.text('Producto: EVO.5'), findsNothing);
     });
 
     testWidgets('sin importes (jefe de almacén) solo se ve el %, nunca un monto', (tester) async {

@@ -59,6 +59,16 @@ class GetRankingReportUseCase {
   }
 }
 
+class SearchReportProductCodesUseCase {
+  final ReportRepository repository;
+  SearchReportProductCodesUseCase({required this.repository});
+
+  Future<Either<Failure, List<ReportProductOption>>> call({required int companyId, required String text}) {
+    if (text.trim().isEmpty) return Future.value(Either.right(const []));
+    return repository.searchProductCodes(companyId: companyId, text: text);
+  }
+}
+
 class ExportSalesReportUseCase {
   final ReportRepository repository;
   ExportSalesReportUseCase({required this.repository});

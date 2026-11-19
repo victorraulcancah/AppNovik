@@ -93,6 +93,7 @@ class ReportsProvider extends ChangeNotifier {
   final GetReportCatalogsUseCase _getCatalogs;
   final GetReportSaleUseCase _getSale;
   final GetRankingReportUseCase? _getRanking;
+  final SearchReportProductCodesUseCase? _searchProductCodes;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -106,9 +107,11 @@ class ReportsProvider extends ChangeNotifier {
     required GetReportCatalogsUseCase getCatalogsUseCase,
     required GetReportSaleUseCase getSaleUseCase,
     GetRankingReportUseCase? getRankingUseCase,
+    SearchReportProductCodesUseCase? searchProductCodesUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
-  }) : _getReport = getSalesReportUseCase,
+  }) : _searchProductCodes = searchProductCodesUseCase,
+       _getReport = getSalesReportUseCase,
        _export = exportSalesReportUseCase,
        _getCatalogs = getCatalogsUseCase,
        _getSale = getSaleUseCase,
@@ -228,7 +231,23 @@ class ReportsProvider extends ChangeNotifier {
     return _advanced.copyWith(desde: r.start, hasta: r.end);
   }
 
-  int get advancedCount => _advanced.advancedCount;
+  /// Cuántos filtros avanzados hay. El código de producto solo cuenta en los reportes por entidad:
+  /// Venta general no lo usa.
+  int get advancedCount {
+    final code = _advanced.productCode;
+    final hidden = code != null && code.isNotEmpty && !kind.isRanking;
+    return _advanced.advancedCount - (hidden ? 1 : 0);
+  }
+
+  /// Productos cuyo código contiene [text] (sugerencias del filtro "Código de producto").
+  Future<Either<Failure, List<ReportProductOption>>> searchProductCodes(String text) async {
+    final search = _searchProductCodes;
+    final companyId = _companyId;
+    if (search == null || companyId == null) return Either.right(const []);
+    final result = await search(companyId: companyId, text: text);
+    if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
+    return result;
+  }
 
   bool get hasMore =>
       report != null && report!.products.length < report!.totalProducts;

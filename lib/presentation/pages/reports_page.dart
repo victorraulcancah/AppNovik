@@ -39,6 +39,36 @@ class _ReportsPageState extends State<ReportsPage> {
   /// la lista se abre con su flecha.
   bool _productsView = false;
 
+  /// El buscador de la lista de productos (por código, nombre o marca). Solo filtra lo vendido en el rango.
+  final _productSearch = TextEditingController();
+  String _productQuery = '';
+
+  @override
+  void dispose() {
+    _productSearch.dispose();
+    super.dispose();
+  }
+
+  void _closeProducts() {
+    _productSearch.clear();
+    setState(() {
+      _productsView = false;
+      _productQuery = '';
+    });
+  }
+
+  /// Busca en toda la lista: el servidor pagina los productos, así que al buscar se piden las páginas
+  /// que faltan (en lotes de 50) para no dejar fuera ninguno.
+  Future<void> _searchProducts(String text) async {
+    final reports = context.read<ReportsProvider>();
+    setState(() => _productQuery = text.trim());
+    while (mounted && _productQuery.isNotEmpty && reports.hasMore) {
+      final before = reports.report?.products.length ?? 0;
+      await reports.loadMore();
+      if ((reports.report?.products.length ?? 0) <= before) break;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -171,7 +201,7 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
         // Venta general: las fechas en consulta, los filtros (con "Comparar año anterior" dentro) y el Excel. Los
         // reportes por entidad no tienen esa fila: su filtro va en la fila del buscador.
-        if (general)
+        if (general && !_productsView)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
           child: Row(
@@ -268,46 +298,83 @@ class _ReportsPageState extends State<ReportsPage> {
 
   /// La lista completa de productos y servicios (con su flecha para volver a Venta general).
   Widget _productsList(ReportsProvider reports, SalesReportEntity report, List<SalesReportProductEntity> products) {
-    final count = 1 + (products.isEmpty ? 1 : products.length) + (reports.loadingMore ? 1 : 0);
-    return RefreshIndicator(
-      onRefresh: reports.refresh,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (n) {
-          if (n.metrics.extentAfter < 400) reports.loadMore();
-          return false;
-        },
-        child: ListView.builder(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          itemCount: count,
-          itemBuilder: (context, i) {
-            Widget child;
-            if (i == 0) {
-              child = _productsHeader(reports, report);
-            } else if (products.isEmpty) {
-              child = const AppEmptyState(
-                icon: Icons.inventory_2_outlined,
-                title: 'No hay ventas',
-                message: 'Prueba con otro rango de fechas o quita los filtros.',
-              );
-            } else if (i - 1 < products.length) {
-              child = _productCard(reports, report, products[i - 1], i);
-            } else {
-              child = const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: i >= 1 ? 8 : 16),
-                  child: child,
+    // Como los reportes por entidad: encabezado, buscador con los filtros al lado y la lista. El buscador
+    // filtra por código, nombre o marca.
+    final query = _productQuery.toLowerCase();
+    final shown = query.isEmpty
+        ? products
+        : [
+            for (final p in products)
+              if (p.codigo.toLowerCase().contains(query) ||
+                  p.name.toLowerCase().contains(query) ||
+                  (p.marca?.toLowerCase().contains(query) ?? false))
+                p,
+          ];
+    final count = (shown.isEmpty ? 1 : shown.length) + (reports.loadingMore ? 1 : 0);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _productsHeader(reports, report),
+            AppSearchBar(
+              hint: 'Buscar por código o nombre',
+              controller: _productSearch,
+              onChanged: _searchProducts,
+              onFilter: () => showReportFilters(context),
+              filterCount: reports.advancedCount,
+              actions: [
+                _sortButton(reports),
+                IconButton(
+                  tooltip: 'Descargar Excel',
+                  onPressed: reports.exporting ? null : _export,
+                  icon: Icon(Icons.download_outlined, color: Theme.of(context).colorScheme.primary),
+                ),
+              ],
+            ),
+            if (reports.loadingMore && query.isNotEmpty) const LinearProgressIndicator(minHeight: 2),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: reports.refresh,
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (n) {
+                    if (n.metrics.extentAfter < 400) reports.loadMore();
+                    return false;
+                  },
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    itemCount: count,
+                    itemBuilder: (context, i) {
+                      Widget child;
+                      if (shown.isEmpty) {
+                        child = products.isEmpty
+                            ? const AppEmptyState(
+                                icon: Icons.inventory_2_outlined,
+                                title: 'No hay ventas',
+                                message: 'Prueba con otro rango de fechas o quita los filtros.',
+                              )
+                            : const AppEmptyState(
+                                icon: Icons.search_off,
+                                title: 'Sin resultados',
+                                message: 'Ninguno coincide con la búsqueda.',
+                              );
+                      } else if (i < shown.length) {
+                        child = _productCard(reports, report, shown[i], i + 1);
+                      } else {
+                        child = const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      return Padding(padding: const EdgeInsets.only(bottom: 8), child: child);
+                    },
+                  ),
                 ),
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -542,39 +609,65 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _productsHeader(ReportsProvider reports, SalesReportEntity report) {
     final theme = Theme.of(context);
-    final sortable = reports.ocultarImportes ? [ReportSort.cantidad] : ReportSort.values;
+    final scheme = theme.colorScheme;
+    final count = '${report.totalProducts} productos y servicios';
 
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Volver a Venta general',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => setState(() => _productsView = false),
-        ),
-        Expanded(
-          child: Text(
-            'Productos y servicios · ${report.totalProducts}',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+    // El mismo encabezado de los reportes por entidad: flecha, título con su total y el ojo del margen.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Volver a Venta general',
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _closeProducts,
           ),
-        ),
-        PopupMenuButton<ReportSort>(
-          tooltip: 'Ordenar',
-          icon: const Icon(Icons.sort),
-          onSelected: reports.selectSort,
-          itemBuilder: (context) => [
-            for (final s in sortable)
-              PopupMenuItem(
-                value: s,
-                child: Row(
-                  children: [
-                    Expanded(child: Text(s.label)),
-                    if (reports.sort == s)
-                      Icon(reports.sortDescending ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Productos y servicios',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
-              ),
-          ],
-        ),
+                const SizedBox(height: 2),
+                Text(
+                  reports.ocultarImportes ? count : 'Total ${_soles(report.totalVentas)} · $count',
+                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          if (!reports.ocultarImportes && !reports.ocultarMargen)
+            IconButton(
+              tooltip: _marginVisible ? 'Ocultar el margen' : 'Ver el margen',
+              icon: Icon(_marginVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+              onPressed: () => setState(() => _marginVisible = !_marginVisible),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// El orden de la lista (junto al buscador, donde los demás reportes tienen sus botones).
+  Widget _sortButton(ReportsProvider reports) {
+    final sortable = reports.ocultarImportes ? [ReportSort.cantidad] : ReportSort.values;
+    return PopupMenuButton<ReportSort>(
+      tooltip: 'Ordenar',
+      icon: const Icon(Icons.sort),
+      onSelected: reports.selectSort,
+      itemBuilder: (context) => [
+        for (final s in sortable)
+          PopupMenuItem(
+            value: s,
+            child: Row(
+              children: [
+                Expanded(child: Text(s.label)),
+                if (reports.sort == s)
+                  Icon(reports.sortDescending ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
+              ],
+            ),
+          ),
       ],
     );
   }

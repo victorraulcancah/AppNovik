@@ -159,6 +159,13 @@ class _FakeRepo implements ReportRepository {
   }) async => Either.right(const RankingReport());
 
   @override
+  Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
+    required int companyId,
+    required String text,
+  }) async =>
+      Either.right(const []);
+
+  @override
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) async {
     exports.add(filters);
     return Either.right(DownloadedFile(name: 'Reporte de Ventas.xlsx', bytes: Uint8List.fromList([1])));
@@ -896,7 +903,7 @@ void main() {
       await pump(tester);
 
       // La lista completa ya no sale suelta: solo la tarjeta con el top.
-      expect(find.text('Productos y servicios · 2'), findsNothing);
+      expect(find.text('Productos y servicios'), findsNothing);
       expect(find.text('Ventas por productos'), findsOneWidget);
       // Solo el código del producto, no el nombre largo.
       expect(find.text('1. SUB-12'), findsOneWidget);
@@ -913,12 +920,13 @@ void main() {
       }
 
       await openProducts(tester);
-      expect(find.text('Productos y servicios · 2'), findsOneWidget);
+      expect(find.text('Productos y servicios'), findsOneWidget);
+      expect(find.text('Total S/. 330.50 · 2 productos y servicios'), findsOneWidget);
       expect(find.byTooltip('Volver a Venta general'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Volver a Venta general'));
       await tester.pumpAndSettle();
-      expect(find.text('Productos y servicios · 2'), findsNothing);
+      expect(find.text('Productos y servicios'), findsNothing);
       expect(find.text('Venta Total'), findsOneWidget);
     });
 
@@ -937,10 +945,41 @@ void main() {
       expect(find.text('S/. *******'), findsWidgets); // el margen sale oculto
       expect(find.text('Ventas'), findsOneWidget); // título de la gráfica
       await openProducts(tester);
-      expect(find.text('Productos y servicios · 2'), findsOneWidget);
+      expect(find.text('Productos y servicios'), findsOneWidget);
       expect(find.text('SUBWOOFER 12"'), findsOneWidget);
       expect(find.text('SUB-12 · PIONEER'), findsOneWidget);
       expect(find.text('S/. 290.00'), findsOneWidget);
+    });
+
+    testWidgets('la lista de productos es como la de los reportes por entidad: buscador por código con los filtros al lado', (tester) async {
+      await pump(tester);
+      await openProducts(tester);
+
+      // Sin la fila de fechas de Venta general: los filtros y el Excel van junto al buscador.
+      expect(find.widgetWithText(TextField, 'Buscar por código o nombre'), findsOneWidget);
+      expect(find.byTooltip('Filtros'), findsOneWidget);
+      expect(find.byTooltip('Ordenar'), findsOneWidget);
+      expect(find.byTooltip('Descargar Excel'), findsOneWidget);
+      expect(find.byTooltip('Filtros avanzados'), findsNothing);
+
+      // Por código, por nombre y por marca.
+      for (final text in ['sub-12', 'woofer', 'pioneer']) {
+        await tester.enterText(find.widgetWithText(TextField, 'Buscar por código o nombre'), text);
+        await tester.pumpAndSettle();
+        expect(find.text('SUBWOOFER 12"'), findsOneWidget, reason: text);
+      }
+
+      await tester.enterText(find.widgetWithText(TextField, 'Buscar por código o nombre'), 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.text('SUBWOOFER 12"'), findsNothing);
+      expect(find.text('Sin resultados'), findsOneWidget);
+
+      // Al volver, la búsqueda se borra.
+      await tester.tap(find.byTooltip('Volver a Venta general'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ventas por productos'));
+      await tester.pumpAndSettle();
+      expect(find.text('SUBWOOFER 12"'), findsOneWidget);
     });
 
     testWidgets('los atajos de fecha son los de la web, con Este mes elegido', (tester) async {

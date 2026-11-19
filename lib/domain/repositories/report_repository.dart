@@ -29,6 +29,12 @@ abstract class ReportRepository {
   /// Excel del reporte con los mismos filtros.
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters);
 
+  /// Los productos cuyo código contiene [text], para elegir uno en el filtro "Código de producto".
+  Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
+    required int companyId,
+    required String text,
+  });
+
   /// Lo que se puede elegir en los filtros avanzados. [soloMiCartera]: un vendedor sin permiso
   /// para ver a los demás solo se ofrece a sí mismo y a sus clientes.
   Future<Either<Failure, SalesReportCatalogs>> getCatalogs({

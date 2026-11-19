@@ -60,6 +60,15 @@ class ReportRepositoryImpl with TokenGuard implements ReportRepository {
       );
 
   @override
+  Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
+    required int companyId,
+    required String text,
+  }) =>
+      withToken(
+        (token) => remoteDataSource.searchProductCodes(token: token, companyId: companyId, text: text),
+      );
+
+  @override
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) =>
       withToken(
         (token) async => DownloadedFile(

@@ -2,6 +2,9 @@
 /// `01`) y su nombre.
 typedef ReportOption = ({String id, String name});
 
+/// Un producto que se ofrece al buscar por código en los reportes por entidad.
+typedef ReportProductOption = ({String codigo, String nombre, String marca});
+
 /// Filtros del reporte Ventas General: el rango de fechas y los filtros avanzados (cada lista
 /// vacía significa "todos").
 class SalesReportFilters {
@@ -14,6 +17,10 @@ class SalesReportFilters {
   final List<String> categorias;
   final List<String> departamentos;
 
+  /// Código exacto de un producto (`product_code` de la web): los reportes por entidad solo cuentan
+  /// lo vendido de ese producto. `null`: todos los productos. Solo lo usan los reportes por entidad.
+  final String? productCode;
+
   const SalesReportFilters({
     required this.desde,
     required this.hasta,
@@ -23,6 +30,7 @@ class SalesReportFilters {
     this.marcas = const [],
     this.categorias = const [],
     this.departamentos = const [],
+    this.productCode,
   });
 
   SalesReportFilters copyWith({
@@ -34,6 +42,8 @@ class SalesReportFilters {
     List<String>? marcas,
     List<String>? categorias,
     List<String>? departamentos,
+    String? productCode,
+    bool clearProductCode = false,
   }) =>
       SalesReportFilters(
         desde: desde ?? this.desde,
@@ -44,12 +54,13 @@ class SalesReportFilters {
         marcas: marcas ?? this.marcas,
         categorias: categorias ?? this.categorias,
         departamentos: departamentos ?? this.departamentos,
+        productCode: clearProductCode ? null : (productCode ?? this.productCode),
       );
 
   /// Cuántos filtros avanzados hay puestos (sin contar las fechas).
-  int get advancedCount => [sucursales, clientes, vendedores, marcas, categorias, departamentos]
-      .where((l) => l.isNotEmpty)
-      .length;
+  int get advancedCount =>
+      [sucursales, clientes, vendedores, marcas, categorias, departamentos].where((l) => l.isNotEmpty).length +
+      (productCode == null || productCode!.isEmpty ? 0 : 1);
 
   /// El mismo rango un año antes (el 29 de febrero pasa al 28).
   SalesReportFilters get yearBefore {

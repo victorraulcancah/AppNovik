@@ -62,6 +62,13 @@ List<AppActiveFilter> reportActiveFilters(ReportsProvider reports) {
         label: label('Departamento', 'Departamentos', f.departamentos, c.departamentos),
         onRemove: () => change(f.copyWith(departamentos: const <String>[])),
       ),
+    // El código de producto solo se aplica en los reportes por entidad.
+    if (reports.kind.isRanking && f.productCode != null && f.productCode!.isNotEmpty)
+      AppActiveFilter(
+        id: 'producto',
+        label: 'Producto: ${f.productCode}',
+        onRemove: () => change(f.copyWith(clearProductCode: true)),
+      ),
   ];
 }
 
@@ -252,6 +259,41 @@ class _FiltersBody extends StatelessWidget {
               onTap: pickDates,
             ),
             const SizedBox(height: 12),
+            // Como en la web ("Buscar por código de producto"): el reporte cuenta solo lo vendido de ese producto.
+            // Venta general no lo usa (ahí se busca en la lista de productos).
+            if (reports.kind.isRanking)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AppPickerField(
+                  label: 'Código de producto',
+                  value: f.productCode == null || f.productCode!.isEmpty ? 'Todos' : f.productCode!,
+                  icon: Icons.qr_code_2,
+                  onTap: () async {
+                    String? chosen;
+                    await showAppSearchSheet<ReportProductOption>(
+                      context,
+                      title: 'Código de producto',
+                      subtitle: 'Solo se cuenta lo vendido de ese producto',
+                      icon: Icons.qr_code_2,
+                      hint: 'Buscar por código de producto',
+                      emptyHint: 'Escribe el código para buscar',
+                      search: reports.searchProductCodes,
+                      itemOf: (p) => AppSearchItem(
+                        title: p.codigo,
+                        subtitle: [p.nombre, p.marca].where((t) => t.isNotEmpty).join(' · '),
+                      ),
+                      onSelect: (p) {
+                        chosen = p.codigo;
+                        return null;
+                      },
+                    );
+                    if (chosen != null) draft.value = f.copyWith(productCode: chosen);
+                  },
+                  onClear: f.productCode == null || f.productCode!.isEmpty
+                      ? null
+                      : () => draft.value = f.copyWith(clearProductCode: true),
+                ),
+              ),
             field(
               label: 'Sucursales',
               icon: Icons.store_mall_directory_outlined,
