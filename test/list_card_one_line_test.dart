@@ -51,6 +51,39 @@ void main() {
     expect(tester.widget<Text>(correo).data, 'Correo: gustavo.grupogm.con.un.correo.muy.largo@gmail.com');
   });
 
+  testWidgets('el correo y las sucursales usan todo el ancho, debajo de los botones', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AppListCard(
+            title: 'GRUPO 7POWER SAC',
+            lines: [
+              'Código: USR001',
+              'Correo: gustavo.grupogm.con.un.correo.muy.largo@gmail.com',
+              'Sucursales: Todos los Almacenes de la empresa y sus sucursales',
+            ],
+            oneLinePrefixes: ['Correo:', 'Sucursales:'],
+            actions: [SizedBox(width: 150, height: 44, child: Icon(Icons.edit))],
+          ),
+        ),
+      ),
+    );
+
+    final actions = tester.getTopLeft(find.byIcon(Icons.edit)).dx;
+    final codigo = tester.getTopRight(find.text('Código: USR001')).dx;
+    final correo = tester.getRect(find.textContaining('Correo:'));
+    final sucursales = tester.getRect(find.textContaining('Sucursales:'));
+    // Lo que va antes de las líneas marcadas queda al lado de los botones...
+    expect(codigo, lessThanOrEqualTo(actions));
+    // ...y estas ocupan más ancho que esa columna y empiezan debajo de los botones.
+    expect(correo.right, greaterThan(actions));
+    expect(sucursales.right, greaterThan(actions));
+    expect(correo.top, greaterThanOrEqualTo(tester.getBottomLeft(find.byIcon(Icons.edit)).dy));
+  });
+
   testWidgets('con letra grande también sigue en una línea', (tester) async {
     await pump(tester, textScale: 1.5);
 
