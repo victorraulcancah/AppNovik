@@ -206,6 +206,37 @@ class _FiltersBody extends StatelessWidget {
                 onChanged: (v) => reports.setCompare(v ?? false),
                 title: const Text('Comparar año anterior'),
               ),
+            // El orden de la lista de productos (también de Venta general y también se aplica de una vez): tocar
+            // otra opción ordena por ella de mayor a menor; tocar la que ya está invierte el sentido.
+            if (reports.kind == ReportKind.general) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  'Ordenar productos por',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  // Sin importes (jefe de almacén) solo se ordena por cantidad.
+                  for (final s in reports.ocultarImportes ? [ReportSort.cantidad] : ReportSort.values)
+                    ChoiceChip(
+                      label: Text(s.label),
+                      avatar: reports.sort == s
+                          ? Icon(reports.sortDescending ? Icons.arrow_downward : Icons.arrow_upward, size: 16)
+                          : null,
+                      showCheckmark: false,
+                      selected: reports.sort == s,
+                      onSelected: (_) => reports.selectSort(s),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             if (reports.catalogsLoading && !reports.catalogsLoaded)
               const Padding(
                 padding: EdgeInsets.only(bottom: 12),

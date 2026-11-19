@@ -325,7 +325,6 @@ class _ReportsPageState extends State<ReportsPage> {
               onFilter: () => showReportFilters(context),
               filterCount: reports.advancedCount,
               actions: [
-                _sortButton(reports),
                 IconButton(
                   tooltip: 'Descargar Excel',
                   onPressed: reports.exporting ? null : _export,
@@ -646,29 +645,6 @@ class _ReportsPageState extends State<ReportsPage> {
             ),
         ],
       ),
-    );
-  }
-
-  /// El orden de la lista (junto al buscador, donde los demás reportes tienen sus botones).
-  Widget _sortButton(ReportsProvider reports) {
-    final sortable = reports.ocultarImportes ? [ReportSort.cantidad] : ReportSort.values;
-    return PopupMenuButton<ReportSort>(
-      tooltip: 'Ordenar',
-      icon: const Icon(Icons.sort),
-      onSelected: reports.selectSort,
-      itemBuilder: (context) => [
-        for (final s in sortable)
-          PopupMenuItem(
-            value: s,
-            child: Row(
-              children: [
-                Expanded(child: Text(s.label)),
-                if (reports.sort == s)
-                  Icon(reports.sortDescending ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
-              ],
-            ),
-          ),
-      ],
     );
   }
 

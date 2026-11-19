@@ -958,7 +958,7 @@ void main() {
       // Sin la fila de fechas de Venta general: los filtros y el Excel van junto al buscador.
       expect(find.widgetWithText(TextField, 'Buscar por código o nombre'), findsOneWidget);
       expect(find.byTooltip('Filtros'), findsOneWidget);
-      expect(find.byTooltip('Ordenar'), findsOneWidget);
+      expect(find.byTooltip('Ordenar'), findsNothing); // el orden va dentro de los filtros
       expect(find.byTooltip('Descargar Excel'), findsOneWidget);
       expect(find.byTooltip('Filtros avanzados'), findsNothing);
 
@@ -980,6 +980,30 @@ void main() {
       await tester.tap(find.text('Ventas por productos'));
       await tester.pumpAndSettle();
       expect(find.text('SUBWOOFER 12"'), findsOneWidget);
+    });
+
+    testWidgets('el orden de los productos va dentro de los filtros: otra opción ordena, la misma invierte', (tester) async {
+      final repo = await pump(tester);
+      await openProducts(tester);
+
+      await tester.tap(find.byTooltip('Filtros'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ordenar productos por'), findsOneWidget);
+      for (final label in ['Venta total', 'Cantidad', 'Subtotal', 'Descuento']) {
+        expect(find.widgetWithText(ChoiceChip, label), findsOneWidget, reason: label);
+      }
+
+      // Por Cantidad: de mayor a menor.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cantidad'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.sortField, 'cantidad');
+      expect(repo.calls.last.desc, isTrue);
+
+      // Tocar la misma invierte el sentido.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cantidad'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.last.sortField, 'cantidad');
+      expect(repo.calls.last.desc, isFalse);
     });
 
     testWidgets('los atajos de fecha son los de la web, con Este mes elegido', (tester) async {
