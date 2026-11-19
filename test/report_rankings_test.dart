@@ -185,7 +185,11 @@ class _FakeRepo implements ReportRepository {
   }
 
   @override
-  Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) async =>
+  Future<Either<Failure, DownloadedFile>> exportSalesReport(
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  }) async =>
       Either.right(DownloadedFile(name: 'x.xlsx', bytes: Uint8List(1)));
 
   @override
@@ -1457,6 +1461,7 @@ void main() {
       expect(find.textContaining('N° de ventas: '), findsWidgets);
       expect(find.textContaining('Ticket promedio: '), findsWidgets);
       expect(find.textContaining('Descuento: '), findsWidgets);
+      expect(find.textContaining('Venta total: S/.'), findsWidgets);
       // Un solo concepto por línea: nada de "Subtotal … · Desc. …" juntos.
       expect(find.textContaining(' · Desc.'), findsNothing);
       expect(find.text('Margen: S/. *******'), findsWidgets);
@@ -1468,7 +1473,7 @@ void main() {
       expect(find.textContaining(RegExp('unidad', caseSensitive: false)), findsNothing);
     });
 
-    testWidgets('los reportes por entidad no ofrecen comparar el año anterior ni el Excel', (tester) async {
+    testWidgets('los reportes por entidad no ofrecen comparar el año anterior y sí el Excel', (tester) async {
       await pump(tester);
       // En Venta general, "Comparar año anterior" está dentro de los filtros y el Excel en la fila.
       expect(find.byTooltip('Descargar Excel'), findsOneWidget);
@@ -1480,7 +1485,8 @@ void main() {
 
       await choose(tester, 'Marcas');
 
-      expect(find.byTooltip('Descargar Excel'), findsNothing);
+      // El Excel de cada reporte por entidad va junto al buscador.
+      expect(find.byTooltip('Descargar Excel'), findsOneWidget);
       // En los reportes por entidad tampoco se ofrece comparar dentro de los filtros.
       await tester.tap(find.byTooltip('Filtros'));
       await tester.pumpAndSettle();

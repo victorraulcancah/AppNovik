@@ -29,7 +29,12 @@ abstract class ReportRemoteDataSource {
     String? search,
   });
 
-  Future<Uint8List> exportSalesReport(String token, SalesReportFilters filters);
+  Future<Uint8List> exportSalesReport(
+    String token,
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  });
 
   /// Los productos vendidos a una entidad ([entityId]: departamento, vendedor, marca, categoría o
   /// cliente) en el rango y con los filtros: lo que abre la web al tocar su nombre.
@@ -290,13 +295,45 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
     ];
   }
 
+  /// Dónde exporta la web cada reporte por entidad.
+  static String _exportPath(ReportKind kind) => switch (kind) {
+    ReportKind.departamentos => '/ventas/export-reporte-departamento',
+    ReportKind.vendedores => '/ventas/export-reporte-vendedor-v2',
+    ReportKind.marcas => '/ventas/export-reporte-marcas-v2',
+    ReportKind.categorias => '/ventas/export-reporte-categorias-v2',
+    ReportKind.clientes => '/ventas/export-reporte-clientes-v2',
+    ReportKind.general => '/ventas/export/reporte',
+  };
+
+  /// Venta general lleva sus filtros de siempre; los reportes por entidad mandan lo mismo que la
+  /// web al exportar: `fechas[]`, `company_id`, `sucursales[]`, `clientes[]`, `vendedores[]`,
+  /// `marcas[]`, `tipos_producto[]`, `departamentos[]` y `product_code`.
   @override
-  Future<Uint8List> exportSalesReport(String token, SalesReportFilters filters) => sendApiBytes(
-        () => client.post(
-          _uri('/ventas/export/reporte', _filterParams(filters)),
-          headers: ApiConstants.authHeaders(token),
-        ),
-      );
+  Future<Uint8List> exportSalesReport(
+    String token,
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  }) {
+    final f = filters;
+    final code = f.productCode;
+    final query = kind == ReportKind.general
+        ? _filterParams(f)
+        : <String, List<String>>{
+            'fechas[]': [_day(f.desde), _day(f.hasta)],
+            if (companyId != null) 'company_id': ['$companyId'],
+            if (f.sucursales.isNotEmpty) 'sucursales[]': f.sucursales,
+            if (f.clientes.isNotEmpty) 'clientes[]': f.clientes,
+            if (f.vendedores.isNotEmpty) 'vendedores[]': f.vendedores,
+            if (f.marcas.isNotEmpty) 'marcas[]': f.marcas,
+            if (f.categorias.isNotEmpty) 'tipos_producto[]': f.categorias,
+            if (f.departamentos.isNotEmpty) 'departamentos[]': f.departamentos,
+            if (code != null && code.isNotEmpty) 'product_code': [code],
+          };
+    return sendApiBytes(
+      () => client.post(_uri(_exportPath(kind), query), headers: ApiConstants.authHeaders(token)),
+    );
+  }
 
   @override
   Future<SalesReportCatalogs> getCatalogs({

@@ -27,6 +27,7 @@ import 'package:app_novik/presentation/providers/shell_navigation.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/components/app_area_chart.dart';
 import 'package:app_novik/presentation/components/app_charts.dart';
+import 'package:app_novik/presentation/components/app_pickers.dart';
 import 'package:app_novik/presentation/components/app_tabs.dart';
 import 'package:app_novik/presentation/utils/contact_launcher.dart';
 import 'package:app_novik/presentation/utils/gestion_receipt.dart';
@@ -1317,16 +1318,17 @@ void main() {
       await _pump(tester, setUp: (repo) => repo.equipo = true);
 
       expect(find.text('Tareas pendientes del equipo (2)'), findsOneWidget);
-      expect(find.text('FRANCIS BULNES GONZALES · Enviar cotización'), findsOneWidget);
-      expect(find.text('LUIS VENDEDOR'), findsOneWidget);
+      // El ejecutivo sale como nombre + inicial del apellido.
+      expect(find.text('FRANCIS B. · Enviar cotización'), findsOneWidget);
+      expect(find.text('LUIS V.'), findsOneWidget);
       expect(find.text('Todos los ejecutivos'), findsOneWidget);
 
       await tester.tap(find.text('Todos los ejecutivos'));
       await tester.pumpAndSettle();
       // El selector lista a los ejecutivos con sus tareas del mes.
-      expect(find.text('LUIS VENDEDOR (1)'), findsOneWidget);
+      expect(find.text('LUIS V. (1)'), findsOneWidget);
       expect(find.text('Sin ejecutivo (1)'), findsOneWidget);
-      await tester.tap(find.text('LUIS VENDEDOR (1)'));
+      await tester.tap(find.text('LUIS V. (1)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
@@ -1334,7 +1336,7 @@ void main() {
       expect(find.text('Tareas pendientes del equipo (1)'), findsOneWidget);
       expect(find.text('WhatsApp – BETA SAC'), findsOneWidget);
       expect(find.text('Llamar – ACME SAC'), findsNothing);
-      expect(find.text('LUIS VENDEDOR (1)'), findsOneWidget);
+      expect(find.text('LUIS V. (1)'), findsOneWidget);
     });
 
     testWidgets('si las tareas no cargan, el mensaje y reintentar', (tester) async {
@@ -2544,18 +2546,34 @@ void main() {
           setUp: setUp,
         );
 
-    testWidgets('Todos, Cotizaciones y Ventas con sus conteos, y cada documento con sus datos', (tester) async {
+    /// El tipo de documento es un selector: se abre desde su campo (que muestra el actual), se elige y se aplica.
+    Future<void> elegirTipo(WidgetTester tester, String actual, String nuevo) async {
+      await tester.tap(find.widgetWithText(AppPickerField, actual));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(nuevo));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Todos, Cotizaciones y Ventas con sus conteos en un selector, y cada documento con sus datos', (tester) async {
       final env = await abrir(tester);
 
       expect(env.provider.tabs.index, 3);
+      // Un selector, no una fila de botones: muestra el tipo actual y al abrirlo están los tres con su conteo.
+      expect(find.byType(ChoiceChip), findsNothing);
       expect(find.text('Todos (3)'), findsOneWidget);
+      await tester.tap(find.widgetWithText(AppPickerField, 'Todos (3)'));
+      await tester.pumpAndSettle();
       expect(find.text('Cotizaciones (1)'), findsOneWidget);
       expect(find.text('Ventas (2)'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
       expect(find.text('01/01/2026 – 19/11/2026'), findsOneWidget);
       expect(find.text('C001-0021'), findsOneWidget);
       expect(find.text('F001-1250'), findsOneWidget);
       expect(find.text('V001-0012'), findsOneWidget);
-      expect(find.text('Ejecutivo: FRANCIS BULNES GONZALES'), findsNWidgets(2));
+      expect(find.text('Ejecutivo: FRANCIS B.'), findsNWidgets(2));
       expect(find.text('Lima'), findsNWidgets(2));
       expect(find.text('S/ 800.00'), findsOneWidget);
       expect(find.text('05/11/2026'), findsOneWidget);
@@ -2579,14 +2597,12 @@ void main() {
     testWidgets('las vistas filtran la lista', (tester) async {
       await abrir(tester);
 
-      await tester.tap(find.text('Cotizaciones (1)'));
-      await tester.pumpAndSettle();
+      await elegirTipo(tester, 'Todos (3)', 'Cotizaciones (1)');
       expect(find.text('C001-0021'), findsOneWidget);
       expect(find.text('F001-1250'), findsNothing);
       expect(find.text('1 documentos'), findsOneWidget);
 
-      await _tapChip(tester, 'Ventas (2)');
-      await tester.pumpAndSettle();
+      await elegirTipo(tester, 'Cotizaciones (1)', 'Ventas (2)');
       expect(find.text('C001-0021'), findsNothing);
       expect(find.text('V001-0012'), findsOneWidget);
     });
@@ -2625,8 +2641,7 @@ void main() {
 
     testWidgets('un atajo de fechas pide ese rango y vuelve a Todos', (tester) async {
       final env = await abrir(tester);
-      await _tapChip(tester, 'Ventas (2)');
-      await tester.pumpAndSettle();
+      await elegirTipo(tester, 'Todos (3)', 'Ventas (2)');
 
       await tester.tap(find.text('Año pasado'));
       await tester.pumpAndSettle();

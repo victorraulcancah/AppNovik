@@ -1688,14 +1688,68 @@ void main() {
       );
     });
 
-    testWidgets('buscar muestra los productos y tocar uno lo agrega con 1 unidad y su último costo', (tester) async {
+    /// Abre el buscador (el campo "Producto"), escribe [text] y espera los resultados.
+    Future<void> searchInPicker(WidgetTester tester, String text) async {
+      await tester.tap(find.text('Producto'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('buscador-productos')), text);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+    }
+
+    /// Busca, marca los productos [ids] y los agrega con el botón del buscador.
+    Future<void> addProducts(WidgetTester tester, String text, List<int> ids) async {
+      await searchInPicker(tester, text);
+      for (final id in ids) {
+        await tester.tap(find.byKey(ValueKey('resultado-$id')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar al stock'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('el buscador es el de Ventas: un campo "Producto" que abre un modal con casillas', (tester) async {
       await openAdd(tester);
 
-      await searchFor(tester, 'sub');
+      // Ya no hay un buscador suelto en la pantalla.
+      expect(find.byType(SearchBar), findsNothing);
+      await searchInPicker(tester, 'sub');
+
+      expect(find.text('Buscar productos'), findsOneWidget);
+      expect(find.text('Marca los que quieres agregar'), findsOneWidget);
+      expect(find.text('2 productos'), findsOneWidget);
+      expect(find.text('0 seleccionados'), findsOneWidget);
+      // Sin marcar nada no se puede agregar.
+      expect(
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Agregar al stock')).onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const ValueKey('resultado-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('1 seleccionado'), findsOneWidget);
+      // Marcar no agrega nada a la pantalla hasta tocar "Agregar al stock".
+      expect(find.byKey(const ValueKey('linea-1')), findsNothing);
+    });
+
+    testWidgets('marcar varios y agregarlos de una vez', (tester) async {
+      await openAdd(tester);
+
+      await addProducts(tester, 'sub', [1, 2]);
+
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('linea-2')), findsOneWidget);
+      expect(find.text('Buscar productos'), findsNothing);
+    });
+
+    testWidgets('buscar muestra los productos y marcar uno lo agrega con 1 unidad y su último costo', (tester) async {
+      await openAdd(tester);
+
+      await searchInPicker(tester, 'sub');
       expect(find.text('SUBWOOFER 12'), findsOneWidget);
       expect(find.byKey(const ValueKey('resultado-2')), findsOneWidget);
-
       await tester.tap(find.byKey(const ValueKey('resultado-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar al stock'));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
@@ -1705,106 +1759,72 @@ void main() {
       expect(find.text('S/. 10.50'), findsOneWidget);
     });
 
-    testWidgets('una búsqueda con un solo resultado lo agrega sola, como en la web', (tester) async {
+    testWidgets('un solo resultado no se agrega solo: se marca y se agrega', (tester) async {
       await pumpPage(
         tester,
         StockAddPage(pickFile: pickImportFile),
         setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
       );
 
-      await searchFor(tester, 'SUB-1');
+      await searchInPicker(tester, 'SUB-1');
+      expect(find.byKey(const ValueKey('linea-1')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('resultado-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar al stock'));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-stock'))).controller!.text, '1');
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-costo'))).controller!.text, '10.5');
     });
 
-    testWidgets('con el lector de código de barras: escribir y pulsar Enter agrega el producto al instante', (
-      tester,
-    ) async {
+    testWidgets('agregar el mismo producto otra vez suma una unidad y no duplica la línea', (tester) async {
       await pumpPage(
         tester,
         StockAddPage(pickFile: pickImportFile),
         setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
       );
 
-      await tester.enterText(find.byType(SearchBar), 'SUB-1');
-      await tester.testTextInput.receiveAction(TextInputAction.search);
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
-    });
-
-    testWidgets('buscar el mismo código otra vez suma una unidad y no duplica la línea', (tester) async {
-      await pumpPage(
-        tester,
-        StockAddPage(pickFile: pickImportFile),
-        setUpRepo: (repo) => repo.products = [product(1, name: 'SUBWOOFER 12')],
-      );
-
-      await tester.enterText(find.byType(SearchBar), 'SUB-1');
-      for (var i = 0; i < 2; i++) {
-        await tester.showKeyboard(find.descendant(of: find.byType(SearchBar), matching: find.byType(TextField)));
-        await tester.testTextInput.receiveAction(TextInputAction.search);
-        await tester.pumpAndSettle();
-      }
+      await addProducts(tester, 'SUB-1', [1]);
+      await addProducts(tester, 'SUB-1', [1]);
 
       expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-stock'))).controller!.text, '2');
     });
 
-    testWidgets('con varios resultados no agrega nada hasta tocar uno', (tester) async {
+    testWidgets('con varios resultados no agrega nada hasta marcar y agregar', (tester) async {
       await openAdd(tester);
 
-      await searchFor(tester, 'sub');
+      await searchInPicker(tester, 'sub');
 
       expect(find.byKey(const ValueKey('resultado-1')), findsOneWidget);
       expect(find.byKey(const ValueKey('resultado-2')), findsOneWidget);
       expect(find.byKey(const ValueKey('linea-1')), findsNothing);
       expect(find.byKey(const ValueKey('linea-2')), findsNothing);
+
+      // Cerrar sin agregar deja la pantalla como estaba.
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
       expect(find.text('Aún no hay productos'), findsOneWidget);
     });
 
     testWidgets('una búsqueda sin resultados no agrega nada', (tester) async {
       await pumpPage(tester, StockAddPage(pickFile: pickImportFile), setUpRepo: (repo) => repo.products = []);
 
-      await searchFor(tester, 'nada');
+      await searchInPicker(tester, 'nada');
 
-      expect(find.text('No se encontraron productos'), findsOneWidget);
-      expect(find.text('Aún no hay productos'), findsOneWidget);
-    });
-
-    testWidgets('si se siguió escribiendo mientras llegaba la respuesta no se agrega a medias', (tester) async {
-      final gate = Completer<void>();
-      await pumpPage(
-        tester,
-        StockAddPage(pickFile: pickImportFile),
-        setUpRepo: (repo) {
-          repo.products = [product(1, name: 'SUBWOOFER 12')];
-          repo.searchGate = gate;
-        },
+      expect(find.text('Sin resultados'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Agregar al stock')).onPressed,
+        isNull,
       );
-
-      await tester.enterText(find.byType(SearchBar), 'SU');
-      await tester.pump(const Duration(milliseconds: 500));
-      // La búsqueda de "SU" sigue en curso y ya se escribió una letra más.
-      await tester.enterText(find.byType(SearchBar), 'SUB');
-      gate.complete();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 10));
-
-      expect(find.byKey(const ValueKey('linea-1')), findsNothing, reason: 'el texto ya no es el que se buscó');
-      expect(find.text('Aún no hay productos'), findsOneWidget);
     });
 
     testWidgets('tocar el mismo producto otra vez suma una unidad', (tester) async {
       await openAdd(tester);
-      await searchFor(tester, 'sub');
 
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
+      await addProducts(tester, 'sub', [1]);
 
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-stock'))).controller!.text, '2');
       expect(find.text('S/. 21.00'), findsOneWidget);
@@ -1812,10 +1832,7 @@ void main() {
 
     testWidgets('un producto sin entradas previas entra sin costo', (tester) async {
       await openAdd(tester);
-      await searchFor(tester, 'par');
-
-      await tester.tap(find.byKey(const ValueKey('resultado-2')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'par', [2]);
 
       expect(tester.widget<TextField>(find.byKey(const ValueKey('campo-costo'))).controller!.text, isEmpty);
       expect(find.text('S/. 0.00'), findsOneWidget);
@@ -1823,9 +1840,7 @@ void main() {
 
     testWidgets('el total sale de costo por stock y se actualiza al escribir', (tester) async {
       await openAdd(tester);
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
 
       await tester.enterText(find.byKey(const ValueKey('campo-stock')), '4');
       await tester.enterText(find.byKey(const ValueKey('campo-costo')), '12.25');
@@ -1836,9 +1851,7 @@ void main() {
 
     testWidgets('una cantidad vacía o 0 bloquea Guardar y avisa el mínimo', (tester) async {
       await openAdd(tester);
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
 
       await tester.enterText(find.byKey(const ValueKey('campo-stock')), '0');
       await tester.pumpAndSettle();
@@ -1852,9 +1865,7 @@ void main() {
 
     testWidgets('quitar la línea vuelve al estado vacío', (tester) async {
       await openAdd(tester);
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
 
       await tester.tap(find.byTooltip('Quitar'));
       await tester.pumpAndSettle();
@@ -1865,11 +1876,7 @@ void main() {
 
     testWidgets('guardar pide confirmar y manda el aumento con el costo en nulo si es 0', (tester) async {
       final repo = await openAdd(tester);
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('resultado-2')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1, 2]);
 
       await tester.enterText(find.byKey(const ValueKey('campo-stock')).first, '5');
       await tester.pumpAndSettle();
@@ -1904,9 +1911,7 @@ void main() {
       expect(find.byType(BackButton), findsNothing);
       expect(find.text('LIMA'), findsOneWidget);
 
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
       await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
@@ -1920,9 +1925,7 @@ void main() {
 
     testWidgets('cancelar la confirmación no guarda nada', (tester) async {
       final repo = await openAdd(tester);
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
       await tester.pumpAndSettle();
@@ -1936,9 +1939,7 @@ void main() {
     testWidgets('si el servidor rechaza el aumento, la pantalla sigue con sus líneas y el motivo', (tester) async {
       final repo = await openAdd(tester);
       repo.nextAdd = Either.left(const ValidationFailure('El producto no existe'));
-      await searchFor(tester, 'sub');
-      await tester.tap(find.byKey(const ValueKey('resultado-1')));
-      await tester.pumpAndSettle();
+      await addProducts(tester, 'sub', [1]);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
       await tester.pumpAndSettle();
@@ -1949,18 +1950,10 @@ void main() {
       expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
     });
 
-    testWidgets('una búsqueda sin resultados lo dice', (tester) async {
-      await pumpPage(tester, const StockAddPage(), setUpRepo: (r) => r.products = const []);
-
-      await searchFor(tester, 'zzz');
-
-      expect(find.text('No se encontraron productos'), findsOneWidget);
-    });
-
     testWidgets('en la lista de resultados se ve lo que hay en el almacén elegido', (tester) async {
       await openAdd(tester);
 
-      await searchFor(tester, 'sub');
+      await searchInPicker(tester, 'sub');
 
       expect(find.textContaining('En el almacén: 8'), findsWidgets);
     });

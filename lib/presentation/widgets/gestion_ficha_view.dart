@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/gestion_entity.dart';
 import '../components/components.dart';
 import '../utils/contact_launcher.dart';
@@ -338,7 +339,7 @@ class GestionResumenTab extends StatelessWidget {
                 value: cliente.documento,
               ),
               GestionInfoRow(label: 'Tipo de cliente', value: cliente.esEmpresa ? 'Empresa' : 'Persona'),
-              GestionInfoRow(label: 'Ejecutivo comercial', value: cliente.vendedor),
+              GestionInfoRow(label: 'Ejecutivo comercial', value: cliente.vendedor == null ? null : shortPersonName(cliente.vendedor)),
               GestionInfoRow(label: 'Teléfono', value: cliente.telefono),
               GestionInfoRow(label: 'Correo', value: cliente.email),
               GestionInfoRow(label: 'Dirección', value: cliente.direccion),

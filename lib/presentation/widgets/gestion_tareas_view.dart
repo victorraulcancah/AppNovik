@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/gestion_entity.dart';
 import '../../domain/entities/inicio_entity.dart' show TaskPeriod;
 import '../components/components.dart';
@@ -23,7 +24,10 @@ class GestionTareasView extends StatelessWidget {
       title: 'Ejecutivo comercial',
       subtitle: 'Elige uno; sin elegir se ven todos',
       icon: Icons.badge_outlined,
-      options: [for (final e in gestion.ejecutivos) (id: e.id, name: '${e.nombre} (${e.tareas})')],
+      options: [
+        for (final e in gestion.ejecutivos)
+          (id: e.id, name: '${e.id == GestionProvider.sinEjecutivo ? e.nombre : shortPersonName(e.nombre)} (${e.tareas})'),
+      ],
       selected: gestion.ejecutivo,
     );
     if (chosen != null) gestion.setEjecutivo(chosen.id);
@@ -110,7 +114,7 @@ class GestionTareasView extends StatelessWidget {
               label: 'Ejecutivo comercial',
               value: ejecutivoElegido == null
                   ? 'Todos los ejecutivos'
-                  : '${ejecutivoElegido.nombre} (${ejecutivoElegido.tareas})',
+                  : '${ejecutivoElegido.id == GestionProvider.sinEjecutivo ? ejecutivoElegido.nombre : shortPersonName(ejecutivoElegido.nombre)} (${ejecutivoElegido.tareas})',
               icon: Icons.badge_outlined,
               onTap: () => _elegirEjecutivo(context, gestion),
               onClear: gestion.ejecutivo == null ? null : () => gestion.setEjecutivo(null),
@@ -159,7 +163,7 @@ class _TareaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = contactType(tarea.tipo);
     final detalle = [
-      if (equipo) tarea.ejecutivo ?? 'Sin ejecutivo',
+      if (equipo) tarea.ejecutivo == null ? 'Sin ejecutivo' : shortPersonName(tarea.ejecutivo),
       ?tarea.accion,
     ].join(' · ');
     return AppListCard(

@@ -392,6 +392,10 @@ class RankingView extends StatefulWidget {
   final VoidCallback? onFilter;
   final int filterCount;
 
+  /// Descarga el Excel del reporte (junto al buscador); [exporting] lo apaga mientras se descarga.
+  final VoidCallback? onExport;
+  final bool exporting;
+
   /// ¿Se puede ver el margen? (rol con margen) y, si se puede, ¿está a la vista o tapado con "*"?
   final bool showMargin;
   final bool marginVisible;
@@ -419,6 +423,8 @@ class RankingView extends StatefulWidget {
     required this.showAmounts,
     this.onFilter,
     this.filterCount = 0,
+    this.onExport,
+    this.exporting = false,
     this.showMargin = false,
     this.marginVisible = false,
     this.onToggleMargin,
@@ -489,6 +495,7 @@ class _RankingViewState extends State<RankingView> {
       if (widget.showAmounts && row.nVentas > 0) 'Ticket promedio: ${_soles(row.ticketPromedio!)}',
       if (widget.showAmounts) 'Subtotal: ${_soles(row.subtotal)}',
       if (widget.showAmounts) 'Descuento: ${_soles(row.descuento)}',
+      if (widget.showAmounts) 'Venta total: ${_soles(row.venta)}',
       if (widget.showAmounts && widget.showMargin) 'Margen: $margin',
     ];
   }
@@ -558,6 +565,14 @@ class _RankingViewState extends State<RankingView> {
           onChanged: _onChanged,
           onFilter: widget.onFilter,
           filterCount: widget.filterCount,
+          actions: [
+            if (widget.onExport != null)
+              IconButton(
+                tooltip: 'Descargar Excel',
+                onPressed: widget.exporting ? null : widget.onExport,
+                icon: Icon(Icons.download_outlined, color: scheme.primary),
+              ),
+          ],
         ),
         if (state.searching) const LinearProgressIndicator(minHeight: 2),
         // Productos con ese código: al elegir uno, el reporte cuenta solo lo vendido de él.

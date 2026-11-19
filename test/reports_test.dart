@@ -129,6 +129,7 @@ SalesReportEntity _report({double ventas = 330.5}) => SalesReportEntity(
 class _FakeRepo implements ReportRepository {
   final List<({SalesReportFilters filters, int page, String? sortField, bool desc})> calls = [];
   final List<SalesReportFilters> exports = [];
+  final List<ReportKind> exportKinds = [];
   Either<Failure, SalesReportEntity>? next;
   SalesReportEntity Function(SalesReportFilters filters, int page)? build;
   int catalogCalls = 0;
@@ -185,8 +186,13 @@ class _FakeRepo implements ReportRepository {
       Either.right(const []);
 
   @override
-  Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) async {
+  Future<Either<Failure, DownloadedFile>> exportSalesReport(
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  }) async {
     exports.add(filters);
+    exportKinds.add(kind);
     return Either.right(DownloadedFile(name: 'Reporte de Ventas.xlsx', bytes: Uint8List.fromList([1])));
   }
 
@@ -532,6 +538,26 @@ void main() {
       expect(requests.last.url.queryParametersAll['fechas[]'], ['2026-10-01', '2026-10-31']);
       expect(requests.last.url.queryParametersAll['marcas[]'], ['3']);
       expect(utf8.decode(bytes), 'xlsx');
+    });
+
+    test('exportar un reporte por entidad usa el endpoint de la web y manda la empresa', () async {
+      body = 'xlsx';
+      const paths = {
+        ReportKind.departamentos: '/ventas/export-reporte-departamento',
+        ReportKind.vendedores: '/ventas/export-reporte-vendedor-v2',
+        ReportKind.marcas: '/ventas/export-reporte-marcas-v2',
+        ReportKind.categorias: '/ventas/export-reporte-categorias-v2',
+        ReportKind.clientes: '/ventas/export-reporte-clientes-v2',
+      };
+      for (final entry in paths.entries) {
+        await dataSource.exportSalesReport('tok', filters, kind: entry.key, companyId: 7);
+        expect(requests.last.method, 'POST');
+        expect(requests.last.url.path, endsWith(entry.value));
+        final q = requests.last.url.queryParametersAll;
+        expect(q['company_id'], ['7']);
+        expect(q['fechas[]'], ['2026-10-01', '2026-10-31']);
+        expect(q['marcas[]'], ['3']);
+      }
     });
 
     test('los catálogos: un vendedor sin permiso solo se ofrece a sí mismo', () async {

@@ -109,11 +109,15 @@ class ReportRepositoryImpl with TokenGuard implements ReportRepository {
       );
 
   @override
-  Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters) =>
+  Future<Either<Failure, DownloadedFile>> exportSalesReport(
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  }) =>
       withToken(
         (token) async => DownloadedFile(
-          name: 'Reporte de Ventas.xlsx',
-          bytes: await remoteDataSource.exportSalesReport(token, filters),
+          name: kind.exportName,
+          bytes: await remoteDataSource.exportSalesReport(token, filters, kind: kind, companyId: companyId),
         ),
       );
 

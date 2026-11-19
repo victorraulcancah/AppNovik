@@ -1321,7 +1321,7 @@ void main() {
       expect(find.text('Cerrar'), findsOneWidget);
     });
 
-    testWidgets('el detalle muestra el historial de notas con autor, fecha y las eliminadas tachadas', (tester) async {
+    testWidgets('el detalle muestra las notas con autor (nombre + inicial) y fecha, sin las eliminadas', (tester) async {
       final r = await _pump(tester);
 
       await tester.tap(find.text('ACME SAC'));
@@ -1329,12 +1329,14 @@ void main() {
 
       expect(r.repo.notesLoadedFor, [1]);
       expect(find.text('Segunda nota'), findsOneWidget);
-      expect(find.textContaining('LUIS VENDEDOR', findRichText: true), findsWidgets);
+      // El autor sale como nombre + inicial del apellido.
+      expect(find.textContaining('LUIS V.', findRichText: true), findsWidgets);
+      expect(find.textContaining('FRANCIS B.', findRichText: true), findsWidgets);
+      expect(find.textContaining('VENDEDOR', findRichText: true), findsNothing);
       expect(find.textContaining('12/11/2026 03:05 pm', findRichText: true), findsOneWidget);
-      // La nota eliminada queda tachada con quién y cuándo.
-      final removed = tester.widget<Text>(find.text('Cuota 1').last);
-      expect(removed.style!.decoration, TextDecoration.lineThrough);
-      expect(find.text('Eliminada por CEO el 11/11/2026 06:45 pm'), findsOneWidget);
+      // Una nota eliminada ya no se ve.
+      expect(find.text('Cuota 1'), findsNothing);
+      expect(find.textContaining('Eliminada por'), findsNothing);
       // Solo las que el servidor deja eliminar tienen el botón.
       expect(find.byTooltip('Eliminar nota'), findsOneWidget);
     });
@@ -1409,22 +1411,24 @@ void main() {
       expect(find.text('Hola'), findsOneWidget);
     });
 
-    testWidgets('eliminar una nota pide confirmación y queda tachada con quién la eliminó', (tester) async {
+    testWidgets('eliminar una nota pide confirmación y desaparece de la lista', (tester) async {
       final r = await _pump(tester, size: const Size(400, 1400));
 
       await tester.tap(find.text('ACME SAC'));
       await tester.pumpAndSettle();
+      expect(find.text('Segunda nota'), findsOneWidget);
       await tester.tap(find.byTooltip('Eliminar nota'));
       await tester.pumpAndSettle();
-      expect(find.text('¿Eliminar esta nota? Quedará en el historial como eliminada por ti.'), findsOneWidget);
+      expect(find.text('¿Eliminar esta nota?'), findsOneWidget);
       expect(r.repo.deletedNotes, isEmpty);
 
       await tester.tap(find.text('Eliminar'));
       await tester.pumpAndSettle();
 
       expect(r.repo.deletedNotes, [11]);
-      expect(find.text('Eliminada por Ana el 17/11/2026 04:30 pm'), findsOneWidget);
-      // Ya no se puede eliminar de nuevo.
+      // La nota eliminada ya no se ve (ni tachada ni con quién la eliminó).
+      expect(find.text('Segunda nota'), findsNothing);
+      expect(find.textContaining('Eliminada por'), findsNothing);
       expect(find.byTooltip('Eliminar nota'), findsNothing);
     });
 
@@ -1458,9 +1462,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Editada el 09/11/2026 08:15 am'), findsOneWidget);
-      // La eliminada también se editó, pero solo se muestra que fue eliminada.
+      // La eliminada también se editó, pero ya no se ve.
       expect(find.text('Editada el 10/11/2026 10:00 am'), findsNothing);
-      expect(find.text('Eliminada por CEO el 11/11/2026 06:45 pm'), findsOneWidget);
+      expect(find.textContaining('Eliminada por'), findsNothing);
       expect(find.text('Segunda nota'), findsOneWidget);
     });
 

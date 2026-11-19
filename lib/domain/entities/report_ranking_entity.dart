@@ -67,6 +67,16 @@ enum ReportKind {
 
   /// Los reportes por entidad (todos menos "Venta general").
   bool get isRanking => this != ReportKind.general;
+
+  /// Nombre del Excel que se descarga.
+  String get exportName => switch (this) {
+    ReportKind.general => 'Reporte de Ventas.xlsx',
+    ReportKind.departamentos => 'Reporte de Departamentos.xlsx',
+    ReportKind.vendedores => 'Reporte de Vendedores.xlsx',
+    ReportKind.marcas => 'Reporte de Marcas.xlsx',
+    ReportKind.categorias => 'Reporte de Categorías.xlsx',
+    ReportKind.clientes => 'Reporte de Clientes.xlsx',
+  };
 }
 
 /// Una fila de un ranking: a quién (departamento, vendedor, marca, categoría o cliente) y cuánto

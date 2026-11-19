@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/seller_payment_entity.dart';
 import '../components/components.dart';
 import '../providers/seller_payments_provider.dart';
@@ -146,7 +147,7 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
       context,
       title: 'Eliminar nota',
       icon: Icons.delete_outline,
-      message: '¿Eliminar esta nota? Quedará en el historial como eliminada por ti.',
+      message: '¿Eliminar esta nota?',
       confirmLabel: 'Eliminar',
     );
     if (!confirmed || !mounted) return;
@@ -168,6 +169,8 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Una nota eliminada ya no se ve (el servidor la conserva en su historial).
+    final visibleNotes = [for (final n in _notes) if (!n.eliminada) n];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -216,7 +219,7 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CircularProgressIndicator()),
           )
-        else if (_notes.isEmpty)
+        else if (visibleNotes.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
@@ -224,11 +227,11 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
             ),
           )
         else
-          for (final note in _notes) ...[
+          for (final note in visibleNotes) ...[
             _NoteCard(
               key: ValueKey('nota-${note.id}'),
               note: note,
-              onEdit: note.puedeEditar && !note.eliminada ? () => _startEdit(note) : null,
+              onEdit: note.puedeEditar ? () => _startEdit(note) : null,
               onDelete: note.puedeEliminar ? () => _delete(note) : null,
               editController: _editingId == note.id ? _editText : null,
               editSaving: _editSaving,
@@ -300,7 +303,10 @@ class _NoteCard extends StatelessWidget {
                     style: muted,
                     children: [
                       TextSpan(
-                        text: note.autor ?? 'Sin autor',
+                        // Nombre + inicial del apellido ("Gustavo M.").
+                        text: note.autor == null || note.autor!.trim().isEmpty
+                            ? 'Sin autor'
+                            : shortPersonName(note.autor),
                         style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface),
                       ),
                       if (note.creado != null) TextSpan(text: '  ${sellerPaymentNoteDate(note.creado!)}'),

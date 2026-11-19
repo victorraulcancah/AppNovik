@@ -793,14 +793,15 @@ class ReportsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Excel del reporte con lo que se ve.
+  /// Excel del reporte que se ve (el de Venta general o el del reporte por entidad abierto), con los
+  /// mismos filtros.
   Future<Either<Failure, DownloadedFile>> exportCurrent() async {
     if (exporting) {
       return Either.left(const ValidationFailure('Ya se está exportando'));
     }
     exporting = true;
     notifyListeners();
-    final result = await _export(filters);
+    final result = await _export(filters, kind: kind, companyId: _companyId);
     exporting = false;
     if (result.isLeft && result.left is AuthenticationFailure) {
       _onSessionExpired?.call();

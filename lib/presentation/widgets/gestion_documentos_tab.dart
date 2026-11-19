@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/gestion_entity.dart';
 import '../components/components.dart';
 import '../providers/gestion_provider.dart';
@@ -37,6 +38,22 @@ class _GestionDocumentosTabState extends State<GestionDocumentosTab> {
       saveText: 'Aplicar',
     );
     if (picked != null) await gestion.setRangoDocumentos(picked);
+  }
+
+  Future<void> _pickVista(GestionProvider gestion, Map<String, String> vistas) async {
+    final claves = vistas.keys.toList();
+    final chosen = await showAppSelectOne(
+      context,
+      title: 'Tipo de documento',
+      subtitle: 'Elige uno',
+      icon: Icons.description_outlined,
+      options: [
+        for (var i = 0; i < claves.length; i++)
+          (id: i, name: '${vistas[claves[i]]} (${gestion.conteoDocumentos(claves[i])})'),
+      ],
+      selected: claves.indexOf(gestion.vistaDocumentos),
+    );
+    if (chosen?.id != null) gestion.setVistaDocumentos(claves[chosen!.id!]);
   }
 
   @override
@@ -99,22 +116,12 @@ class _GestionDocumentosTabState extends State<GestionDocumentosTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            children: [
-              for (final v in vistas.keys) ...[
-                if (v != vistas.keys.first) const SizedBox(width: 8),
-                ChoiceChip(
-                  label: Text('${vistas[v]} (${gestion.conteoDocumentos(v)})'),
-                  selected: gestion.vistaDocumentos == v,
-                  showCheckmark: false,
-                  onSelected: (_) => gestion.setVistaDocumentos(v),
-                ),
-              ],
-            ],
-          ),
+        // Un selector (no una fila de botones que se corta): Todos, Cotizaciones o Ventas, cada uno con su conteo.
+        AppPickerField(
+          label: 'Tipo de documento',
+          value: '${vistas[gestion.vistaDocumentos]} (${gestion.conteoDocumentos(gestion.vistaDocumentos)})',
+          icon: Icons.description_outlined,
+          onTap: () => _pickVista(gestion, vistas),
         ),
         const SizedBox(height: 8),
         AppPickerField(
@@ -209,7 +216,7 @@ class _DocumentoCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                if (d.ejecutivo != null) dato(Icons.person_outline, const Color(0xFF0EA5E9), 'Ejecutivo: ${d.ejecutivo}'),
+                if (d.ejecutivo != null) dato(Icons.person_outline, const Color(0xFF0EA5E9), 'Ejecutivo: ${shortPersonName(d.ejecutivo)}'),
                 if (d.almacen != null) dato(Icons.warehouse_outlined, const Color(0xFF65A30D), d.almacen!),
                 const SizedBox(height: 6),
                 Row(

@@ -33,6 +33,9 @@ class ReportProductCard extends StatelessWidget {
   final bool marginVisible;
   final VoidCallback onTap;
 
+  /// Lo que representa del total del reporte (en %): de la venta, o de las unidades si no hay importes.
+  final double? share;
+
   const ReportProductCard({
     super.key,
     required this.title,
@@ -46,7 +49,16 @@ class ReportProductCard extends StatelessWidget {
     required this.showMargin,
     required this.marginVisible,
     required this.onTap,
+    this.share,
   });
+
+  String? _caption() {
+    final lines = [
+      if (share != null) rankingPercent(share!),
+      if (showAmounts) 'Cant. ${formatQuantity(cantidad)}',
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +75,8 @@ class ReportProductCard extends StatelessWidget {
         if (showAmounts && showMargin) 'Margen $margin',
       ],
       trailingTitle: showAmounts ? _soles(venta) : '${formatQuantity(cantidad)} uds.',
-      trailingCaption: showAmounts ? 'Cant. ${formatQuantity(cantidad)}' : null,
+      // El % del total del reporte y, con importes, las unidades (cada uno en su línea).
+      trailingCaption: _caption(),
       onTap: onTap,
       actions: [
         AppActionButton(type: AppActionType.view, label: 'Ver documentos', onPressed: onTap),

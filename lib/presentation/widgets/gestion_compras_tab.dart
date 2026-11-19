@@ -335,10 +335,11 @@ class _TopSeccion extends StatelessWidget {
                               : Text.rich(
                                   TextSpan(
                                     children: [
-                                      // En los productos, el código va delante de la descripción.
+                                      // En los productos, solo el código (sin la descripción, que en el celular no cabe).
                                       if (f.codigo != null)
-                                        TextSpan(text: '${f.codigo}  ', style: const TextStyle(fontWeight: FontWeight.w700)),
-                                      TextSpan(text: f.nombre),
+                                        TextSpan(text: f.codigo, style: const TextStyle(fontWeight: FontWeight.w700))
+                                      else
+                                        TextSpan(text: f.nombre),
                                     ],
                                   ),
                                   style: theme.textTheme.bodyMedium,

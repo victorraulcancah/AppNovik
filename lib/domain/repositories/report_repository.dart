@@ -46,7 +46,11 @@ abstract class ReportRepository {
   });
 
   /// Excel del reporte con los mismos filtros.
-  Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters);
+  Future<Either<Failure, DownloadedFile>> exportSalesReport(
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  });
 
   /// Los productos cuyo código contiene [text], para elegir uno en el filtro "Código de producto".
   Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({

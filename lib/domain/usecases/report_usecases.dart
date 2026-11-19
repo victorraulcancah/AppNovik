@@ -121,8 +121,12 @@ class ExportSalesReportUseCase {
   final ReportRepository repository;
   ExportSalesReportUseCase({required this.repository});
 
-  Future<Either<Failure, DownloadedFile>> call(SalesReportFilters filters) =>
-      repository.exportSalesReport(filters);
+  Future<Either<Failure, DownloadedFile>> call(
+    SalesReportFilters filters, {
+    ReportKind kind = ReportKind.general,
+    int? companyId,
+  }) =>
+      repository.exportSalesReport(filters, kind: kind, companyId: companyId);
 }
 
 class GetReportCatalogsUseCase {

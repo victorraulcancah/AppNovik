@@ -423,6 +423,8 @@ class _ReportsPageState extends State<ReportsPage> {
           showAmounts: !reports.ocultarImportes,
           onFilter: () => showReportFilters(context),
           filterCount: reports.advancedCount,
+          onExport: _export,
+          exporting: reports.exporting,
           showMargin: !reports.ocultarMargen,
           marginVisible: _marginVisible,
           onToggleMargin: () => setState(() => _marginVisible = !_marginVisible),
@@ -641,6 +643,14 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
+  /// Lo que el producto representa del total del reporte: de la venta, o de las unidades si el rol no ve importes.
+  double? _productShare(ReportsProvider reports, SalesReportEntity report, SalesReportProductEntity p) {
+    final byAmount = !reports.ocultarImportes;
+    final base = byAmount ? report.totalVentas : report.unidades;
+    if (base <= 0) return null;
+    return (byAmount ? p.venta : p.cantidad) / base * 100;
+  }
+
   Widget _productCard(
     ReportsProvider reports,
     SalesReportEntity report,
@@ -659,6 +669,7 @@ class _ReportsPageState extends State<ReportsPage> {
       showAmounts: importes,
       showMargin: importes && !reports.ocultarMargen,
       marginVisible: _marginVisible,
+      share: _productShare(reports, report, p),
       onTap: () => _showDocuments(p, report),
     );
   }

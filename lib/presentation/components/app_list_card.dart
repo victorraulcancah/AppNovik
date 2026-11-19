@@ -135,6 +135,7 @@ class AppListCard extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 8),
                   child: Text(
                     trailingCaption!,
+                    textAlign: TextAlign.end,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color:
                           trailingCaptionColor ??

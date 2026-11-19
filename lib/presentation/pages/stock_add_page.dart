@@ -10,7 +10,7 @@ import '../utils/download_file.dart';
 import '../utils/import_file.dart';
 import '../utils/success_snack.dart';
 import '../widgets/stock_operations_modals.dart';
-import '../widgets/stock_product_search.dart';
+import '../widgets/stock_product_picker.dart';
 
 /// "Agregar Stock" de la web: se elige el almacén, se buscan productos y se anota cuántas
 /// unidades entran y a qué costo; al guardar se registra el aumento (`POST /stock`). También
@@ -82,6 +82,21 @@ class _StockAddPageState extends State<StockAddPage> {
       }
     });
     HapticFeedback.selectionClick();
+  }
+
+  /// Abre el buscador y agrega de una vez los productos marcados.
+  Future<void> _pickProducts(StockProvider stock) async {
+    final picked = await showStockProductPicker(
+      context,
+      search: stock.searchProducts,
+      detail: (p) {
+        final id = _warehouseId;
+        if (id == null || !p.existeEn(id)) return '';
+        return 'En el almacén: ${formatQuantity(p.stockEn(id))}';
+      },
+    );
+    if (!mounted) return;
+    picked.forEach(_add);
   }
 
   void _change(StockEntryLine line) {
@@ -202,15 +217,22 @@ class _StockAddPageState extends State<StockAddPage> {
                         : (id) => setState(() => _warehouseId = id),
                   ),
                   const SizedBox(height: 12),
-                  StockProductSearch(
-                    enabled: !_saving,
-                    search: stock.searchProducts,
-                    detail: (p) {
-                      final id = _warehouseId;
-                      if (id == null || !p.existeEn(id)) return '';
-                      return 'En el almacén: ${formatQuantity(p.stockEn(id))}';
-                    },
-                    onPick: _add,
+                  // El mismo buscador de Ventas: un campo que abre el buscador con casillas.
+                  InkWell(
+                    onTap: _saving ? null : () => _pickProducts(stock),
+                    borderRadius: BorderRadius.circular(14),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.inventory_2_outlined),
+                        suffixIcon: Icon(Icons.manage_search, color: scheme.onSurfaceVariant),
+                      ),
+                      child: Text(
+                        'Producto',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -258,7 +280,7 @@ class _StockAddPageState extends State<StockAddPage> {
         ? const AppEmptyState(
             icon: Icons.add_box_outlined,
             title: 'Aún no hay productos',
-            message: 'Busca un producto y tócalo para sumarle stock.',
+            message: 'Toca "Producto", marca los que entran y agrégalos.',
           )
         : ListView.separated(
             // Abajo queda espacio para que el botón "Acciones" no tape la última línea.
