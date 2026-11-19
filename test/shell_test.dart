@@ -233,6 +233,45 @@ void main() {
     expect(find.text('pantalla agregar-stock'), findsOneWidget);
   });
 
+  testWidgets('Gestión aparece con el permiso clientes.seguimiento, aunque la empresa no tenga ese módulo', (tester) async {
+    await _pump(
+      tester,
+      const ['Ventas', 'Clientes'],
+      size: const Size(1100, 800),
+      permissions: const {'clientes.seguimiento'},
+    );
+    expect(find.descendant(of: find.byType(NavigationRail), matching: find.text('Gestión')), findsOneWidget);
+  });
+
+  testWidgets('sin el permiso clientes.seguimiento, Gestión no aparece (ni con el módulo Clientes)', (tester) async {
+    await _pump(
+      tester,
+      const ['Ventas', 'Clientes'],
+      size: const Size(1100, 800),
+      permissions: const {'clientes.seguimiento.registrar', 'stock.show'},
+    );
+    expect(find.text('Gestión'), findsNothing);
+  });
+
+  testWidgets('Gestión se abre desde "Más" y con el pedido de otra pantalla (una tarea del Inicio)', (tester) async {
+    final navigation = await _pump(tester, _todos, permissions: const {'clientes.seguimiento'});
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Más')));
+    await tester.pumpAndSettle();
+    expect(find.text('Gestión'), findsOneWidget);
+    await tester.tap(find.text('Gestión'));
+    await tester.pumpAndSettle();
+    expect(find.text('pantalla gestion'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Inicio')));
+    await tester.pumpAndSettle();
+    expect(find.text('pantalla inicio'), findsOneWidget);
+    navigation.goToGestionCliente(7, 'ACME SAC');
+    await tester.pumpAndSettle();
+    expect(find.text('pantalla gestion'), findsOneWidget);
+    // El pedido del cliente lo atiende la pantalla de Gestión (aquí es de mentira).
+    expect(navigation.pendingGestionCliente, (clienteId: 7, nombre: 'ACME SAC'));
+  });
+
   testWidgets('sin el módulo, Deudas y Estado de cuenta no aparecen', (tester) async {
     await _pump(tester, const ['Ventas', 'Clientes'], size: const Size(1100, 800));
     expect(find.text('Deudas'), findsNothing);

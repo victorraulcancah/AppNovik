@@ -11,6 +11,7 @@ import 'account_statement_page.dart';
 import 'clients_page.dart';
 import 'debts_page.dart';
 import 'documents_page.dart';
+import 'gestion_page.dart';
 import 'inicio_page.dart';
 import 'price_lists_page.dart';
 import 'products_page.dart';
@@ -109,6 +110,14 @@ const _catalogo = [
   ),
   _AppModulo('productos', 'Productos', Icons.category_outlined, Icons.category),
   _AppModulo('clientes', 'Clientes', Icons.people_alt_outlined, Icons.people_alt),
+  // Seguimiento de clientes: no es un módulo de la base, se ve con el permiso `clientes.seguimiento`.
+  _AppModulo(
+    'gestion',
+    'Gestión',
+    Icons.handshake_outlined,
+    Icons.handshake,
+    permiso: 'clientes.seguimiento',
+  ),
   // En la web el módulo "Pagos" se llama "Deudas".
   _AppModulo('pagos', 'Deudas', Icons.payments_outlined, Icons.payments),
   _AppModulo(
@@ -250,6 +259,7 @@ class _MainShellPageState extends State<MainShellPage> {
             'reportes' => const ReportsPage(),
             'productos' => const ProductsPage(),
             'clientes' => const ClientsPage(),
+            'gestion' => const GestionPage(),
             'estado-de-cuenta' => const AccountStatementPage(),
             'pagos' => const DebtsPage(),
             'usuarios' => const UsersPage(),

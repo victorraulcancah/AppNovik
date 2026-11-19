@@ -23,7 +23,11 @@ class StockAddPage extends StatefulWidget {
   /// barra con la flecha, carga los almacenes por sí sola y, al guardar, queda limpia para la siguiente entrada.
   final bool embedded;
 
-  const StockAddPage({super.key, this.pickFile = pickImportFile, this.embedded = false});
+  const StockAddPage({
+    super.key,
+    this.pickFile = pickImportFile,
+    this.embedded = false,
+  });
 
   @override
   State<StockAddPage> createState() => _StockAddPageState();
@@ -54,7 +58,8 @@ class _StockAddPageState extends State<StockAddPage> {
 
   double get _total => _lines.fold(0, (sum, l) => sum + l.totalCosto);
 
-  bool get _canSave => !_saving && _lines.isNotEmpty && _lines.every((l) => l.stock >= 1);
+  bool get _canSave =>
+      !_saving && _lines.isNotEmpty && _lines.every((l) => l.stock >= 1);
 
   /// Como en la web: un producto repetido suma una unidad; uno nuevo entra con 1 unidad y el
   /// costo de su última entrada de stock.
@@ -64,10 +69,16 @@ class _StockAddPageState extends State<StockAddPage> {
       if (i >= 0) {
         _lines = [
           for (var j = 0; j < _lines.length; j++)
-            if (j == i) _lines[j].copyWith(stock: _lines[j].stock + 1) else _lines[j],
+            if (j == i)
+              _lines[j].copyWith(stock: _lines[j].stock + 1)
+            else
+              _lines[j],
         ];
       } else {
-        _lines = [..._lines, StockEntryLine(product: product, costo: product.ultimoCosto)];
+        _lines = [
+          ..._lines,
+          StockEntryLine(product: product, costo: product.ultimoCosto),
+        ];
       }
     });
     HapticFeedback.selectionClick();
@@ -75,12 +86,20 @@ class _StockAddPageState extends State<StockAddPage> {
 
   void _change(StockEntryLine line) {
     setState(() {
-      _lines = [for (final l in _lines) if (l.product.id == line.product.id) line else l];
+      _lines = [
+        for (final l in _lines)
+          if (l.product.id == line.product.id) line else l,
+      ];
     });
   }
 
   void _remove(StockEntryLine line) {
-    setState(() => _lines = [for (final l in _lines) if (l.product.id != line.product.id) l]);
+    setState(
+      () => _lines = [
+        for (final l in _lines)
+          if (l.product.id != line.product.id) l,
+      ],
+    );
   }
 
   Future<void> _save() async {
@@ -94,7 +113,10 @@ class _StockAddPageState extends State<StockAddPage> {
     if (!confirmed || !mounted) return;
 
     setState(() => _saving = true);
-    final problem = await context.read<StockProvider>().addStock(_warehouseId, _lines);
+    final problem = await context.read<StockProvider>().addStock(
+      _warehouseId,
+      _lines,
+    );
     if (!mounted) return;
     setState(() => _saving = false);
 
@@ -144,7 +166,9 @@ class _StockAddPageState extends State<StockAddPage> {
     _warehouseId ??= stock.warehouseId;
 
     return Scaffold(
-      appBar: widget.embedded ? null : AppBar(title: const Text('Agregar stock')),
+      appBar: widget.embedded
+          ? null
+          : AppBar(title: const Text('Agregar stock')),
       body: SafeArea(
         // Como módulo, el encabezado ya cuida el borde de arriba.
         top: !widget.embedded,
@@ -173,27 +197,9 @@ class _StockAddPageState extends State<StockAddPage> {
                           child: Text(w.name, overflow: TextOverflow.ellipsis),
                         ),
                     ],
-                    onChanged: _saving ? null : (id) => setState(() => _warehouseId = id),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _saving ? null : _template,
-                          icon: const Icon(Icons.download_outlined, size: 18),
-                          label: const Text('Plantilla'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: _saving || _warehouseId == null ? null : _upload,
-                          icon: const Icon(Icons.file_upload_outlined, size: 18),
-                          label: const Text('Subir stocks'),
-                        ),
-                      ),
-                    ],
+                    onChanged: _saving
+                        ? null
+                        : (id) => setState(() => _warehouseId = id),
                   ),
                   const SizedBox(height: 12),
                   StockProductSearch(
@@ -210,63 +216,103 @@ class _StockAddPageState extends State<StockAddPage> {
               ),
             ),
             Expanded(
-              child: _lines.isEmpty
-                  ? const AppEmptyState(
-                      icon: Icons.add_box_outlined,
-                      title: 'Aún no hay productos',
-                      message: 'Busca un producto y tócalo para sumarle stock.',
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                      itemCount: _lines.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, i) => _EntryLineTile(
-                        key: ValueKey('linea-${_lines[i].product.id}'),
-                        line: _lines[i],
-                        enabled: !_saving,
-                        onChanged: _change,
-                        onRemove: () => _remove(_lines[i]),
-                      ),
+              // La plantilla y subir el Excel van en el botón "Acciones", como en los demás módulos.
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _linesList()),
+                  Positioned(
+                    right: 16,
+                    bottom: 16,
+                    child: AppSpeedDial(
+                      actions: [
+                        AppSpeedDialAction(
+                          label: 'Plantilla',
+                          icon: Icons.download_outlined,
+                          color: const Color(0xFF0D9488),
+                          onPressed: _saving ? null : _template,
+                        ),
+                        AppSpeedDialAction(
+                          label: 'Subir stocks',
+                          icon: Icons.file_upload_outlined,
+                          color: const Color(0xFF7C3AED),
+                          onPressed: _saving || _warehouseId == null
+                              ? null
+                              : _upload,
+                        ),
+                      ],
                     ),
+                  ),
+                ],
+              ),
             ),
-            Material(
-              color: scheme.surfaceContainerLowest,
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Total costo',
-                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                          Text(
-                            formatMoney(_total, symbol: 'S/.'),
-                            key: const ValueKey('total-costo'),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ],
-                      ),
+            _totalBar(theme, scheme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Las líneas del aumento (o el aviso de que aún no hay productos).
+  Widget _linesList() {
+    return _lines.isEmpty
+        ? const AppEmptyState(
+            icon: Icons.add_box_outlined,
+            title: 'Aún no hay productos',
+            message: 'Busca un producto y tócalo para sumarle stock.',
+          )
+        : ListView.separated(
+            // Abajo queda espacio para que el botón "Acciones" no tape la última línea.
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            itemCount: _lines.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, i) => _EntryLineTile(
+              key: ValueKey('linea-${_lines[i].product.id}'),
+              line: _lines[i],
+              enabled: !_saving,
+              onChanged: _change,
+              onRemove: () => _remove(_lines[i]),
+            ),
+          );
+  }
+
+  /// El total del costo y el botón Guardar.
+  Widget _totalBar(ThemeData theme, ColorScheme scheme) {
+    return Material(
+      color: scheme.surfaceContainerLowest,
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Total costo',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
-                    SizedBox(
-                      width: 180,
-                      child: AppButton(
-                        label: 'Guardar',
-                        icon: Icons.save_outlined,
-                        loading: _saving,
-                        onPressed: _canSave ? _save : null,
-                      ),
+                  ),
+                  Text(
+                    formatMoney(_total, symbol: 'S/.'),
+                    key: const ValueKey('total-costo'),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: AppButton(
+                label: 'Guardar',
+                icon: Icons.save_outlined,
+                loading: _saving,
+                onPressed: _canSave ? _save : null,
               ),
             ),
           ],
@@ -296,18 +342,24 @@ class _EntryLineTile extends StatefulWidget {
 }
 
 class _EntryLineTileState extends State<_EntryLineTile> {
-  late final TextEditingController _stock = TextEditingController(text: '${widget.line.stock}');
+  late final TextEditingController _stock = TextEditingController(
+    text: '${widget.line.stock}',
+  );
   late final TextEditingController _costo = TextEditingController(
-    text: widget.line.costo == null || widget.line.costo == 0 ? '' : _decimal(widget.line.costo!),
+    text: widget.line.costo == null || widget.line.costo == 0
+        ? ''
+        : _decimal(widget.line.costo!),
   );
 
-  static String _decimal(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+  static String _decimal(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
 
   @override
   void didUpdateWidget(_EntryLineTile old) {
     super.didUpdateWidget(old);
     // El padre sumó una unidad (el mismo producto tocado otra vez): se refleja en el campo.
-    if (widget.line.stock != (int.tryParse(_stock.text) ?? 0) && widget.line.stock != old.line.stock) {
+    if (widget.line.stock != (int.tryParse(_stock.text) ?? 0) &&
+        widget.line.stock != old.line.stock) {
       _stock.text = '${widget.line.stock}';
     }
   }
@@ -357,11 +409,18 @@ class _EntryLineTileState extends State<_EntryLineTile> {
                         p.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       Text(
-                        [if (p.codigo.isNotEmpty) p.codigo, if (p.marca != null) p.marca!].join(' · '),
-                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        [
+                          if (p.codigo.isNotEmpty) p.codigo,
+                          if (p.marca != null) p.marca!,
+                        ].join(' · '),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -384,8 +443,14 @@ class _EntryLineTileState extends State<_EntryLineTile> {
                     key: const ValueKey('campo-costo'),
                     controller: _costo,
                     enabled: widget.enabled,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d{0,7}([.,]\d{0,2})?'))],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d{0,7}([.,]\d{0,2})?'),
+                      ),
+                    ],
                     decoration: const InputDecoration(
                       labelText: 'Costo / U',
                       prefixText: 'S/. ',

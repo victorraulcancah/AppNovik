@@ -61,6 +61,13 @@ class _InicioPageState extends State<InicioPage> {
     return () => context.read<ShellNavigation>().goToPendingQuotes(desde: desde, hasta: hasta);
   }
 
+  /// Las tareas se abren en Gestión, en la pestaña Seguimiento del cliente: solo si el usuario puede verla.
+  ValueChanged<TaskEntity>? _taskLink() {
+    final session = context.read<AuthProvider>().session;
+    if (session == null || !session.can('clientes.seguimiento')) return null;
+    return (task) => context.read<ShellNavigation>().goToGestionCliente(task.clienteId, task.cliente);
+  }
+
   @override
   Widget build(BuildContext context) {
     final inicio = context.watch<InicioProvider>();
@@ -192,6 +199,7 @@ class _InicioPageState extends State<InicioPage> {
           data: inicio.executive!,
           now: now,
           onOpenQuotes: _quotesLink(inicio.executive!.desde, inicio.executive!.hasta),
+          onOpenTask: _taskLink(),
         ),
       ),
       InicioView.jefe => _withGreeting(

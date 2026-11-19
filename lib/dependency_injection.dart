@@ -15,6 +15,7 @@ import 'data/datasources/price_list_remote_datasource.dart';
 import 'data/datasources/seller_payment_remote_datasource.dart';
 import 'data/datasources/user_record_remote_datasource.dart';
 import 'data/datasources/document_remote_datasource.dart';
+import 'data/datasources/gestion_remote_datasource.dart';
 import 'data/datasources/guide_remote_datasource.dart';
 import 'data/datasources/inicio_cache_datasource.dart';
 import 'data/datasources/inicio_remote_datasource.dart';
@@ -33,6 +34,7 @@ import 'data/repositories/price_list_repository_impl.dart';
 import 'data/repositories/seller_payment_repository_impl.dart';
 import 'data/repositories/user_record_repository_impl.dart';
 import 'data/repositories/document_repository_impl.dart';
+import 'data/repositories/gestion_repository_impl.dart';
 import 'data/repositories/guide_repository_impl.dart';
 import 'data/repositories/inicio_repository_impl.dart';
 import 'data/repositories/other_document_repository_impl.dart';
@@ -53,6 +55,7 @@ import 'domain/repositories/price_list_repository.dart';
 import 'domain/repositories/seller_payment_repository.dart';
 import 'domain/repositories/user_record_repository.dart';
 import 'domain/repositories/document_repository.dart';
+import 'domain/repositories/gestion_repository.dart';
 import 'domain/repositories/guide_repository.dart';
 import 'domain/repositories/inicio_repository.dart';
 import 'domain/repositories/other_document_repository.dart';
@@ -70,6 +73,7 @@ import 'domain/usecases/price_list_usecases.dart';
 import 'domain/usecases/seller_payment_usecases.dart';
 import 'domain/usecases/user_record_usecases.dart';
 import 'domain/usecases/document_usecases.dart';
+import 'domain/usecases/gestion_usecases.dart';
 import 'domain/usecases/guide_usecases.dart';
 import 'domain/usecases/inicio_cache_usecases.dart';
 import 'domain/usecases/inicio_usecases.dart';
@@ -90,6 +94,7 @@ import 'presentation/providers/debts_provider.dart';
 import 'presentation/providers/price_lists_provider.dart';
 import 'presentation/providers/seller_payments_provider.dart';
 import 'presentation/providers/users_provider.dart';
+import 'presentation/providers/gestion_provider.dart';
 import 'presentation/providers/guide_provider.dart';
 import 'presentation/providers/inicio_provider.dart';
 import 'presentation/providers/documents_provider.dart';
@@ -268,6 +273,22 @@ class DependencyInjection {
           update: (context, auth, previous) => previous!..syncSession(auth.session),
         ),
 
+        // El módulo Gestión (seguimiento de clientes: tareas pendientes, ficha del cliente y sus gestiones).
+        ChangeNotifierProxyProvider<AuthProvider, GestionProvider>(
+          create: (context) => GestionProvider(
+            getCatalogoUseCase: GetGestionCatalogoUseCase(repository: _gestionRepository),
+            searchClientsUseCase: SearchGestionClientesUseCase(repository: _gestionRepository),
+            getTareasUseCase: GetGestionTareasUseCase(repository: _gestionRepository),
+            getFichaUseCase: GetGestionFichaUseCase(repository: _gestionRepository),
+            getHistorialUseCase: GetGestionHistorialUseCase(repository: _gestionRepository),
+            registerUseCase: RegisterGestionUseCase(repository: _gestionRepository),
+            editUseCase: EditGestionUseCase(repository: _gestionRepository),
+            rescheduleUseCase: RescheduleGestionUseCase(repository: _gestionRepository),
+            onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
+          ),
+          update: (context, auth, previous) => previous!..syncSession(auth.session),
+        ),
+
         // El módulo Deudas (resumen de deuda pendiente por cliente).
         ChangeNotifierProxyProvider<AuthProvider, DebtsProvider>(
           create: (context) => DebtsProvider(
@@ -416,6 +437,11 @@ class DependencyInjection {
 
   static DebtRepository get _debtRepository => DebtRepositoryImpl(
         remoteDataSource: DebtRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
+      );
+
+  static GestionRepository get _gestionRepository => GestionRepositoryImpl(
+        remoteDataSource: GestionRemoteDataSourceImpl(client: _httpClient),
         authLocalDataSource: _authLocalDataSource,
       );
 

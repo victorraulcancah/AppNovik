@@ -16,7 +16,16 @@ class InicioExecutiveView extends StatelessWidget {
   /// Abre Documentos para ver las cotizaciones; `null` si el usuario no puede verlas.
   final VoidCallback? onOpenQuotes;
 
-  const InicioExecutiveView({super.key, required this.data, required this.now, this.onOpenQuotes});
+  /// Abre la ficha del cliente de una tarea en Gestión; `null` si el usuario no puede ver Gestión.
+  final ValueChanged<TaskEntity>? onOpenTask;
+
+  const InicioExecutiveView({
+    super.key,
+    required this.data,
+    required this.now,
+    this.onOpenQuotes,
+    this.onOpenTask,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +121,7 @@ class InicioExecutiveView extends StatelessWidget {
         child: InicioTopBars(items: data.departamentos),
       ),
       _Opportunities(data: data, onOpenQuotes: onOpenQuotes),
-      _TasksSection(tasks: data.tareas, now: now),
+      _TasksSection(tasks: data.tareas, now: now, onOpenTask: onOpenTask),
       InicioFallClients(
         fall: data.conCaida,
         previousLabel: previousLabel,
@@ -185,8 +194,9 @@ class _Opportunities extends StatelessWidget {
 class _TasksSection extends StatefulWidget {
   final List<TaskEntity> tasks;
   final DateTime now;
+  final ValueChanged<TaskEntity>? onOpenTask;
 
-  const _TasksSection({required this.tasks, required this.now});
+  const _TasksSection({required this.tasks, required this.now, this.onOpenTask});
 
   @override
   State<_TasksSection> createState() => _TasksSectionState();
@@ -267,7 +277,12 @@ class _TasksSectionState extends State<_TasksSection> {
               ),
             )
           else
-            for (final t in visible) _TaskRow(task: t, now: widget.now),
+            for (final t in visible)
+              _TaskRow(
+                task: t,
+                now: widget.now,
+                onTap: widget.onOpenTask == null ? null : () => widget.onOpenTask!(t),
+              ),
         ],
       ),
     );
@@ -278,13 +293,16 @@ class _TaskRow extends StatelessWidget {
   final TaskEntity task;
   final DateTime now;
 
-  const _TaskRow({required this.task, required this.now});
+  /// Abre al cliente en Gestión; sin él la fila no se toca.
+  final VoidCallback? onTap;
+
+  const _TaskRow({required this.task, required this.now, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final type = contactType(task.tipo);
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
@@ -306,8 +324,15 @@ class _TaskRow extends StatelessWidget {
               fontWeight: task.vencida ? FontWeight.w700 : null,
             ),
           ),
+          if (onTap != null) Icon(Icons.chevron_right, size: 18, color: theme.colorScheme.outline),
         ],
       ),
+    );
+    if (onTap == null) return row;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(child: row)),
     );
   }
 }

@@ -8,6 +8,12 @@
 	<string>Novik reconoce tu voz para buscar productos hablando.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Novik usa la cámara para escanear códigos de barras de productos.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>mailto</string>
+		<string>https</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

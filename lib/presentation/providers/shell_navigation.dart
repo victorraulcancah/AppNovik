@@ -37,4 +37,21 @@ class ShellNavigation extends ChangeNotifier {
     _pendingQuotes = null;
     return request;
   }
+
+  ({int clienteId, String nombre})? _pendingGestionCliente;
+
+  /// Pedido para Gestión: abrir la ficha de un cliente en su pestaña Seguimiento (tocar una tarea en el
+  /// Inicio). Lo atiende `GestionPage` con [takePendingGestionCliente].
+  ({int clienteId, String nombre})? get pendingGestionCliente => _pendingGestionCliente;
+
+  void goToGestionCliente(int clienteId, String nombre) {
+    _pendingGestionCliente = (clienteId: clienteId, nombre: nombre);
+    goTo('gestion');
+  }
+
+  ({int clienteId, String nombre})? takePendingGestionCliente() {
+    final request = _pendingGestionCliente;
+    _pendingGestionCliente = null;
+    return request;
+  }
 }

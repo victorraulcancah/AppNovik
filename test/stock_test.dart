@@ -1965,10 +1965,25 @@ void main() {
       expect(find.textContaining('En el almacén: 8'), findsWidgets);
     });
 
+    testWidgets('Plantilla y Subir stocks van dentro del botón Acciones, no sueltas', (tester) async {
+      await openAdd(tester);
+
+      expect(find.widgetWithText(OutlinedButton, 'Plantilla'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Subir stocks'), findsNothing);
+      expect(find.text('Acciones'), findsOneWidget);
+
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Plantilla'), findsOneWidget);
+      expect(find.byTooltip('Subir stocks'), findsOneWidget);
+    });
+
     testWidgets('Plantilla pide el Excel al servidor', (tester) async {
       final repo = await openAdd(tester);
 
-      await tester.tap(find.text('Plantilla'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Plantilla'));
       await tester.pumpAndSettle();
 
       expect(repo.templates, 1);
@@ -1980,7 +1995,9 @@ void main() {
         pickFile: () async => (name: 'stocks.xlsx', bytes: Uint8List.fromList([1, 2, 3, 4])),
       );
 
-      await tester.tap(find.text('Subir stocks'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Subir stocks'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Toca para elegir un archivo'));
       await tester.pumpAndSettle();
@@ -2012,7 +2029,9 @@ void main() {
         ],
       ));
 
-      await tester.tap(find.text('Subir stocks'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Subir stocks'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Toca para elegir un archivo'));
       await tester.pumpAndSettle();
@@ -2031,7 +2050,9 @@ void main() {
       );
       repo.nextImport = Either.left(const ValidationFailure('El archivo no es un Excel'));
 
-      await tester.tap(find.text('Subir stocks'));
+      await tester.tap(find.text('Acciones'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Subir stocks'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Toca para elegir un archivo'));
       await tester.pumpAndSettle();
