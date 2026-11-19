@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../components/components.dart';
 import '../../core/constants/app_constants.dart';
+import '../../domain/entities/session_context_entity.dart';
 import '../providers/auth_provider.dart';
 import '../providers/shell_navigation.dart';
 import 'account_statement_page.dart';
@@ -16,6 +17,7 @@ import 'products_page.dart';
 import 'reports_page.dart';
 import 'sales_page.dart';
 import 'seller_payments_page.dart';
+import 'stock_add_page.dart';
 import 'stock_page.dart';
 import 'users_page.dart';
 
@@ -34,6 +36,11 @@ class _AppModulo {
   /// solo puede ver el stock: `stock.show`, sin el módulo Stock, que es el de agregar).
   final String? permiso;
 
+  /// Entradas del menú que son una parte de otro módulo (en la web, "Agregar Stock" y "Actualizar Stock" cuelgan
+  /// del módulo Stock): se ven con ese módulo contratado ([modulo]) Y el permiso [exige].
+  final String? modulo;
+  final String? exige;
+
   const _AppModulo(
     this.slug,
     this.titulo,
@@ -41,7 +48,18 @@ class _AppModulo {
     this.iconoActivo, {
     this.siempre = false,
     this.permiso,
+    this.modulo,
+    this.exige,
   });
+
+  /// ¿Lo ve este usuario?
+  bool visiblePara(SessionContextEntity session) {
+    if (siempre) return true;
+    if (modulo != null) {
+      return session.hasModule(modulo!) && (exige == null || session.can(exige!));
+    }
+    return session.hasModule(slug) || (permiso != null && session.can(permiso!));
+  }
 
   AppDestination get destino =>
       AppDestination(label: titulo, icon: icono, selectedIcon: iconoActivo);
@@ -65,6 +83,23 @@ const _catalogo = [
     Icons.inventory_2_outlined,
     Icons.inventory_2,
     permiso: 'stock.show',
+  ),
+  // Como el menú de la web: "Agregar Stock" y "Actualizar Stock" son parte del módulo Stock.
+  _AppModulo(
+    'agregar-stock',
+    'Agregar stock',
+    Icons.add_box_outlined,
+    Icons.add_box,
+    modulo: 'stock',
+    exige: 'stock.store',
+  ),
+  _AppModulo(
+    'actualizar-stock',
+    'Actualizar stock',
+    Icons.edit_note_outlined,
+    Icons.edit_note,
+    modulo: 'stock',
+    exige: 'stock.update',
   ),
   _AppModulo(
     'documentos',
@@ -129,15 +164,7 @@ class _MainShellPageState extends State<MainShellPage> {
     final session = context.watch<AuthProvider>().session;
     if (session == null) return const SizedBox.shrink();
 
-    final modulos = _catalogo
-        .where(
-          (m) =>
-              !_ocultos.contains(m.slug) &&
-              (m.siempre ||
-                  session.hasModule(m.slug) ||
-                  (m.permiso != null && session.can(m.permiso!))),
-        )
-        .toList();
+    final modulos = _catalogo.where((m) => !_ocultos.contains(m.slug) && m.visiblePara(session)).toList();
     // Otra pantalla pidió pasar a un módulo (por ejemplo, Documentos → Ventas al culminar una
     // cotización): se atiende en cuanto termina de dibujarse este cuadro.
     final navigation = context.watch<ShellNavigation>();
@@ -229,6 +256,8 @@ class _MainShellPageState extends State<MainShellPage> {
             'pagos-vendedores' => const SellerPaymentsPage(),
             'lista-de-precios' => const PriceListsPage(),
             'stock' => const StockPage(),
+            'agregar-stock' => const StockAddPage(embedded: true),
+            'actualizar-stock' => const StockPage(mode: StockMode.update),
             'documentos' => const DocumentsPage(),
             _ => _ModuloVacio(
               icono: actual.iconoActivo,

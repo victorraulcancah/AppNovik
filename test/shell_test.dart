@@ -192,6 +192,47 @@ void main() {
     expect(find.text('Stock'), findsNothing);
   });
 
+  testWidgets('Agregar stock y Actualizar stock salen como en la web: con el módulo Stock y el permiso de cada uno', (tester) async {
+    Finder rail(String t) => find.descendant(of: find.byType(NavigationRail), matching: find.text(t));
+
+    // Con el módulo y ambos permisos: las dos entradas.
+    await _pump(tester, const ['Stock'], size: const Size(1100, 800), permissions: const {'stock.store', 'stock.update'});
+    expect(rail('Stock'), findsOneWidget);
+    expect(rail('Agregar stock'), findsOneWidget);
+    expect(rail('Actualizar stock'), findsOneWidget);
+
+    // Solo con stock.store: Agregar, sin Actualizar.
+    await _pump(tester, const ['Stock'], size: const Size(1100, 800), permissions: const {'stock.store'});
+    expect(rail('Agregar stock'), findsOneWidget);
+    expect(rail('Actualizar stock'), findsNothing);
+
+    // Sin permisos de escribir: ninguna.
+    await _pump(tester, const ['Stock'], size: const Size(1100, 800), permissions: const {'stock.show'});
+    expect(rail('Agregar stock'), findsNothing);
+    expect(rail('Actualizar stock'), findsNothing);
+
+    // El permiso solo no basta: hace falta el módulo Stock de la empresa.
+    await _pump(tester, const ['Ventas'], size: const Size(1100, 800), permissions: const {'stock.store', 'stock.update'});
+    expect(rail('Agregar stock'), findsNothing);
+    expect(rail('Actualizar stock'), findsNothing);
+  });
+
+  testWidgets('Agregar stock y Actualizar stock se abren desde "Más"', (tester) async {
+    await _pump(
+      tester,
+      const ['Ventas', 'Reportes', 'Stock'],
+      permissions: const {'stock.store', 'stock.update'},
+    );
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Más')));
+    await tester.pumpAndSettle();
+    expect(find.text('Agregar stock'), findsOneWidget);
+    expect(find.text('Actualizar stock'), findsOneWidget);
+
+    await tester.tap(find.text('Agregar stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('pantalla agregar-stock'), findsOneWidget);
+  });
+
   testWidgets('sin el módulo, Deudas y Estado de cuenta no aparecen', (tester) async {
     await _pump(tester, const ['Ventas', 'Clientes'], size: const Size(1100, 800));
     expect(find.text('Deudas'), findsNothing);

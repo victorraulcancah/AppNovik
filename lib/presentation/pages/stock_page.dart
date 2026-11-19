@@ -15,10 +15,16 @@ import 'stock_transfer_page.dart';
 /// Roles que ven los totales de costo y venta del almacén (igual que la web).
 const _rolesConTotales = ['Admin Global', 'Ceo Empresa', 'Contador'];
 
+/// Cómo se abre el módulo: "Ver stock" (el de siempre) o "Actualizar stock" (la entrada del menú que lleva
+/// directo a corregir el stock de un producto).
+enum StockMode { view, update }
+
 /// Módulo Stock: existencias por almacén, como el detalle del almacén de la web.
 /// Costo, precio y totales solo se ven con los permisos de la web.
 class StockPage extends StatefulWidget {
-  const StockPage({super.key});
+  final StockMode mode;
+
+  const StockPage({super.key, this.mode = StockMode.view});
 
   @override
   State<StockPage> createState() => _StockPageState();
@@ -49,8 +55,11 @@ class _StockPageState extends State<StockPage> {
 
   /// Entrar al módulo pide alguno de estos permisos (como la web); ver la lista, además,
   /// `almacenes.show`.
-  bool get _hasAccess =>
-      _can('stock.show') || _can('stock.store') || _can('stock.update') || _can('almacenes.show');
+  bool get _hasAccess => widget.mode == StockMode.update
+      ? _can('stock.update')
+      : _can('stock.show') || _can('stock.store') || _can('stock.update') || _can('almacenes.show');
+
+  bool get _updating => widget.mode == StockMode.update;
 
   /// La lista de existencias la ven quienes pueden ver o actualizar stock.
   bool get _canList => _can('stock.show') || _can('stock.update') || _can('almacenes.show');
@@ -145,14 +154,15 @@ class _StockPageState extends State<StockPage> {
   /// Las acciones del botón flotante: exportar el Excel, ver los totales (con permiso) y, según
   /// los permisos de la web, agregar stock y transferirlo entre almacenes.
   List<AppSpeedDialAction> _actions(StockProvider stock, bool canSeeTotals, String symbol) => [
-        if (_can('stock.store'))
+        // "Actualizar stock" no ofrece agregar ni transferir: tiene sus propias entradas.
+        if (_can('stock.store') && !_updating)
           AppSpeedDialAction(
             label: 'Agregar stock',
             icon: Icons.add_box_outlined,
             color: const Color(0xFF16A34A),
             onPressed: _addStock,
           ),
-        if (_can('transferir-stock.store'))
+        if (_can('transferir-stock.store') && !_updating)
           AppSpeedDialAction(
             label: 'Transferir stock',
             icon: Icons.swap_horiz,
@@ -206,11 +216,13 @@ class _StockPageState extends State<StockPage> {
 
     return Column(
       children: [
-        const AppPageHeader(
-          icon: Icons.inventory_2_outlined,
-          title: 'Stock',
-          subtitle: 'Existencias de cada producto por almacén.',
-          trailing: AppAccountMenu(),
+        AppPageHeader(
+          icon: _updating ? Icons.edit_note : Icons.inventory_2_outlined,
+          title: _updating ? 'Actualizar stock' : 'Stock',
+          subtitle: _updating
+              ? 'Toca un producto y escribe el stock que debe quedar.'
+              : 'Existencias de cada producto por almacén.',
+          trailing: const AppAccountMenu(),
         ),
         // En tablet, la lista a la izquierda y el detalle de existencias a la derecha.
         Expanded(
@@ -381,7 +393,8 @@ class _StockPageState extends State<StockPage> {
       trailingTitleColor: stockColor(s, brightness),
       trailingCaption: 'Total ${formatQuantity(s.stockTotal)}',
       selected: _pane.selectedId == s.productId,
-      onTap: () => _verDetalle(s, symbol),
+      // "Actualizar stock": tocar el producto abre directo la corrección del stock.
+      onTap: _updating ? () => _actualizar(s) : () => _verDetalle(s, symbol),
       actions: [
         AppActionButton(type: AppActionType.view, onPressed: () => _verDetalle(s, symbol)),
         // "Actualizar" de la lista de stock de la web (permiso `stock.update`).

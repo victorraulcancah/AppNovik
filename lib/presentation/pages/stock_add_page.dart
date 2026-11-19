@@ -19,7 +19,11 @@ class StockAddPage extends StatefulWidget {
   /// Selector del Excel a subir; se cambia en las pruebas.
   final Future<PickedImportFile?> Function() pickFile;
 
-  const StockAddPage({super.key, this.pickFile = pickImportFile});
+  /// Como módulo del menú "Más" (no como pantalla que se abre encima): lleva su encabezado en vez de la
+  /// barra con la flecha, carga los almacenes por sí sola y, al guardar, queda limpia para la siguiente entrada.
+  final bool embedded;
+
+  const StockAddPage({super.key, this.pickFile = pickImportFile, this.embedded = false});
 
   @override
   State<StockAddPage> createState() => _StockAddPageState();
@@ -34,6 +38,11 @@ class _StockAddPageState extends State<StockAddPage> {
   void initState() {
     super.initState();
     _warehouseId = context.read<StockProvider>().warehouseId;
+    if (widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<StockProvider>().ensureLoaded();
+      });
+    }
   }
 
   String get _warehouseName {
@@ -96,6 +105,11 @@ class _StockAddPageState extends State<StockAddPage> {
       return;
     }
     showSuccessSnack(context, 'Stock Registrado');
+    if (widget.embedded) {
+      // En el menú no hay a dónde volver: queda limpia para la siguiente entrada.
+      setState(() => _lines = []);
+      return;
+    }
     Navigator.of(context).pop(true);
   }
 
@@ -126,12 +140,23 @@ class _StockAddPageState extends State<StockAddPage> {
     final stock = context.watch<StockProvider>();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Los almacenes pueden llegar después de abrir la pantalla (como módulo del menú): se toma el que se esté viendo.
+    _warehouseId ??= stock.warehouseId;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agregar stock')),
+      appBar: widget.embedded ? null : AppBar(title: const Text('Agregar stock')),
       body: SafeArea(
+        // Como módulo, el encabezado ya cuida el borde de arriba.
+        top: !widget.embedded,
         child: Column(
           children: [
+            if (widget.embedded)
+              const AppPageHeader(
+                icon: Icons.add_box_outlined,
+                title: 'Agregar stock',
+                subtitle: 'Suma unidades al stock de un almacén.',
+                trailing: AppAccountMenu(),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Column(

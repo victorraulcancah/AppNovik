@@ -1588,6 +1588,35 @@ void main() {
         expect(find.text('Cambio Registrado'), findsOneWidget);
       });
 
+      testWidgets('como entrada del menú: tocar el producto abre directo la corrección, y no ofrece agregar ni transferir', (tester) async {
+        final repo = await pumpPage(tester, const StockPage(mode: StockMode.update), setUpRepo: withItem);
+
+        expect(find.text('Toca un producto y escribe el stock que debe quedar.'), findsOneWidget);
+
+        // No ofrece agregar ni transferir (tienen sus propias entradas): solo queda Exportar, directo.
+        expect(find.text('Acciones'), findsNothing);
+        expect(find.text('Agregar stock'), findsNothing);
+        expect(find.text('Transferir stock'), findsNothing);
+        expect(find.text('Exportar'), findsOneWidget);
+
+        // Tocar la tarjeta (no solo el lápiz) abre "Actualizar stock".
+        await tester.tap(find.text('SUBWOOFER 12'));
+        await tester.pumpAndSettle();
+        expect(find.text('Stock actual'), findsOneWidget);
+
+        await tester.enterText(find.byKey(const ValueKey('stock-nuevo')), '14');
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Actualizar'));
+        await tester.pumpAndSettle();
+        expect(repo.adds.single.items.single, (productId: 5, costo: 8.0, stock: 4));
+      });
+
+      testWidgets('como entrada del menú, sin stock.update dice que no hay acceso', (tester) async {
+        await pumpPage(tester, const StockPage(mode: StockMode.update), permissions: const {'stock.show'});
+        expect(find.text('Sin acceso'), findsOneWidget);
+        expect(find.byTooltip('Actualizar stock'), findsNothing);
+      });
+
       testWidgets('si el servidor rechaza, el modal sigue abierto con el motivo', (tester) async {
         final repo = await pumpPage(tester, const StockPage(), setUpRepo: withItem);
         repo.nextAdd = Either.left(const ValidationFailure('Sin permiso para cambiar stock'));
@@ -1858,6 +1887,35 @@ void main() {
         (productId: 1, costo: 10.5, stock: 5),
         (productId: 2, costo: null, stock: 1),
       ]);
+    });
+
+    testWidgets('como entrada del menú: lleva su encabezado, carga sola los almacenes y queda limpia al guardar', (tester) async {
+      // No se le cargan los almacenes de antes: como módulo los pide ella misma.
+      final repo = await pumpPage(
+        tester,
+        StockAddPage(pickFile: pickImportFile, embedded: true),
+        setUpRepo: withProducts,
+        preload: false,
+      );
+
+      // Encabezado del módulo, sin la barra con la flecha de volver.
+      expect(find.text('Agregar stock'), findsOneWidget);
+      expect(find.text('Suma unidades al stock de un almacén.'), findsOneWidget);
+      expect(find.byType(BackButton), findsNothing);
+      expect(find.text('LIMA'), findsOneWidget);
+
+      await searchFor(tester, 'sub');
+      await tester.tap(find.byKey(const ValueKey('resultado-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+      await tester.pumpAndSettle();
+
+      expect(repo.adds.single.warehouseId, 1);
+      // Sigue en la pantalla (no hay a dónde volver) y vacía, lista para la siguiente entrada.
+      expect(find.text('Aún no hay productos'), findsOneWidget);
+      expect(find.text('Suma unidades al stock de un almacén.'), findsOneWidget);
     });
 
     testWidgets('cancelar la confirmación no guarda nada', (tester) async {
