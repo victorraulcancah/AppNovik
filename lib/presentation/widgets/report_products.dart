@@ -52,13 +52,8 @@ class ReportProductCard extends StatelessWidget {
     this.share,
   });
 
-  String? _caption() {
-    final lines = [
-      if (share != null) rankingPercent(share!),
-      if (showAmounts) 'Cant. ${formatQuantity(cantidad)}',
-    ];
-    return lines.isEmpty ? null : lines.join('\n');
-  }
+  /// Bajo el monto solo va el % del total; la cantidad está con los datos de la izquierda.
+  String? _caption() => share == null ? null : rankingPercent(share!);
 
   @override
   Widget build(BuildContext context) {
@@ -69,13 +64,14 @@ class ReportProductCard extends StatelessWidget {
       title: title,
       lines: [
         if (detail.isNotEmpty) detail,
+        // La cantidad va a la izquierda, con los demás datos (antes estaba bajo el monto).
+        if (showAmounts) 'Cant. ${formatQuantity(cantidad)}',
         if (showAmounts && subtotal != null) 'Subtotal ${_soles(subtotal!)}',
         if (showAmounts && descuento != null) 'Desc. ${_soles(descuento!)}',
         // El margen con su porcentaje de la venta (la ganancia).
         if (showAmounts && showMargin) 'Margen $margin',
       ],
       trailingTitle: showAmounts ? _soles(venta) : '${formatQuantity(cantidad)} uds.',
-      // El % del total del reporte y, con importes, las unidades (cada uno en su línea).
       trailingCaption: _caption(),
       onTap: onTap,
       actions: [

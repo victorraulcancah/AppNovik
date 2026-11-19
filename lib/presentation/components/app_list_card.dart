@@ -74,37 +74,14 @@ class AppListCard extends StatelessWidget {
     const tabular = [FontFeature.tabularFigures()];
     final hasTrailing = trailingTitle != null || trailingCaption != null || actions.isNotEmpty;
 
-    // Con imagen a la izquierda, esta queda centrada a lo alto de la tarjeta y el resto sigue arriba.
-    final rowCore = Row(
-      crossAxisAlignment: leading != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
-      children: [
-        if (leading != null) ...[Center(child: leading!), const SizedBox(width: 12)],
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                for (final line in lines)
-                  _line(theme, line),
-                if (footer != null && !footerOnRight)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: footer,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        if (hasTrailing) ...[
-          const SizedBox(width: 12),
-          Column(
+    // Las líneas de una sola fila (el correo, las sucursales) y todo lo que sigue usan TODO el ancho de la tarjeta,
+    // debajo de los botones: así se ven completas. Lo de antes (título y primeras líneas) queda al lado de los botones.
+    final firstFull = oneLinePrefixes.isEmpty ? -1 : lines.indexWhere((l) => oneLinePrefixes.any(l.startsWith));
+    final besideTrailing = firstFull < 0 ? lines : lines.sublist(0, firstFull);
+    final fullWidth = firstFull < 0 ? const <String>[] : lines.sublist(firstFull);
+
+    final trailing = hasTrailing
+        ? Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -140,8 +117,69 @@ class AppListCard extends StatelessWidget {
                   children: actions,
                 ),
             ],
+          )
+        : null;
+
+    // Con imagen a la izquierda, esta queda centrada a lo alto de la tarjeta y el resto sigue arriba.
+    final rowCore = Row(
+      crossAxisAlignment: leading != null ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+      children: [
+        if (leading != null) ...[Center(child: leading!), const SizedBox(width: 12)],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Título y primeras líneas, al lado de los botones.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          for (final line in besideTrailing) _line(theme, line),
+                          if (fullWidth.isEmpty && footer != null && !footerOnRight)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: footer,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 12),
+                    trailing,
+                  ],
+                ],
+              ),
+              // Debajo de los botones, a todo el ancho.
+              if (fullWidth.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final line in fullWidth) _line(theme, line),
+                      if (footer != null && !footerOnRight)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: footer,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ],
     );
     final cardRow = leading != null ? IntrinsicHeight(child: rowCore) : rowCore;
