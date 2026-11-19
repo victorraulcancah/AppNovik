@@ -21,6 +21,9 @@ class GestionSeguimientoTab extends StatefulWidget {
 
 class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
   final _draft = GestionFormDraft();
+
+  /// Las tarjetas de arriba: a donde se sube al guardar una gestión.
+  final _topKey = GlobalKey();
   bool _saving = false;
   String? _error;
 
@@ -55,7 +58,14 @@ class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
     });
     if (result.isRight) {
       _draft.reset();
+      // Se baja el teclado y se sube a las tarjetas (último contacto, próxima gestión...) para ver lo guardado.
+      FocusManager.instance.primaryFocus?.unfocus();
       showSuccessSnack(context, programa ? 'Gestión guardada y seguimiento programado' : 'Gestión guardada');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final top = _topKey.currentContext;
+        if (!mounted || top == null) return;
+        Scrollable.ensureVisible(top, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      });
     }
   }
 
@@ -72,6 +82,7 @@ class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GestionStatGrid(
+          key: _topKey,
           children: [
             GestionStatCard(
               title: 'Último contacto',
