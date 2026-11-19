@@ -27,6 +27,8 @@ import 'support/screen_look.dart';
 import 'package:app_novik/presentation/pages/products_page.dart';
 import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/products_provider.dart';
+import 'package:app_novik/presentation/utils/barcode_scanner.dart';
+import 'package:app_novik/presentation/utils/share_product.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
 import 'package:app_novik/presentation/utils/import_file.dart';
 import 'package:app_novik/theme/app_theme.dart';
@@ -1136,6 +1138,45 @@ void main() {
       );
       const sinImagen = ProductEntity(id: 2, codigo: 'P2', name: 'Producto 2');
 
+      testWidgets('el detalle tiene "Compartir": manda el producto con su foto, código y descripción', (tester) async {
+        final original = ProductSharer.share;
+        addTearDown(() => ProductSharer.share = original);
+        final shared = <ProductEntity>[];
+        ProductSharer.share = (p) async => shared.add(p);
+        await pump(tester, const {}, existing: conImagen);
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+        final compartir = find.widgetWithText(OutlinedButton, 'Compartir');
+        await tester.ensureVisible(compartir);
+        await tester.tap(compartir);
+        await tester.pumpAndSettle();
+
+        expect(shared.single.codigo, 'P1');
+        expect(shared.single.imagen, '/storage/images/products/a.jpg');
+        // El texto lleva el código y la descripción.
+        expect(productShareText(conImagen), 'Cód: P1\nDescripción: Producto 1');
+        // Sin código no sale la línea vacía.
+        expect(productShareText(const ProductEntity(id: 3, codigo: '', name: 'X')), 'Descripción: X');
+      });
+
+      testWidgets('si no se puede compartir lo avisa y el botón vuelve a quedar disponible', (tester) async {
+        final original = ProductSharer.share;
+        addTearDown(() => ProductSharer.share = original);
+        ProductSharer.share = (_) async => throw Exception('sin app');
+        await pump(tester, const {}, existing: sinImagen);
+
+        await tester.tap(find.byTooltip('Ver detalle'));
+        await tester.pumpAndSettle();
+        final compartir = find.widgetWithText(OutlinedButton, 'Compartir');
+        await tester.ensureVisible(compartir);
+        await tester.tap(compartir);
+        await tester.pumpAndSettle();
+
+        expect(find.text('No se pudo compartir el producto'), findsOneWidget);
+        expect(tester.widget<OutlinedButton>(compartir).onPressed, isNotNull);
+      });
+
       testWidgets('un producto con imagen muestra su miniatura en la tarjeta', (tester) async {
         await pump(tester, const {}, existing: conImagen);
 
@@ -1666,6 +1707,33 @@ void main() {
 
       expect(find.byTooltip('Filtros'), findsNothing);
       expect(find.byTooltip('Escanear código de barras'), findsOneWidget);
+    });
+
+    testWidgets('escanear con un código ya filtrado reemplaza el filtro: queda un solo chip', (tester) async {
+      final original = BarcodeScanner.scan;
+      addTearDown(() => BarcodeScanner.scan = original);
+      final env = await pump(tester);
+
+      await tester.enterText(find.byType(SearchBar), 'tubo');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('chip-tubo')), findsOneWidget);
+
+      BarcodeScanner.scan = (_) async => '6904567319916';
+      await tester.tap(find.byTooltip('Escanear código de barras'));
+      await tester.pumpAndSettle();
+
+      // El de antes se fue; un segundo código escaneado reemplaza otra vez al primero.
+      expect(find.byKey(const ValueKey('chip-tubo')), findsNothing);
+      expect(find.byKey(const ValueKey('chip-6904567319916')), findsOneWidget);
+      expect(env.repo.calls.last.$3, ['6904567319916']);
+
+      BarcodeScanner.scan = (_) async => '4006381333931';
+      await tester.tap(find.byTooltip('Escanear código de barras'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('chip-6904567319916')), findsNothing);
+      expect(find.byKey(const ValueKey('chip-4006381333931')), findsOneWidget);
+      expect(env.repo.calls.last.$3, ['4006381333931']);
     });
 
     testWidgets('enviar la búsqueda la vuelve un chip que se puede quitar', (tester) async {

@@ -8,12 +8,55 @@ import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_form_entity.dart';
 import '../components/components.dart';
 import '../utils/import_file.dart';
+import '../utils/share_product.dart';
 import 'product_image.dart';
 
 AppStatusBadge _siNo(bool value) => AppStatusBadge(
       label: value ? 'Sí' : 'No',
       tone: value ? AppBadgeTone.success : AppBadgeTone.neutral,
     );
+
+/// "Compartir" del detalle del producto: baja la foto y abre el menú de compartir del sistema con la foto, el código y
+/// la descripción. Mientras baja la foto muestra una rueda y no se puede volver a tocar.
+class _ShareProductButton extends StatefulWidget {
+  final ProductEntity product;
+
+  const _ShareProductButton({required this.product});
+
+  @override
+  State<_ShareProductButton> createState() => _ShareProductButtonState();
+}
+
+class _ShareProductButtonState extends State<_ShareProductButton> {
+  bool _sharing = false;
+
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await ProductSharer.share(widget.product);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('No se pudo compartir el producto')));
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: _sharing ? null : _share,
+      icon: _sharing
+          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.share_outlined),
+      label: const Text('Compartir'),
+    );
+  }
+}
 
 /// Modal "ver detalle" de un producto, con los mismos datos que la web en
 /// `/productos`: la pestaña General trae las columnas de la tabla y Adicional
@@ -63,6 +106,9 @@ Future<bool?> showProductDetail(
                 tone: p.activo ? AppBadgeTone.success : AppBadgeTone.neutral,
               ),
             ),
+            const SizedBox(height: 12),
+            // Compartir (WhatsApp, correo…): la foto, el código y la descripción.
+            _ShareProductButton(product: p),
           ],
         ),
       ),

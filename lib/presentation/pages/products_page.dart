@@ -75,7 +75,8 @@ class _ProductsPageState extends State<ProductsPage> {
   void _onScanned(String barcode) {
     _debounce?.cancel();
     _searchController.clear();
-    context.read<ProductsProvider>().addSearchTerm(barcode);
+    // Un código nuevo reemplaza al filtro de antes: juntos no encontrarían nada (los términos se combinan con "y").
+    context.read<ProductsProvider>().replaceSearchTerm(barcode);
   }
 
   void _snack(String message) {

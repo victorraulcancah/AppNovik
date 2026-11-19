@@ -68,6 +68,7 @@ class ReportProductCard extends StatelessWidget {
         if (showAmounts) 'Cant. ${formatQuantity(cantidad)}',
         if (showAmounts && subtotal != null) 'Subtotal ${_soles(subtotal!)}',
         if (showAmounts && descuento != null) 'Desc. ${_soles(descuento!)}',
+        if (showAmounts) 'Venta total ${_soles(venta)}',
         // El margen con su porcentaje de la venta (la ganancia).
         if (showAmounts && showMargin) 'Margen $margin',
       ],

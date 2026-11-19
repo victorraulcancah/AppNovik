@@ -250,6 +250,15 @@ class ProductsProvider extends ChangeNotifier {
     return refresh();
   }
 
+  /// Un código leído con la cámara: la lista pasa a mostrar solo ese producto. Reemplaza los términos de antes (los
+  /// términos se combinan con "y", así que un segundo código nunca encontraría nada junto al primero).
+  Future<void> replaceSearchTerm(String text) {
+    final term = text.trim();
+    search = const [];
+    searchTerms = term.isEmpty ? const [] : [term];
+    return refresh();
+  }
+
   Future<void> removeSearchTerm(String term) {
     searchTerms = [
       for (final t in searchTerms)
