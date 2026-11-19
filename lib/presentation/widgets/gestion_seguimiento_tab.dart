@@ -5,7 +5,6 @@ import '../../domain/entities/gestion_entity.dart';
 import '../components/components.dart';
 import '../providers/gestion_provider.dart';
 import '../utils/gestion_copy.dart';
-import '../utils/success_snack.dart';
 import 'gestion_form.dart';
 import 'gestion_widgets.dart';
 
@@ -22,8 +21,9 @@ class GestionSeguimientoTab extends StatefulWidget {
 class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
   final _draft = GestionFormDraft();
 
-  /// Las tarjetas de arriba: a donde se sube al guardar una gestión.
-  final _topKey = GlobalKey();
+  /// El mensaje de confirmación que queda en lugar del formulario después de guardar (`null`: se ve el formulario).
+  String? _saved;
+  int? _savedFor;
   bool _saving = false;
   String? _error;
 
@@ -58,14 +58,10 @@ class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
     });
     if (result.isRight) {
       _draft.reset();
-      // Se baja el teclado y se sube a las tarjetas (último contacto, próxima gestión...) para ver lo guardado.
+      // Se cierra todo: el teclado baja y el formulario se recoge; en su lugar queda el mensaje de que se guardó
+      // (con "Registrar otra gestión" para volver a abrirlo).
       FocusManager.instance.primaryFocus?.unfocus();
-      showSuccessSnack(context, programa ? 'Gestión guardada y seguimiento programado' : 'Gestión guardada');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final top = _topKey.currentContext;
-        if (!mounted || top == null) return;
-        Scrollable.ensureVisible(top, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-      });
+      setState(() => _saved = programa ? 'Gestión guardada y seguimiento programado' : 'Gestión guardada');
     }
   }
 
@@ -82,7 +78,6 @@ class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GestionStatGrid(
-          key: _topKey,
           children: [
             GestionStatCard(
               title: 'Último contacto',
@@ -137,9 +132,59 @@ class _GestionSeguimientoTabState extends State<GestionSeguimientoTab> {
     );
   }
 
+  /// "Gestión guardada": queda en el lugar del formulario hasta que se pida registrar otra.
+  Widget _confirmacion(BuildContext context, String message) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.check_circle, size: 22, color: Color(0xFF16A34A)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(message, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Ya está en el historial y en las tarjetas de arriba.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          style: gestionEnlace(context),
+          onPressed: () => setState(() => _saved = null),
+          icon: const Icon(Icons.add),
+          label: const Text('Registrar otra gestión'),
+        ),
+      ],
+    );
+  }
+
   Widget _form(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Con otro cliente abierto el mensaje de antes ya no aplica.
+    final client = context.read<GestionProvider>().clienteId;
+    if (_saved != null && _savedFor != client) _saved = null;
+    _savedFor = client;
+    final saved = _saved;
+    if (saved != null) return _confirmacion(context, saved);
     return ListenableBuilder(
       listenable: _draft,
       builder: (context, _) => Column(

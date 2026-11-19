@@ -1787,7 +1787,16 @@ void main() {
       expect(env.repo.fichaIds, [7, 7]);
       expect(env.repo.historialCalls, 2);
       expect(env.repo.tareasCalls, 2);
-      // El formulario queda como nuevo.
+      // Se cierra todo: el teclado baja y el formulario se recoge; en su lugar queda el mensaje de que se guardó.
+      expect(FocusManager.instance.primaryFocus?.hasPrimaryFocus == true && tester.testTextInput.isVisible, isFalse);
+      expect(find.text('Selecciona el resultado'), findsNothing);
+      expect(find.byType(GestionFormFields), findsNothing);
+      expect(find.text('Registrar otra gestión'), findsOneWidget);
+
+      // "Registrar otra gestión" vuelve a abrir el formulario, como nuevo.
+      await tester.tap(find.text('Registrar otra gestión'));
+      await tester.pumpAndSettle();
+      expect(find.text('Gestión guardada'), findsNothing);
       expect(find.text('Selecciona el resultado'), findsOneWidget);
       expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Comentario')).controller?.text, isEmpty);
     });
