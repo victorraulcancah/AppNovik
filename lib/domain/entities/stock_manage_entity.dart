@@ -22,6 +22,11 @@ class StockProductEntity {
   final double? ultimoCosto;
   final Map<int, StockWarehouseLevel> levels;
 
+  /// Foto del producto (`img`; `null` si no tiene) y su unidad ("unidad", "set"...), como en el buscador de Ventas.
+  final String? imagen;
+  final String? unidad;
+  final bool esServicio;
+
   const StockProductEntity({
     required this.id,
     required this.codigo,
@@ -29,6 +34,9 @@ class StockProductEntity {
     this.marca,
     this.ultimoCosto,
     this.levels = const {},
+    this.imagen,
+    this.unidad,
+    this.esServicio = false,
   });
 
   /// `true` si el producto ya tiene registro de stock en ese almacén (aunque sea 0).

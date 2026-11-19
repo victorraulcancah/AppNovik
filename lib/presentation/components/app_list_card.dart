@@ -34,7 +34,7 @@ class AppListCard extends StatelessWidget {
   final bool footerOnRight;
 
   /// Las líneas de detalle que empiezan con alguno de estos textos (por ejemplo `Correo:`) van en una sola
-  /// línea, achicando el texto si hace falta en vez de partirlo en dos.
+  /// línea y con el mismo tamaño de letra (con "…" si no cabe) en vez de partirlo en dos.
   final List<String> oneLinePrefixes;
 
   const AppListCard({
@@ -54,26 +54,16 @@ class AppListCard extends StatelessWidget {
     this.oneLinePrefixes = const [],
   });
 
-  /// Una línea de detalle. Si empieza con alguno de [oneLinePrefixes] va siempre en una sola línea: el texto se
-  /// achica para caber (no se corta ni baja a la siguiente).
+  /// Una línea de detalle. Si empieza con alguno de [oneLinePrefixes] va siempre en una sola línea, con el mismo
+  /// tamaño de letra que las demás (si no cabe, termina en "…": no se achica ni baja a la siguiente).
   Widget _line(ThemeData theme, String line) {
-    final text = Text(
+    final oneLine = oneLinePrefixes.any(line.startsWith);
+    return Text(
       line,
+      maxLines: oneLine ? 1 : null,
+      overflow: oneLine ? TextOverflow.ellipsis : null,
+      softWrap: !oneLine,
       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-    );
-    if (!oneLinePrefixes.any(line.startsWith)) return text;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(
-          line,
-          maxLines: 1,
-          softWrap: false,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ),
     );
   }
 

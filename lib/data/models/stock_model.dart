@@ -115,6 +115,8 @@ StockProductEntity stockProductFromJson(Map<String, dynamic> json) {
     }
   }
 
+  final measure = json['measure'];
+  final img = json['img'];
   return StockProductEntity(
     id: _int(json['id']) ?? 0,
     codigo: (json['codigo'] ?? '') as String,
@@ -122,6 +124,10 @@ StockProductEntity stockProductFromJson(Map<String, dynamic> json) {
     marca: brand is Map ? brand['name'] as String? : null,
     ultimoCosto: ultimoCosto,
     levels: levels,
+    // Como en Ventas: la web trata `/storage/` solo como "sin imagen".
+    imagen: img is String && img.replaceFirst('/storage/', '').isNotEmpty ? img : null,
+    unidad: measure is Map && measure['name'] is String ? measure['name'] as String : null,
+    esServicio: json['tipo'] == 's',
   );
 }
 

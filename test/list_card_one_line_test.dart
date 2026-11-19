@@ -2,8 +2,8 @@ import 'package:app_novik/presentation/components/components.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Las líneas marcadas (el correo y las sucursales de Usuarios) van siempre en una sola línea, achicadas
-/// si hace falta, y su texto sigue completo.
+/// Las líneas marcadas (el correo y las sucursales de Usuarios) van siempre en una sola línea y con la misma
+/// letra que las demás: si no caben terminan en "…", no se achican.
 void main() {
   Future<void> pump(WidgetTester tester, {double textScale = 1}) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -31,26 +31,34 @@ void main() {
     );
   }
 
-  testWidgets('el correo y las sucursales ocupan una sola línea y no se cortan', (tester) async {
+  double? fontSize(WidgetTester tester, Finder finder) => tester.widget<Text>(finder).style?.fontSize;
+
+  testWidgets('el correo y las sucursales ocupan una sola línea con la misma letra que las demás', (tester) async {
     await pump(tester);
 
-    final roles = tester.getSize(find.text('Roles: Ceo Empresa')).height;
-    final correo = tester.getSize(find.textContaining('Correo:')).height;
-    final sucursales = tester.getSize(find.textContaining('Sucursales:')).height;
+    final roles = find.text('Roles: Ceo Empresa');
+    final correo = find.textContaining('Correo:');
+    final sucursales = find.textContaining('Sucursales:');
 
     // Una línea de texto mide lo mismo que la de Roles (que cabe de sobra).
-    expect(correo, roles);
-    expect(sucursales, roles);
-    // Y el texto está completo.
-    expect(find.text('Correo: gustavo.grupogm.con.un.correo.muy.largo@gmail.com'), findsOneWidget);
+    expect(tester.getSize(correo).height, tester.getSize(roles).height);
+    expect(tester.getSize(sucursales).height, tester.getSize(roles).height);
+    // Y la misma letra: no se achican.
+    expect(fontSize(tester, correo), fontSize(tester, roles));
+    expect(fontSize(tester, sucursales), fontSize(tester, roles));
+    // Lo que no cabe termina en "…" y el texto completo sigue ahí.
+    expect(tester.widget<Text>(correo).overflow, TextOverflow.ellipsis);
+    expect(tester.widget<Text>(correo).data, 'Correo: gustavo.grupogm.con.un.correo.muy.largo@gmail.com');
   });
 
   testWidgets('con letra grande también sigue en una línea', (tester) async {
     await pump(tester, textScale: 1.5);
 
+    // Las dos marcadas siguen en una línea (misma altura); "Roles", sin marcar, puede partirse.
     final correo = tester.getSize(find.textContaining('Correo:')).height;
+    final sucursales = tester.getSize(find.textContaining('Sucursales:')).height;
     final roles = tester.getSize(find.text('Roles: Ceo Empresa')).height;
-    // Con letra grande el texto se achica: sigue siendo una línea (no más alta que una).
+    expect(correo, sucursales);
     expect(correo, lessThanOrEqualTo(roles));
     expect(tester.takeException(), isNull);
   });

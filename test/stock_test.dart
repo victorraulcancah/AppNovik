@@ -7,6 +7,7 @@ import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/core/utils/format.dart';
 import 'package:app_novik/data/datasources/stock_remote_datasource.dart';
 import 'package:app_novik/data/models/stock_model.dart';
+import 'package:app_novik/presentation/widgets/product_image.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
 import 'package:app_novik/domain/entities/document_entity.dart' show DownloadedFile;
@@ -525,6 +526,26 @@ void main() {
       );
 
   group('modelos de stock', () {
+    test('el producto del buscador trae foto, unidad y si es servicio', () {
+      final p = stockProductFromJson({
+        'id': 3,
+        'codigo': 'EVO.4',
+        'name': 'AMPLIFICADOR',
+        'img': '/storage/productos/evo4.png',
+        'measure': {'name': 'UNIDAD'},
+        'tipo': 'p',
+      });
+      expect(p.imagen, '/storage/productos/evo4.png');
+      expect(p.unidad, 'UNIDAD');
+      expect(p.esServicio, isFalse);
+
+      // `/storage/` solo es "sin imagen"; un servicio se marca con tipo "s".
+      final s = stockProductFromJson({'id': 4, 'codigo': 'S', 'name': 'S', 'img': '/storage/', 'tipo': 's'});
+      expect(s.imagen, isNull);
+      expect(s.unidad, isNull);
+      expect(s.esServicio, isTrue);
+    });
+
     test('la existencia trae el último costo promedio', () {
       final item = stockItemFromJson({
         'id': 5,
@@ -1955,7 +1976,15 @@ void main() {
 
       await searchInPicker(tester, 'sub');
 
-      expect(find.textContaining('En el almacén: 8'), findsWidgets);
+      // Cada resultado se ve como en Ventas: código y último costo, foto (o recuadro), nombre, casilla, lo que hay
+      // en el almacén y la marca.
+      expect(find.text('SUB-1'), findsOneWidget);
+      expect(find.text('S/ 10.50'), findsOneWidget);
+      expect(find.text('Sin costo'), findsOneWidget); // el producto 2 no tiene entradas previas
+      expect(find.byType(ProductImagePlaceholder), findsNWidgets(2));
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      expect(find.text('8'), findsOneWidget);
+      expect(find.text('PIONEER'), findsNWidgets(2));
     });
 
     testWidgets('Plantilla y Subir stocks van dentro del botón Acciones, no sueltas', (tester) async {

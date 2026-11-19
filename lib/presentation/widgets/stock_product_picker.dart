@@ -3,18 +3,22 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/stock_manage_entity.dart';
 import '../components/components.dart';
+import 'product_image.dart';
+import 'product_image_viewer.dart';
 
 /// El mismo buscador de productos de Ventas, para armar un aumento de stock: un modal de alto fijo donde
 /// se busca por nombre, código o marca (con voz y escáner de código de barras), se marcan uno o varios
-/// productos y se agregan de una vez ([confirmLabel]). [search] hace la consulta; [detail] arma el
-/// texto del stock de cada resultado (por ejemplo "En el almacén: 12"). Devuelve los productos
-/// marcados (vacío si se cerró sin agregar).
+/// productos y se agregan de una vez ([confirmLabel]). Cada resultado se ve como en Ventas: el código y, a
+/// la derecha, el último costo; la foto, el nombre y la casilla; y abajo lo que hay en el almacén
+/// [warehouseId] (con su unidad) y la marca. [search] hace la consulta. Devuelve los productos marcados
+/// (vacío si se cerró sin agregar).
 Future<List<StockProductEntity>> showStockProductPicker(
   BuildContext context, {
   required Future<Either<Failure, List<StockProductEntity>>> Function(String text) search,
-  required String Function(StockProductEntity product) detail,
+  required int? warehouseId,
   String confirmLabel = 'Agregar al stock',
 }) async {
   final selection = ValueNotifier<Map<int, StockProductEntity>>({});
@@ -32,7 +36,7 @@ Future<List<StockProductEntity>> showStockProductPicker(
     primaryEnabled: hasSelection,
     child: AppDisposer(
       onDispose: [selection.dispose, hasSelection.dispose],
-      child: _PickerBody(search: search, detail: detail, selection: selection),
+      child: _PickerBody(search: search, warehouseId: warehouseId, selection: selection),
     ),
     onPrimary: () {
       picked = selection.value.values.toList();
@@ -43,10 +47,10 @@ Future<List<StockProductEntity>> showStockProductPicker(
 
 class _PickerBody extends StatefulWidget {
   final Future<Either<Failure, List<StockProductEntity>>> Function(String text) search;
-  final String Function(StockProductEntity product) detail;
+  final int? warehouseId;
   final ValueNotifier<Map<int, StockProductEntity>> selection;
 
-  const _PickerBody({required this.search, required this.detail, required this.selection});
+  const _PickerBody({required this.search, required this.warehouseId, required this.selection});
 
   @override
   State<_PickerBody> createState() => _PickerBodyState();
@@ -198,20 +202,30 @@ class _PickerBodyState extends State<_PickerBody> {
       itemBuilder: (context, i) => _ProductCard(
         key: ValueKey('resultado-${_results[i].id}'),
         product: _results[i],
-        detail: widget.detail(_results[i]),
+        warehouseId: widget.warehouseId,
         selection: widget.selection,
       ),
     );
   }
 }
 
-/// Un producto del buscador: código, nombre, casilla, stock en el almacén y marca.
+/// Un producto del buscador, igual que el de Ventas: código y último costo arriba; foto, nombre y casilla en
+/// medio; y abajo lo que hay en el almacén (con su unidad) y la marca.
 class _ProductCard extends StatelessWidget {
   final StockProductEntity product;
-  final String detail;
+  final int? warehouseId;
   final ValueNotifier<Map<int, StockProductEntity>> selection;
 
-  const _ProductCard({super.key, required this.product, required this.detail, required this.selection});
+  const _ProductCard({super.key, required this.product, required this.warehouseId, required this.selection});
+
+  /// "50 unidades", "1 unidad", "12 set": la cantidad con la unidad del producto.
+  String _stockWithUnit(double stock) {
+    final unit = (product.unidad ?? '').trim().toLowerCase();
+    final quantity = formatQuantity(stock);
+    if (unit.isEmpty) return quantity;
+    if (unit == 'unidad') return '$quantity ${stock == 1 ? 'unidad' : 'unidades'}';
+    return '$quantity $unit';
+  }
 
   void _select(bool on) {
     final next = {...selection.value};
@@ -227,6 +241,11 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final id = warehouseId;
+    final stockText = product.esServicio
+        ? 'Servicio'
+        : _stockWithUnit(id == null ? 0 : product.stockEn(id));
+    final costo = product.ultimoCosto;
 
     return ValueListenableBuilder<Map<int, StockProductEntity>>(
       valueListenable: selection,
@@ -246,8 +265,10 @@ class _ProductCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Arriba: el código, grande, y la casilla.
+                  // Arriba: el código, grande, y el último costo.
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
                       Expanded(
                         child: Text(
@@ -255,29 +276,55 @@ class _ProductCard extends StatelessWidget {
                           style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Text(
+                          costo != null && costo > 0 ? formatMoney(costo, symbol: 'S/') : 'Sin costo',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: costo != null && costo > 0 ? scheme.onSurface : scheme.onSurfaceVariant,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // En medio: la foto (o un recuadro vacío), el nombre completo y la casilla.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      product.imagen == null
+                          ? const ProductImagePlaceholder(size: 64, radius: 12)
+                          : Semantics(
+                              button: true,
+                              label: 'Ver la imagen de ${product.name}',
+                              child: GestureDetector(
+                                onTap: () => openProductImage(context, path: product.imagen!, title: product.name),
+                                child: ProductImage(path: product.imagen!, size: 64, radius: 12),
+                              ),
+                            ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(product.name, style: theme.textTheme.bodyMedium)),
                       Checkbox(value: checked, onChanged: (v) => _select(v ?? false)),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: Text(product.name, style: theme.textTheme.bodyMedium),
-                  ),
                   const SizedBox(height: 10),
-                  // Abajo: el stock en el almacén y la marca.
+                  // Abajo: lo que hay en el almacén con su unidad y la marca.
                   Row(
                     children: [
-                      if (detail.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            detail,
-                            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-                          ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        child: Text(
+                          stockText,
+                          style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
                       const Spacer(),
                       if (product.marca != null && product.marca!.isNotEmpty)
                         Padding(

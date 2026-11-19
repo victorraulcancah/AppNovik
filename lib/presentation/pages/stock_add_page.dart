@@ -89,11 +89,7 @@ class _StockAddPageState extends State<StockAddPage> {
     final picked = await showStockProductPicker(
       context,
       search: stock.searchProducts,
-      detail: (p) {
-        final id = _warehouseId;
-        if (id == null || !p.existeEn(id)) return '';
-        return 'En el almacén: ${formatQuantity(p.stockEn(id))}';
-      },
+      warehouseId: _warehouseId,
     );
     if (!mounted) return;
     picked.forEach(_add);
