@@ -117,6 +117,14 @@ class AddSellerPaymentNoteUseCase {
       repository.addNote(paymentId: paymentId, texto: texto);
 }
 
+class EditSellerPaymentNoteUseCase {
+  final SellerPaymentRepository repository;
+  EditSellerPaymentNoteUseCase({required this.repository});
+
+  Future<Either<Failure, SellerPaymentNote>> call({required int noteId, required String texto}) =>
+      repository.editNote(noteId: noteId, texto: texto);
+}
+
 class DeleteSellerPaymentNoteUseCase {
   final SellerPaymentRepository repository;
   DeleteSellerPaymentNoteUseCase({required this.repository});

@@ -96,6 +96,10 @@ class SellerPaymentRepositoryImpl with TokenGuard implements SellerPaymentReposi
       withToken((token) => remoteDataSource.addNote(token, paymentId: paymentId, texto: texto));
 
   @override
+  Future<Either<Failure, SellerPaymentNote>> editNote({required int noteId, required String texto}) =>
+      withToken((token) => remoteDataSource.editNote(token, noteId: noteId, texto: texto));
+
+  @override
   Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId}) =>
       withToken((token) => remoteDataSource.deleteNote(token, noteId: noteId));
 }

@@ -296,6 +296,7 @@ class DependencyInjection {
             deleteUseCase: DeleteSellerPaymentUseCase(repository: _sellerPaymentRepository),
             getNotesUseCase: GetSellerPaymentNotesUseCase(repository: _sellerPaymentRepository),
             addNoteUseCase: AddSellerPaymentNoteUseCase(repository: _sellerPaymentRepository),
+            editNoteUseCase: EditSellerPaymentNoteUseCase(repository: _sellerPaymentRepository),
             deleteNoteUseCase: DeleteSellerPaymentNoteUseCase(repository: _sellerPaymentRepository),
             onSessionExpired: () => context.read<AuthProvider>().checkAuthStatus(),
           ),

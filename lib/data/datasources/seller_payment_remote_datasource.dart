@@ -56,6 +56,10 @@ abstract class SellerPaymentRemoteDataSource {
   /// Agrega una nota al pago, a nombre de quien la escribe.
   Future<SellerPaymentNote> addNote(String token, {required int paymentId, required String texto});
 
+  /// Cambia el texto de una nota propia (`PUT /pagos-vendedores/notas/{nota}`). Devuelve la nota
+  /// actualizada, con la fecha de edición.
+  Future<SellerPaymentNote> editNote(String token, {required int noteId, required String texto});
+
   /// Elimina una nota: queda en el historial como eliminada. Devuelve la nota ya eliminada.
   Future<SellerPaymentNote> deleteNote(String token, {required int noteId});
 }
@@ -268,6 +272,18 @@ class SellerPaymentRemoteDataSourceImpl implements SellerPaymentRemoteDataSource
     final body = await sendApiRequest(
       () => client.post(
         _uri('/pagos-vendedores/$paymentId/notas'),
+        headers: ApiConstants.authHeaders(token),
+        body: json.encode({'texto': texto}),
+      ),
+    );
+    return sellerPaymentNoteFromJson((body as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<SellerPaymentNote> editNote(String token, {required int noteId, required String texto}) async {
+    final body = await sendApiRequest(
+      () => client.put(
+        _uri('/pagos-vendedores/notas/$noteId'),
         headers: ApiConstants.authHeaders(token),
         body: json.encode({'texto': texto}),
       ),

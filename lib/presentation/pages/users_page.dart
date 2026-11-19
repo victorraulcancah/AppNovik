@@ -281,6 +281,8 @@ class _UsersPageState extends State<UsersPage> {
     return AppListCard(
       title: u.name,
       lines: lines,
+      // El correo y las sucursales van cada uno en una sola línea.
+      oneLinePrefixes: const ['Correo:', 'Sucursales:'],
       leading: UserAvatar(user: u, size: 44),
       footerOnRight: true,
       footer: Row(

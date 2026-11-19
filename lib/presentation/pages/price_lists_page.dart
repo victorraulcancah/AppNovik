@@ -201,6 +201,7 @@ class _PriceListsPageState extends State<PriceListsPage> {
           children: [
             AppSearchBar(
               hint: 'Búsqueda por nombre…',
+              voice: false,
               controller: _searchController,
               onChanged: _onSearchChanged,
               onSubmitted: _onSearchSubmitted,

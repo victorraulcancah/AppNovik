@@ -146,7 +146,17 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
       creado: DateTime(2026, 11, 12, 15, 5),
       autor: 'LUIS VENDEDOR',
       puedeEliminar: true,
+      puedeEditar: true,
     ),
+    // La de otro autor, ya corregida por él: se ve "Editada el …" y no tiene lápiz.
+    SellerPaymentNote(
+      id: 9,
+      texto: 'Corregida por otro',
+      creado: DateTime(2026, 11, 9, 7, 0),
+      autor: 'FRANCIS BULNES GONZALES',
+      editadaEn: DateTime(2026, 11, 9, 8, 15),
+    ),
+    // Eliminada (y editada antes): tachada, sin lápiz y sin "Editada el".
     SellerPaymentNote(
       id: 10,
       texto: 'Cuota 1',
@@ -154,6 +164,7 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
       autor: 'FRANCIS BULNES GONZALES',
       eliminadaEn: DateTime(2026, 11, 11, 18, 45),
       eliminadaPor: 'CEO',
+      editadaEn: DateTime(2026, 11, 10, 10, 0),
     ),
   ];
   bool canWriteNotes = true;
@@ -162,6 +173,8 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
   final notesLoadedFor = <int>[];
   final addedNotes = <({int paymentId, String texto})>[];
   final deletedNotes = <int>[];
+  final editedNotes = <({int noteId, String texto})>[];
+  Failure? editNoteFailure;
 
   List<SellerPaymentOption> clients = const [
     SellerPaymentOption(id: 7, name: 'DISTRIBUIDORA SUR'),
@@ -293,6 +306,24 @@ class _FakeSellerPaymentRepository implements SellerPaymentRepository {
   }
 
   @override
+  Future<Either<Failure, SellerPaymentNote>> editNote({required int noteId, required String texto}) async {
+    editedNotes.add((noteId: noteId, texto: texto));
+    if (editNoteFailure != null) return Either.left(editNoteFailure!);
+    final original = notes.firstWhere((n) => n.id == noteId, orElse: () => SellerPaymentNote(id: noteId, texto: 'Nueva'));
+    return Either.right(
+      SellerPaymentNote(
+        id: noteId,
+        texto: texto,
+        creado: original.creado,
+        autor: original.autor,
+        puedeEliminar: true,
+        puedeEditar: true,
+        editadaEn: DateTime(2026, 11, 17, 17, 0),
+      ),
+    );
+  }
+
+  @override
   Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId}) async {
     deletedNotes.add(noteId);
     if (noteActionFailure != null) return Either.left(noteActionFailure!);
@@ -379,6 +410,7 @@ SellerPaymentsProvider _provider(_FakeSellerPaymentRepository repo, {SessionCont
       deleteUseCase: DeleteSellerPaymentUseCase(repository: repo),
       getNotesUseCase: GetSellerPaymentNotesUseCase(repository: repo),
       addNoteUseCase: AddSellerPaymentNoteUseCase(repository: repo),
+      editNoteUseCase: EditSellerPaymentNoteUseCase(repository: repo),
       deleteNoteUseCase: DeleteSellerPaymentNoteUseCase(repository: repo),
       now: () => _now,
     )..syncSession(session ?? _session());
@@ -832,6 +864,66 @@ void main() {
       expect(() => ds.addNote('t', paymentId: 1, texto: 'x'), throwsA(predicate((e) => '$e'.contains('permiso'))));
     });
 
+    test('editar una nota es PUT notas/{nota} con el texto y devuelve la nota editada', () async {
+      late http.Request req;
+      final ds = SellerPaymentRemoteDataSourceImpl(
+        client: MockClient((request) async {
+          req = request;
+          return http.Response(
+            jsonEncode({
+              'id': 11,
+              'texto': 'Texto corregido',
+              'created_at': '2026-11-12T20:05:00.000000Z',
+              'user': {'id': 9, 'name': 'LUIS'},
+              'eliminada_at': null,
+              'eliminada_por': null,
+              'editada_at': '2026-11-17T22:00:00.000000Z',
+              'puede_eliminar': true,
+              'puede_editar': true,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final note = await ds.editNote('t', noteId: 11, texto: 'Texto corregido');
+
+      expect(req.method, 'PUT');
+      expect(req.url.path, '$_apiPath/pagos-vendedores/notas/11');
+      expect(jsonDecode(req.body), {'texto': 'Texto corregido'});
+      expect(note.texto, 'Texto corregido');
+      expect(note.puedeEditar, isTrue);
+      expect(note.editada, isTrue);
+      expect(note.eliminada, isFalse);
+    });
+
+    test('las notas traen puede_editar y editada_at (sin ellos, no se editan ni están editadas)', () {
+      final edited = sellerPaymentNoteFromJson({'id': 1, 'texto': 'x', 'puede_editar': true, 'editada_at': '2026-11-17T22:00:00Z'});
+      final plain = sellerPaymentNoteFromJson({'id': 2, 'texto': 'y'});
+
+      expect(edited.puedeEditar, isTrue);
+      expect(edited.editadaEn, isNotNull);
+      expect(plain.puedeEditar, isFalse);
+      expect(plain.editada, isFalse);
+    });
+
+    test('editar la nota de otro (403) o una sin cambios, vacía o eliminada (422) llega con el motivo', () async {
+      final forbidden = SellerPaymentRemoteDataSourceImpl(
+        client: MockClient((request) async => http.Response('{"message": "Solo puedes editar tus notas"}', 403)),
+      );
+      expect(
+        () => forbidden.editNote('t', noteId: 1, texto: 'x'),
+        throwsA(predicate((e) => '$e'.contains('No tienes permiso para esta acción'))),
+      );
+
+      for (final reason in ['No hay cambios en la nota', 'Escribe la nota', 'No se puede editar una nota eliminada']) {
+        final ds = SellerPaymentRemoteDataSourceImpl(
+          client: MockClient((request) async => http.Response(jsonEncode({'message': reason}), 422)),
+        );
+        expect(() => ds.editNote('t', noteId: 1, texto: 'x'), throwsA(predicate((e) => '$e'.contains(reason))));
+      }
+    });
+
     test('eliminar un pago pendiente y uno confirmado usan rutas distintas, con type=payment_seller', () async {
       final requests = <http.Request>[];
       final ds = SellerPaymentRemoteDataSourceImpl(
@@ -1058,7 +1150,7 @@ void main() {
       final added = await p.addNote(1, '  Pagó por Yape  ');
       final removed = await p.deleteNote(11);
 
-      expect(notes.right.notas.map((n) => n.id), [11, 10]);
+      expect(notes.right.notas.map((n) => n.id), [11, 9, 10]);
       expect(notes.right.puedeEscribir, isTrue);
       expect(repo.notesLoadedFor, [1]);
       expect(repo.addedNotes, [(paymentId: 1, texto: 'Pagó por Yape')]);
@@ -1066,6 +1158,28 @@ void main() {
       expect(repo.deletedNotes, [11]);
       expect(removed.right.eliminada, isTrue);
       expect(removed.right.eliminadaPor, 'Ana');
+    });
+
+    test('editar una nota manda el texto sin espacios sobrantes y devuelve la nota con su fecha de edición', () async {
+      final repo = _FakeSellerPaymentRepository();
+      final p = _provider(repo);
+
+      final result = await p.editNote(11, '  Texto corregido ');
+
+      expect(repo.editedNotes, [(noteId: 11, texto: 'Texto corregido')]);
+      expect(result.right.texto, 'Texto corregido');
+      expect(result.right.editada, isTrue);
+      expect(result.right.autor, 'LUIS VENDEDOR');
+    });
+
+    test('si editar la nota falla devuelve el motivo del servidor', () async {
+      final repo = _FakeSellerPaymentRepository()..editNoteFailure = const ValidationFailure('No hay cambios en la nota');
+      final p = _provider(repo);
+
+      final result = await p.editNote(11, 'x');
+
+      expect(result.isLeft, isTrue);
+      expect(result.left.message, 'No hay cambios en la nota');
     });
 
     test('si las notas fallan devuelve el error del servidor', () async {
@@ -1145,12 +1259,12 @@ void main() {
 
     testWidgets('la columna Ejecutivo solo la ve quien ve los pagos de todos', (tester) async {
       await _pump(tester);
-      expect(find.textContaining('Ejecutivo comercial:'), findsNothing);
+      expect(find.textContaining('Ejecutivo:'), findsNothing);
     });
 
     testWidgets('quien ve los pagos de todos ve el ejecutivo comercial', (tester) async {
       await _pump(tester, permissions: const {'pagos-vendedores.index', 'pagos-vendedores.showOthersSellers'});
-      expect(find.text('Ejecutivo comercial: LUIS VENDEDOR'), findsOneWidget);
+      expect(find.text('Ejecutivo: LUIS V.'), findsOneWidget);
     });
 
     testWidgets('los totales están en Acciones → Totales, en soles y dólares', (tester) async {
@@ -1325,6 +1439,198 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(r.repo.deletedNotes, isEmpty);
+    });
+
+    testWidgets('solo las notas propias (puede_editar) tienen lápiz', (tester) async {
+      await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      // De las tres notas, solo la de LUIS (la del usuario) se puede editar.
+      expect(find.byTooltip('Editar nota'), findsOneWidget);
+    });
+
+    testWidgets('las notas editadas dicen cuándo, salvo las eliminadas', (tester) async {
+      await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editada el 09/11/2026 08:15 am'), findsOneWidget);
+      // La eliminada también se editó, pero solo se muestra que fue eliminada.
+      expect(find.text('Editada el 10/11/2026 10:00 am'), findsNothing);
+      expect(find.text('Eliminada por CEO el 11/11/2026 06:45 pm'), findsOneWidget);
+      expect(find.text('Segunda nota'), findsOneWidget);
+    });
+
+    testWidgets('editar una nota: la caja trae el texto con contador, Guardar espera cambios y se reemplaza en la lista', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const ValueKey('nota-editar-texto'));
+      expect(field, findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, 'Segunda nota');
+      expect(find.text('12/1000'), findsOneWidget);
+      // Mientras se edita no están el lápiz ni el bote de esa nota.
+      expect(find.byTooltip('Editar nota'), findsNothing);
+      // Sin cambios no se puede guardar.
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Guardar')).onPressed, isNull);
+
+      await tester.enterText(field, 'Texto corregido');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Guardar')).onPressed, isNotNull);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.editedNotes, [(noteId: 11, texto: 'Texto corregido')]);
+      expect(find.byKey(const ValueKey('nota-editar-texto')), findsNothing);
+      expect(find.text('Texto corregido'), findsOneWidget);
+      expect(find.text('Segunda nota'), findsNothing);
+      expect(find.text('Editada el 17/11/2026 05:00 pm'), findsOneWidget);
+      // La tarjeta de la lista se refresca al cerrar (muestra la última nota).
+      expect(r.repo.calls, hasLength(1));
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(r.repo.calls, hasLength(2));
+    });
+
+    testWidgets('un texto vacío o igual al original deja Guardar deshabilitado', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const ValueKey('nota-editar-texto'));
+      await tester.enterText(field, '   ');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Guardar')).onPressed, isNull);
+
+      // Con espacios alrededor sigue siendo el mismo texto.
+      await tester.enterText(field, '  Segunda nota ');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Guardar')).onPressed, isNull);
+      expect(r.repo.editedNotes, isEmpty);
+    });
+
+    testWidgets('Cancelar la edición deja la nota como estaba y no llama al servidor', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('nota-editar-texto')), 'Otra cosa');
+      await tester.pump();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('nota-editar-texto')), findsNothing);
+      expect(find.text('Segunda nota'), findsOneWidget);
+      expect(find.text('Otra cosa'), findsNothing);
+      expect(find.byTooltip('Editar nota'), findsOneWidget);
+      expect(r.repo.editedNotes, isEmpty);
+
+      // Al reabrirla vuelve el texto original, no lo que se había escrito.
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('nota-editar-texto'))).controller!.text, 'Segunda nota');
+    });
+
+    testWidgets('si el servidor rechaza la edición muestra el motivo sin perder lo escrito', (tester) async {
+      final r = await _pump(tester, size: const Size(400, 1400));
+      r.repo.editNoteFailure = const ValidationFailure('No hay cambios en la nota');
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('nota-editar-texto')), 'Mi corrección');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No hay cambios en la nota'), findsOneWidget);
+      final field = find.byKey(const ValueKey('nota-editar-texto'));
+      expect(field, findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, 'Mi corrección');
+      // Sigue guardable para reintentar.
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Guardar')).onPressed, isNotNull);
+      // No se refrescó la lista: no hubo cambios.
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(r.repo.calls, hasLength(1));
+    });
+
+    testWidgets('solo una nota se edita a la vez', (tester) async {
+      await _pump(
+        tester,
+        size: const Size(400, 1400),
+        setUp: (r) => r.notes = [
+          SellerPaymentNote(id: 21, texto: 'Primera mía', creado: DateTime(2026, 11, 12, 15, 5), autor: 'Ana', puedeEditar: true),
+          SellerPaymentNote(id: 20, texto: 'Segunda mía', creado: DateTime(2026, 11, 11, 15, 5), autor: 'Ana', puedeEditar: true),
+        ],
+      );
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Editar nota'), findsNWidgets(2));
+
+      await tester.tap(find.byTooltip('Editar nota').first);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('nota-editar-texto')), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('nota-editar-texto')), 'Cambio a medias');
+      await tester.pump();
+
+      // Editar la otra cierra la primera (sin guardar) y abre la segunda.
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('nota-editar-texto')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('nota-editar-texto'))).controller!.text, 'Segunda mía');
+      expect(find.text('Primera mía'), findsOneWidget);
+      expect(find.text('Cambio a medias'), findsNothing);
+    });
+
+    testWidgets('en el modal de editar el pago también se edita una nota propia', (tester) async {
+      final r = await _pump(tester, permissions: _allPermissions, size: const Size(400, 1600));
+
+      await tester.tap(find.byTooltip('Editar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Editar nota'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('nota-editar-texto')), 'Corregida en el modal');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+      await tester.pumpAndSettle();
+
+      expect(r.repo.editedNotes, [(noteId: 11, texto: 'Corregida en el modal')]);
+      expect(r.repo.editedInstallment, isNull);
+      expect(find.text('Corregida en el modal'), findsOneWidget);
+    });
+
+    testWidgets('sin permiso de notas ninguna nota tiene lápiz', (tester) async {
+      await _pump(
+        tester,
+        size: const Size(400, 1400),
+        setUp: (r) => r.notes = [
+          SellerPaymentNote(id: 21, texto: 'De otro', creado: DateTime(2026, 11, 12, 15, 5), autor: 'LUIS'),
+        ],
+      );
+
+      await tester.tap(find.text('ACME SAC'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('De otro'), findsOneWidget);
+      expect(find.byTooltip('Editar nota'), findsNothing);
     });
 
     testWidgets('sin permisos de acción no hay botones en las filas', (tester) async {

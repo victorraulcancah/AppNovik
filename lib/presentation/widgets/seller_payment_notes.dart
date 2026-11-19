@@ -38,6 +38,13 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
   bool _saving = false;
   String? _error;
 
+  /// La nota que se está editando (una a la vez), con su caja de texto, si se está guardando y el error
+  /// del servidor (que no borra lo escrito).
+  int? _editingId;
+  TextEditingController? _editText;
+  bool _editSaving = false;
+  String? _editError;
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +54,53 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
   @override
   void dispose() {
     _text.dispose();
+    _editText?.dispose();
     super.dispose();
+  }
+
+  void _startEdit(SellerPaymentNote note) {
+    // Una a la vez: abrir otra deja la anterior como estaba.
+    final previous = _editText;
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous?.dispose());
+    setState(() {
+      _editingId = note.id;
+      _editText = TextEditingController(text: note.texto);
+      _editSaving = false;
+      _editError = null;
+    });
+  }
+
+  void _cancelEdit() {
+    final controller = _editText;
+    setState(() {
+      _editingId = null;
+      _editText = null;
+      _editError = null;
+    });
+    // Se libera después de dibujar sin la caja.
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller?.dispose());
+  }
+
+  Future<void> _saveEdit(SellerPaymentNote note) async {
+    final texto = _editText?.text.trim() ?? '';
+    if (texto.isEmpty || texto == note.texto.trim() || _editSaving) return;
+    setState(() {
+      _editSaving = true;
+      _editError = null;
+    });
+    final result = await widget.payments.editNote(note.id, texto);
+    if (!mounted) return;
+    result.fold(
+      (failure) => setState(() {
+        _editSaving = false;
+        _editError = failure.message;
+      }),
+      (updated) {
+        setState(() => _notes = [for (final n in _notes) n.id == updated.id ? updated : n]);
+        _cancelEdit();
+        widget.onChanged?.call();
+      },
+    );
   }
 
   Future<void> _load() async {
@@ -172,7 +225,18 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
           )
         else
           for (final note in _notes) ...[
-            _NoteCard(note: note, onDelete: note.puedeEliminar ? () => _delete(note) : null),
+            _NoteCard(
+              key: ValueKey('nota-${note.id}'),
+              note: note,
+              onEdit: note.puedeEditar && !note.eliminada ? () => _startEdit(note) : null,
+              onDelete: note.puedeEliminar ? () => _delete(note) : null,
+              editController: _editingId == note.id ? _editText : null,
+              editSaving: _editSaving,
+              editError: _editingId == note.id ? _editError : null,
+              onEditChanged: () => setState(() {}),
+              onCancelEdit: _cancelEdit,
+              onSaveEdit: () => _saveEdit(note),
+            ),
             const SizedBox(height: 8),
           ],
       ],
@@ -182,9 +246,29 @@ class _SellerPaymentNotesSectionState extends State<SellerPaymentNotesSection> {
 
 class _NoteCard extends StatelessWidget {
   final SellerPaymentNote note;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
-  const _NoteCard({required this.note, required this.onDelete});
+  /// Con caja de texto, la nota está en edición (en esta misma tarjeta).
+  final TextEditingController? editController;
+  final bool editSaving;
+  final String? editError;
+  final VoidCallback onEditChanged;
+  final VoidCallback onCancelEdit;
+  final VoidCallback onSaveEdit;
+
+  const _NoteCard({
+    super.key,
+    required this.note,
+    required this.onEdit,
+    required this.onDelete,
+    required this.editController,
+    required this.editSaving,
+    required this.editError,
+    required this.onEditChanged,
+    required this.onCancelEdit,
+    required this.onSaveEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +276,11 @@ class _NoteCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final removed = note.eliminada;
     final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final controller = editController;
+    final editing = controller != null;
+    final newText = controller?.text.trim() ?? '';
+    // Guardar: no vacío y con cambios (el servidor también lo exige).
+    final canSave = editing && !editSaving && newText.isNotEmpty && newText != note.texto.trim();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
@@ -219,27 +308,84 @@ class _NoteCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (onDelete != null)
+              if (onEdit != null && !editing)
+                IconButton(
+                  tooltip: 'Editar nota',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onEdit,
+                  icon: Icon(Icons.edit_outlined, size: 18, color: scheme.primary),
+                ),
+              if (onDelete != null && !editing)
                 IconButton(
                   tooltip: 'Eliminar nota',
                   visualDensity: VisualDensity.compact,
                   onPressed: onDelete,
                   icon: Icon(Icons.delete_outline, size: 18, color: scheme.error),
                 )
-              else
+              else if (onEdit == null || editing)
                 const SizedBox(height: 8, width: 8),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(
-              note.texto,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                decoration: removed ? TextDecoration.lineThrough : null,
-                color: removed ? scheme.onSurfaceVariant : null,
+          if (editing)
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    key: const ValueKey('nota-editar-texto'),
+                    controller: controller,
+                    maxLength: 1000,
+                    minLines: 2,
+                    maxLines: 5,
+                    enabled: !editSaving,
+                    keyboardType: TextInputType.multiline,
+                    onChanged: (_) => onEditChanged(),
+                    decoration: const InputDecoration(labelText: 'Editar nota'),
+                  ),
+                  if (editError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(editError!, style: theme.textTheme.bodySmall?.copyWith(color: scheme.error)),
+                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+                        onPressed: editSaving ? null : onCancelEdit,
+                        child: const Text('Cancelar'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        // El tema los estira a todo el ancho: en una fila se achican.
+                        style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                        onPressed: canSave ? onSaveEdit : null,
+                        child: editSaving
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('Guardar'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                note.texto,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  decoration: removed ? TextDecoration.lineThrough : null,
+                  color: removed ? scheme.onSurfaceVariant : null,
+                ),
               ),
             ),
-          ),
+          if (note.editada && !removed && !editing)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 8),
+              child: Text('Editada el ${sellerPaymentNoteDate(note.editadaEn!)}', style: muted),
+            ),
           if (removed)
             Padding(
               padding: const EdgeInsets.only(top: 4, right: 8),

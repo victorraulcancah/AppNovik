@@ -70,7 +70,8 @@ class SellerPaymentLastNote {
 }
 
 /// Una nota de un pago: la "Descripción adicional" ya no es un texto editable sino notas con autor y
-/// fecha. No se editan, se agregan; eliminar una no la borra: queda tachada con quién y cuándo.
+/// fecha. Cada uno edita solo las suyas (las de otros no se editan: se agrega una nota nueva); eliminar
+/// una no la borra: queda tachada con quién y cuándo.
 class SellerPaymentNote {
   final int id;
   final String texto;
@@ -83,6 +84,12 @@ class SellerPaymentNote {
   /// las de todos.
   final bool puedeEliminar;
 
+  /// Lo decide el servidor: solo el autor edita su nota (y mientras no esté eliminada).
+  final bool puedeEditar;
+
+  /// Cuándo se editó por última vez, si se editó.
+  final DateTime? editadaEn;
+
   const SellerPaymentNote({
     required this.id,
     required this.texto,
@@ -91,7 +98,11 @@ class SellerPaymentNote {
     this.eliminadaEn,
     this.eliminadaPor,
     this.puedeEliminar = false,
+    this.puedeEditar = false,
+    this.editadaEn,
   });
+
+  bool get editada => editadaEn != null;
 
   bool get eliminada => eliminadaEn != null;
 }

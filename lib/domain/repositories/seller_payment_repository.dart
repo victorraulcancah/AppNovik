@@ -53,6 +53,9 @@ abstract class SellerPaymentRepository {
 
   Future<Either<Failure, SellerPaymentNote>> addNote({required int paymentId, required String texto});
 
+  /// Cambia el texto de una nota propia y devuelve la nota actualizada.
+  Future<Either<Failure, SellerPaymentNote>> editNote({required int noteId, required String texto});
+
   /// Elimina una nota (queda tachada en el historial) y devuelve cómo quedó.
   Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId});
 }

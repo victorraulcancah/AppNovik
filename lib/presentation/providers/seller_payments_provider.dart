@@ -28,6 +28,7 @@ class SellerPaymentsProvider extends ChangeNotifier {
   final DeleteSellerPaymentUseCase _delete;
   final GetSellerPaymentNotesUseCase _getNotes;
   final AddSellerPaymentNoteUseCase _addNote;
+  final EditSellerPaymentNoteUseCase _editNote;
   final DeleteSellerPaymentNoteUseCase _deleteNote;
 
   /// Se llama cuando el backend responde 401 (token vencido).
@@ -48,6 +49,7 @@ class SellerPaymentsProvider extends ChangeNotifier {
     required DeleteSellerPaymentUseCase deleteUseCase,
     required GetSellerPaymentNotesUseCase getNotesUseCase,
     required AddSellerPaymentNoteUseCase addNoteUseCase,
+    required EditSellerPaymentNoteUseCase editNoteUseCase,
     required DeleteSellerPaymentNoteUseCase deleteNoteUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
@@ -64,6 +66,7 @@ class SellerPaymentsProvider extends ChangeNotifier {
         _delete = deleteUseCase,
         _getNotes = getNotesUseCase,
         _addNote = addNoteUseCase,
+        _editNote = editNoteUseCase,
         _deleteNote = deleteNoteUseCase,
         _onExpired = onSessionExpired,
         _now = now ?? DateTime.now;
@@ -418,6 +421,12 @@ class SellerPaymentsProvider extends ChangeNotifier {
   /// Agrega una nota al pago; queda con el nombre de quien la escribe y la fecha.
   Future<Either<Failure, SellerPaymentNote>> addNote(int paymentId, String texto) async =>
       _check(await _addNote(paymentId: paymentId, texto: texto.trim()));
+
+  /// Cambia el texto de una nota propia (el servidor rechaza las de otros, las eliminadas, las vacías y
+  /// las sin cambios). Devuelve la nota actualizada, con la fecha de edición; la lista de pagos se
+  /// refresca cuando se cierra el modal (la tarjeta muestra la última nota).
+  Future<Either<Failure, SellerPaymentNote>> editNote(int noteId, String texto) async =>
+      _check(await _editNote(noteId: noteId, texto: texto.trim()));
 
   /// Elimina una nota: queda en el historial tachada, con quién la eliminó y cuándo.
   Future<Either<Failure, SellerPaymentNote>> deleteNote(int noteId) async =>

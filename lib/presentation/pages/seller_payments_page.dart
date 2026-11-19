@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/format.dart';
 import '../../domain/entities/seller_payment_entity.dart';
 import '../components/components.dart';
 import '../providers/auth_provider.dart';
@@ -333,7 +334,7 @@ class _SellerPaymentsPageState extends State<SellerPaymentsPage> {
       lines: [
         if (p.creado != null) DateFormat(AppConstants.dateFormat).format(p.creado!),
         // La columna "Ejecutivo" solo la ve quien ve los pagos de todos.
-        if (payments.canSeeOthers && p.ejecutivo != null) 'Ejecutivo comercial: ${p.ejecutivo}',
+        if (payments.canSeeOthers && p.ejecutivo != null) 'Ejecutivo: ${shortPersonName(p.ejecutivo)}',
         if (p.metodos.isNotEmpty) 'Método: ${p.metodos.join(' / ')}',
         // La columna "Descripción Adicional" de la web: la última nota y, con más de una, cuántas hay.
         if (p.ultimaNota != null)

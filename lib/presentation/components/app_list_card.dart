@@ -33,6 +33,10 @@ class AppListCard extends StatelessWidget {
   /// de acción y el texto (por ejemplo la categoría y, a su costado, el estado).
   final bool footerOnRight;
 
+  /// Las líneas de detalle que empiezan con alguno de estos textos (por ejemplo `Correo:`) van en una sola
+  /// línea, achicando el texto si hace falta en vez de partirlo en dos.
+  final List<String> oneLinePrefixes;
+
   const AppListCard({
     super.key,
     required this.title,
@@ -47,7 +51,31 @@ class AppListCard extends StatelessWidget {
     this.footer,
     this.selected = false,
     this.footerOnRight = false,
+    this.oneLinePrefixes = const [],
   });
+
+  /// Una línea de detalle. Si empieza con alguno de [oneLinePrefixes] va siempre en una sola línea: el texto se
+  /// achica para caber (no se corta ni baja a la siguiente).
+  Widget _line(ThemeData theme, String line) {
+    final text = Text(
+      line,
+      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    );
+    if (!oneLinePrefixes.any(line.startsWith)) return text;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          line,
+          maxLines: 1,
+          softWrap: false,
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,12 +102,7 @@ class AppListCard extends StatelessWidget {
                   ),
                 ),
                 for (final line in lines)
-                  Text(
-                    line,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
+                  _line(theme, line),
                 if (footer != null && !footerOnRight)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

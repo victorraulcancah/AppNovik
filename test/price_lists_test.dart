@@ -1009,6 +1009,13 @@ void main() {
       expect(find.text('Inactivo'), findsOneWidget);
     });
 
+    testWidgets('el buscador no tiene micrófono', (tester) async {
+      await _pump(tester);
+
+      expect(find.widgetWithText(TextField, 'Búsqueda por nombre…'), findsOneWidget);
+      expect(find.byTooltip('Buscar por voz'), findsNothing);
+    });
+
     testWidgets('sin listas dice que no hay', (tester) async {
       await _pump(tester, setUp: (r) => r.lists = []);
 
@@ -1285,6 +1292,13 @@ void main() {
       await tester.tap(find.text('Acciones'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('el buscador del detalle no tiene micrófono', (tester) async {
+      await openDetail(tester);
+
+      expect(find.widgetWithText(TextField, 'Búsqueda por nombre, código…'), findsOneWidget);
+      expect(find.byTooltip('Buscar por voz'), findsNothing);
+    });
 
     testWidgets(
       'muestra el nombre, la moneda, el total y los productos con su precio',

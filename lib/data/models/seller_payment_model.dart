@@ -128,7 +128,7 @@ SellerClientDebt sellerClientDebtFromJson(Map<String, dynamic> j) => SellerClien
       dolares: _doubleOrNull(j['deuda_pendiente_dolares']) ?? 0,
     );
 
-/// Una nota de `GET/POST /pagos-vendedores/{id}/notas` y `DELETE /pagos-vendedores/notas/{nota}`.
+/// Una nota de `GET/POST /pagos-vendedores/{id}/notas` y `PUT/DELETE /pagos-vendedores/notas/{nota}`.
 SellerPaymentNote sellerPaymentNoteFromJson(Map<String, dynamic> j) => SellerPaymentNote(
       id: _int(j['id']) ?? 0,
       texto: _text(j['texto']) ?? '',
@@ -137,6 +137,8 @@ SellerPaymentNote sellerPaymentNoteFromJson(Map<String, dynamic> j) => SellerPay
       eliminadaEn: _date(j['eliminada_at']),
       eliminadaPor: _text(_map(j['eliminada_por'])?['name']),
       puedeEliminar: _bool(j['puede_eliminar']),
+      puedeEditar: _bool(j['puede_editar']),
+      editadaEn: _date(j['editada_at']),
     );
 
 /// `GET /pagos-vendedores/{id}/notas`: `{notas, puede_escribir}`.
