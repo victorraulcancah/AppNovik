@@ -44,7 +44,6 @@ class SellerPaymentAllocation {
   final int? paymentMethodId;
   final String? paymentMethodName;
   final double monto;
-  final String? descripcionAdicional;
 
   /// Ya confirmada (aprobada): su monto no se puede cambiar.
   final bool confirmed;
@@ -57,10 +56,52 @@ class SellerPaymentAllocation {
     this.paymentMethodId,
     this.paymentMethodName,
     this.monto = 0,
-    this.descripcionAdicional,
     this.confirmed = false,
     this.paymentTotal,
   });
+}
+
+/// La última nota (no eliminada) de un pago, tal como la trae la lista (`ultima_nota`).
+class SellerPaymentLastNote {
+  final String texto;
+  final String? autor;
+
+  const SellerPaymentLastNote({required this.texto, this.autor});
+}
+
+/// Una nota de un pago: la "Descripción adicional" ya no es un texto editable sino notas con autor y
+/// fecha. No se editan, se agregan; eliminar una no la borra: queda tachada con quién y cuándo.
+class SellerPaymentNote {
+  final int id;
+  final String texto;
+  final DateTime? creado;
+  final String? autor;
+  final DateTime? eliminadaEn;
+  final String? eliminadaPor;
+
+  /// Lo decide el servidor: cada uno elimina las suyas y quien tiene `pagos-vendedores.notas.destroy`
+  /// las de todos.
+  final bool puedeEliminar;
+
+  const SellerPaymentNote({
+    required this.id,
+    required this.texto,
+    this.creado,
+    this.autor,
+    this.eliminadaEn,
+    this.eliminadaPor,
+    this.puedeEliminar = false,
+  });
+
+  bool get eliminada => eliminadaEn != null;
+}
+
+/// El historial de notas de un pago (la más reciente primero) y si el usuario puede escribir una.
+class SellerPaymentNotes {
+  final List<SellerPaymentNote> notas;
+  final bool puedeEscribir;
+
+  const SellerPaymentNotes({this.notas = const [], this.puedeEscribir = false});
 }
 
 /// Un pago de un cliente registrado por un ejecutivo: una fila de "Registro de Pagos" de la web
@@ -75,8 +116,9 @@ class SellerPaymentEntity {
   /// Quien registró el pago (la columna "Ejecutivo").
   final String? ejecutivo;
 
-  /// La descripción adicional: la de la primera parte con descripción o, si no hay, la del pago.
-  final String? descripcion;
+  /// La columna "Descripción Adicional": la última nota del pago y cuántas hay (sin contar las eliminadas).
+  final SellerPaymentLastNote? ultimaNota;
+  final int notasCount;
   final DateTime? creado;
   final double montoTotal;
 
@@ -100,7 +142,8 @@ class SellerPaymentEntity {
     this.clientId,
     this.cliente = '',
     this.ejecutivo,
-    this.descripcion,
+    this.ultimaNota,
+    this.notasCount = 0,
     this.creado,
     this.montoTotal = 0,
     this.moneda = 'soles',
@@ -111,6 +154,9 @@ class SellerPaymentEntity {
     this.paymentMethodName,
     this.allocations = const [],
   });
+
+  /// El texto de la última nota, si hay.
+  String? get descripcion => ultimaNota?.texto;
 
   bool get esDolares => moneda == 'dolares';
 

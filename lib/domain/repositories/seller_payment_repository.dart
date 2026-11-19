@@ -38,14 +38,21 @@ abstract class SellerPaymentRepository {
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   });
 
+  /// Edita un saldo a favor: solo su método de pago.
   Future<Either<Failure, void>> editPayment({
     required int id,
     required int paymentMethodId,
-    String? descripcion,
   });
 
   Future<Either<Failure, void>> deletePayment({required int id, required bool afterConfirm});
+
+  /// El historial de notas del pago (la "Descripción adicional") y si el usuario puede escribir una.
+  Future<Either<Failure, SellerPaymentNotes>> getNotes({required int paymentId});
+
+  Future<Either<Failure, SellerPaymentNote>> addNote({required int paymentId, required String texto});
+
+  /// Elimina una nota (queda tachada en el historial) y devuelve cómo quedó.
+  Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId});
 }

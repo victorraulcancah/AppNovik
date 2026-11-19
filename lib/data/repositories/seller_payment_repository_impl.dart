@@ -64,7 +64,6 @@ class SellerPaymentRepositoryImpl with TokenGuard implements SellerPaymentReposi
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   }) =>
       withToken(
         (token) => remoteDataSource.editInstallmentPayment(
@@ -72,7 +71,6 @@ class SellerPaymentRepositoryImpl with TokenGuard implements SellerPaymentReposi
           id: id,
           paymentMethodId: paymentMethodId,
           monto: monto,
-          descripcionAdicional: descripcionAdicional,
         ),
       );
 
@@ -80,18 +78,24 @@ class SellerPaymentRepositoryImpl with TokenGuard implements SellerPaymentReposi
   Future<Either<Failure, void>> editPayment({
     required int id,
     required int paymentMethodId,
-    String? descripcion,
   }) =>
       withToken(
-        (token) => remoteDataSource.editPayment(
-          token,
-          id: id,
-          paymentMethodId: paymentMethodId,
-          descripcion: descripcion,
-        ),
+        (token) => remoteDataSource.editPayment(token, id: id, paymentMethodId: paymentMethodId),
       );
 
   @override
   Future<Either<Failure, void>> deletePayment({required int id, required bool afterConfirm}) =>
       withToken((token) => remoteDataSource.deletePayment(token, id: id, afterConfirm: afterConfirm));
+
+  @override
+  Future<Either<Failure, SellerPaymentNotes>> getNotes({required int paymentId}) =>
+      withToken((token) => remoteDataSource.getNotes(token, paymentId: paymentId));
+
+  @override
+  Future<Either<Failure, SellerPaymentNote>> addNote({required int paymentId, required String texto}) =>
+      withToken((token) => remoteDataSource.addNote(token, paymentId: paymentId, texto: texto));
+
+  @override
+  Future<Either<Failure, SellerPaymentNote>> deleteNote({required int noteId}) =>
+      withToken((token) => remoteDataSource.deleteNote(token, noteId: noteId));
 }

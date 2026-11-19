@@ -26,6 +26,9 @@ class SellerPaymentsProvider extends ChangeNotifier {
   final EditSellerInstallmentPaymentUseCase _editInstallment;
   final EditSellerPaymentUseCase _edit;
   final DeleteSellerPaymentUseCase _delete;
+  final GetSellerPaymentNotesUseCase _getNotes;
+  final AddSellerPaymentNoteUseCase _addNote;
+  final DeleteSellerPaymentNoteUseCase _deleteNote;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onExpired;
@@ -43,6 +46,9 @@ class SellerPaymentsProvider extends ChangeNotifier {
     required EditSellerInstallmentPaymentUseCase editInstallmentUseCase,
     required EditSellerPaymentUseCase editUseCase,
     required DeleteSellerPaymentUseCase deleteUseCase,
+    required GetSellerPaymentNotesUseCase getNotesUseCase,
+    required AddSellerPaymentNoteUseCase addNoteUseCase,
+    required DeleteSellerPaymentNoteUseCase deleteNoteUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   })  : _getPayments = getPaymentsUseCase,
@@ -56,6 +62,9 @@ class SellerPaymentsProvider extends ChangeNotifier {
         _editInstallment = editInstallmentUseCase,
         _edit = editUseCase,
         _delete = deleteUseCase,
+        _getNotes = getNotesUseCase,
+        _addNote = addNoteUseCase,
+        _deleteNote = deleteNoteUseCase,
         _onExpired = onSessionExpired,
         _now = now ?? DateTime.now;
 
@@ -370,24 +379,22 @@ class SellerPaymentsProvider extends ChangeNotifier {
     return result;
   }
 
-  /// Edita el pago como la web: un saldo a favor, solo método y descripción; si no, la primera parte
-  /// aplicada a una cuota (el monto solo mientras no esté confirmada).
+  /// Edita el pago como la web: un saldo a favor, solo el método; si no, la primera parte aplicada a
+  /// una cuota (el monto solo mientras no esté confirmada). La descripción ya no se edita: son notas.
   Future<Either<Failure, void>> editPayment(
     SellerPaymentEntity payment, {
     required int paymentMethodId,
     double? monto,
-    String? descripcion,
   }) async {
     final allocation = payment.editAllocation;
     final Either<Failure, void> result;
     if (allocation == null) {
-      result = await _edit(id: payment.id, paymentMethodId: paymentMethodId, descripcion: descripcion);
+      result = await _edit(id: payment.id, paymentMethodId: paymentMethodId);
     } else {
       result = await _editInstallment(
         id: allocation.id,
         paymentMethodId: paymentMethodId,
         monto: allocation.confirmed ? null : monto,
-        descripcionAdicional: descripcion,
       );
     }
     _check(result);
@@ -403,6 +410,18 @@ class SellerPaymentsProvider extends ChangeNotifier {
     if (result.isRight) await refresh();
     return result;
   }
+
+  /// El historial de notas del pago y si el usuario puede escribir una (lo decide el servidor).
+  Future<Either<Failure, SellerPaymentNotes>> loadNotes(int paymentId) async =>
+      _check(await _getNotes(paymentId: paymentId));
+
+  /// Agrega una nota al pago; queda con el nombre de quien la escribe y la fecha.
+  Future<Either<Failure, SellerPaymentNote>> addNote(int paymentId, String texto) async =>
+      _check(await _addNote(paymentId: paymentId, texto: texto.trim()));
+
+  /// Elimina una nota: queda en el historial tachada, con quién la eliminó y cuándo.
+  Future<Either<Failure, SellerPaymentNote>> deleteNote(int noteId) async =>
+      _check(await _deleteNote(noteId: noteId));
 
   /// Excel con lo que se está viendo (la búsqueda y los filtros).
   Future<Either<Failure, DownloadedFile>> exportAll() async {

@@ -38,7 +38,6 @@ SellerPaymentAllocation sellerPaymentAllocationFromJson(Map<String, dynamic> j) 
       paymentMethodId: _int(j['payment_method_id']) ?? _int(_map(j['payment_method'])?['id']),
       paymentMethodName: _text(_map(j['payment_method'])?['name']),
       monto: _doubleOrNull(j['monto']) ?? 0,
-      descripcionAdicional: _text(j['descripcion_adicional']),
       confirmed: _bool(j['estado']),
       paymentTotal: _doubleOrNull(_map(j['payment_seller'])?['monto_total']),
     );
@@ -51,20 +50,19 @@ SellerPaymentEntity sellerPaymentFromJson(Map<String, dynamic> j) {
       ? [for (final p in parts) if (p is Map) sellerPaymentAllocationFromJson(p.cast<String, dynamic>())]
       : <SellerPaymentAllocation>[];
   final method = _map(j['payment_method'] ?? j['paymentMethod']);
-  String? descripcion;
-  for (final a in allocations) {
-    if (a.descripcionAdicional != null) {
-      descripcion = a.descripcionAdicional;
-      break;
-    }
-  }
+  // La descripción son las notas del pago: la lista trae la última (sin las eliminadas) y cuántas hay.
+  final lastNote = _map(j['ultima_nota']);
+  final noteText = _text(lastNote?['texto']);
   final client = _map(j['client']);
   return SellerPaymentEntity(
     id: _int(j['id']) ?? 0,
     clientId: _int(j['client_id']) ?? _int(client?['id']),
     cliente: _clientName(client),
     ejecutivo: _text(_map(j['user'])?['name']),
-    descripcion: descripcion ?? _text(j['descripcion']),
+    ultimaNota: noteText == null
+        ? null
+        : SellerPaymentLastNote(texto: noteText, autor: _text(_map(lastNote?['user'])?['name'])),
+    notasCount: _int(j['notas_count']) ?? (noteText == null ? 0 : 1),
     creado: _date(j['created_at']),
     montoTotal: _doubleOrNull(j['monto_total']) ?? 0,
     moneda: _text(j['moneda']) == 'dolares' ? 'dolares' : 'soles',
@@ -129,3 +127,25 @@ SellerClientDebt sellerClientDebtFromJson(Map<String, dynamic> j) => SellerClien
       soles: _doubleOrNull(j['deuda_pendiente_soles']) ?? 0,
       dolares: _doubleOrNull(j['deuda_pendiente_dolares']) ?? 0,
     );
+
+/// Una nota de `GET/POST /pagos-vendedores/{id}/notas` y `DELETE /pagos-vendedores/notas/{nota}`.
+SellerPaymentNote sellerPaymentNoteFromJson(Map<String, dynamic> j) => SellerPaymentNote(
+      id: _int(j['id']) ?? 0,
+      texto: _text(j['texto']) ?? '',
+      creado: _date(j['created_at']),
+      autor: _text(_map(j['user'])?['name']),
+      eliminadaEn: _date(j['eliminada_at']),
+      eliminadaPor: _text(_map(j['eliminada_por'])?['name']),
+      puedeEliminar: _bool(j['puede_eliminar']),
+    );
+
+/// `GET /pagos-vendedores/{id}/notas`: `{notas, puede_escribir}`.
+SellerPaymentNotes sellerPaymentNotesFromJson(Map<String, dynamic> j) {
+  final list = j['notas'];
+  return SellerPaymentNotes(
+    notas: list is List
+        ? [for (final n in list) if (n is Map) sellerPaymentNoteFromJson(n.cast<String, dynamic>())]
+        : const [],
+    puedeEscribir: _bool(j['puede_escribir']),
+  );
+}

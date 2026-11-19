@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/utils/format.dart';
+import '../../domain/entities/report_entity.dart';
 import '../../domain/entities/report_ranking_entity.dart';
 import '../components/components.dart';
 import '../providers/reports_provider.dart';
@@ -397,6 +400,11 @@ class RankingView extends StatefulWidget {
   /// Vuelve a "Venta general" (la flecha del encabezado).
   final VoidCallback? onBack;
   final ValueChanged<String> onSearch;
+
+  /// Lo escrito también se busca como código de producto: estos son los productos que coinciden. Al elegir uno
+  /// ([onPickCode]) el reporte cuenta solo lo vendido de ese producto.
+  final Future<List<ReportProductOption>> Function(String text)? onSearchCodes;
+  final ValueChanged<String>? onPickCode;
   final Future<void> Function() onRefresh;
   final VoidCallback onRetry;
   final VoidCallback onLoadMore;
@@ -413,6 +421,8 @@ class RankingView extends StatefulWidget {
     this.onToggleMargin,
     this.onBack,
     required this.onSearch,
+    this.onSearchCodes,
+    this.onPickCode,
     required this.onRefresh,
     required this.onRetry,
     required this.onLoadMore,
@@ -424,11 +434,41 @@ class RankingView extends StatefulWidget {
 
 class _RankingViewState extends State<RankingView> {
   final _search = TextEditingController();
+  Timer? _codeTimer;
+
+  /// Los productos cuyo código coincide con lo escrito.
+  List<ReportProductOption> _codes = const [];
 
   @override
   void dispose() {
+    _codeTimer?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  /// Lo escrito filtra por nombre (de una vez) y, con una pausa, también se busca como código de producto.
+  void _onChanged(String text) {
+    widget.onSearch(text);
+    _codeTimer?.cancel();
+    final query = text.trim();
+    final search = widget.onSearchCodes;
+    if (search == null || query.length < 2) {
+      if (_codes.isNotEmpty) setState(() => _codes = const []);
+      return;
+    }
+    _codeTimer = Timer(const Duration(milliseconds: 450), () async {
+      final found = await search(query);
+      if (!mounted || _search.text.trim() != query) return;
+      setState(() => _codes = found.take(5).toList());
+    });
+  }
+
+  void _pickCode(String code) {
+    _codeTimer?.cancel();
+    _search.clear();
+    widget.onSearch('');
+    setState(() => _codes = const []);
+    widget.onPickCode?.call(code);
   }
 
   /// Los detalles de una fila bajo su nombre (sin unidades): documento y categoría del cliente,
@@ -509,13 +549,46 @@ class _RankingViewState extends State<RankingView> {
           ),
         ),
         AppSearchBar(
-          hint: 'Buscar por nombre',
+          hint: widget.onSearchCodes == null ? 'Buscar por nombre' : 'Buscar por nombre o código de producto',
           controller: _search,
-          onChanged: widget.onSearch,
+          onChanged: _onChanged,
           onFilter: widget.onFilter,
           filterCount: widget.filterCount,
         ),
         if (state.searching) const LinearProgressIndicator(minHeight: 2),
+        // Productos con ese código: al elegir uno, el reporte cuenta solo lo vendido de él.
+        if (_codes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                    child: Text(
+                      'Código de producto',
+                      style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                  for (final p in _codes)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(Icons.qr_code_2, color: scheme.primary),
+                      title: Text(p.codigo, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(
+                        [p.nombre, p.marca].where((t) => t.isNotEmpty).join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => _pickCode(p.codigo),
+                    ),
+                ],
+              ),
+            ),
+          ),
         Expanded(
           child: AppCardList<RankingRow>(
             items: rows,

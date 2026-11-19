@@ -81,26 +81,16 @@ class EditSellerInstallmentPaymentUseCase {
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   }) =>
-      repository.editInstallmentPayment(
-        id: id,
-        paymentMethodId: paymentMethodId,
-        monto: monto,
-        descripcionAdicional: descripcionAdicional,
-      );
+      repository.editInstallmentPayment(id: id, paymentMethodId: paymentMethodId, monto: monto);
 }
 
 class EditSellerPaymentUseCase {
   final SellerPaymentRepository repository;
   EditSellerPaymentUseCase({required this.repository});
 
-  Future<Either<Failure, void>> call({
-    required int id,
-    required int paymentMethodId,
-    String? descripcion,
-  }) =>
-      repository.editPayment(id: id, paymentMethodId: paymentMethodId, descripcion: descripcion);
+  Future<Either<Failure, void>> call({required int id, required int paymentMethodId}) =>
+      repository.editPayment(id: id, paymentMethodId: paymentMethodId);
 }
 
 class DeleteSellerPaymentUseCase {
@@ -109,4 +99,28 @@ class DeleteSellerPaymentUseCase {
 
   Future<Either<Failure, void>> call({required int id, required bool afterConfirm}) =>
       repository.deletePayment(id: id, afterConfirm: afterConfirm);
+}
+
+class GetSellerPaymentNotesUseCase {
+  final SellerPaymentRepository repository;
+  GetSellerPaymentNotesUseCase({required this.repository});
+
+  Future<Either<Failure, SellerPaymentNotes>> call({required int paymentId}) =>
+      repository.getNotes(paymentId: paymentId);
+}
+
+class AddSellerPaymentNoteUseCase {
+  final SellerPaymentRepository repository;
+  AddSellerPaymentNoteUseCase({required this.repository});
+
+  Future<Either<Failure, SellerPaymentNote>> call({required int paymentId, required String texto}) =>
+      repository.addNote(paymentId: paymentId, texto: texto);
+}
+
+class DeleteSellerPaymentNoteUseCase {
+  final SellerPaymentRepository repository;
+  DeleteSellerPaymentNoteUseCase({required this.repository});
+
+  Future<Either<Failure, SellerPaymentNote>> call({required int noteId}) =>
+      repository.deleteNote(noteId: noteId);
 }

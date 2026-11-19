@@ -900,6 +900,34 @@ void main() {
       expect(find.text('Sin resultados'), findsOneWidget);
     });
 
+    testWidgets('el buscador también busca por código de producto: ofrece los productos y al elegir uno filtra el reporte', (tester) async {
+      final repo = await pump(tester);
+      await choose(tester, 'Vendedor');
+      expect(find.widgetWithText(TextField, 'Buscar por nombre o código de producto'), findsOneWidget);
+
+      // Una letra no busca; con dos o más, tras una pausa, se ofrecen los códigos que coinciden.
+      await tester.enterText(find.byType(SearchBar), 'e');
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(repo.codeSearches, isEmpty);
+
+      await tester.enterText(find.byType(SearchBar), 'EVO.5');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(repo.codeSearches, ['EVO.5']);
+      expect(find.text('Código de producto'), findsOneWidget);
+      expect(find.text('EVO.4'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ListTile, 'EVO.5'));
+      await tester.pumpAndSettle();
+
+      // El reporte se pide solo con lo vendido de ese producto, queda el chip y el buscador se vacía.
+      expect(repo.calls.last.kind, ReportKind.vendedores);
+      expect(repo.calls.last.filters.productCode, 'EVO.5');
+      expect(find.text('Producto: EVO.5'), findsOneWidget);
+      expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, isEmpty);
+      expect(find.text('EVO.4'), findsNothing);
+    });
+
     testWidgets('el filtro "Código de producto" solo sale en los reportes por entidad y cuenta solo ese producto', (tester) async {
       final repo = await pump(tester);
 

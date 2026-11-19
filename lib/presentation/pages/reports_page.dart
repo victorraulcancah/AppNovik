@@ -442,6 +442,10 @@ class _ReportsPageState extends State<ReportsPage> {
               ? () => reports.selectKind(ReportKind.general)
               : null,
           onSearch: (text) => reports.setRankingSearch(kind, text),
+          // Lo escrito también se busca como código de producto: elegir uno filtra el reporte por él.
+          onSearchCodes: (text) async =>
+              (await reports.searchProductCodes(text)).fold((_) => <ReportProductOption>[], (list) => list),
+          onPickCode: (code) => reports.applyFilters(reports.filters.copyWith(productCode: code)),
           onRefresh: reports.refresh,
           onRetry: () => reports.retryRanking(kind),
           onLoadMore: () => reports.loadMoreRanking(kind),

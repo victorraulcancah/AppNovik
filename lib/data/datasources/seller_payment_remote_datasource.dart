@@ -39,18 +39,25 @@ abstract class SellerPaymentRemoteDataSource {
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   });
 
-  /// Editar un pago de saldo a favor (`edit-payment-seller`): solo método y descripción.
+  /// Editar un pago de saldo a favor (`edit-payment-seller`): solo el método de pago.
   Future<void> editPayment(
     String token, {
     required int id,
     required int paymentMethodId,
-    String? descripcion,
   });
 
   Future<void> deletePayment(String token, {required int id, required bool afterConfirm});
+
+  /// El historial de notas del pago y si el usuario puede escribir una.
+  Future<SellerPaymentNotes> getNotes(String token, {required int paymentId});
+
+  /// Agrega una nota al pago, a nombre de quien la escribe.
+  Future<SellerPaymentNote> addNote(String token, {required int paymentId, required String texto});
+
+  /// Elimina una nota: queda en el historial como eliminada. Devuelve la nota ya eliminada.
+  Future<SellerPaymentNote> deleteNote(String token, {required int noteId});
 }
 
 class SellerPaymentRemoteDataSourceImpl implements SellerPaymentRemoteDataSource {
@@ -215,16 +222,15 @@ class SellerPaymentRemoteDataSourceImpl implements SellerPaymentRemoteDataSource
     required int id,
     required int paymentMethodId,
     double? monto,
-    String? descripcionAdicional,
   }) async {
     await sendApiRequest(
       () => client.put(
         _uri('/pagos-vendedores/edit-pre-confirm/$id'),
         headers: ApiConstants.authHeaders(token),
+        // La descripción ya no se edita aquí: son las notas del pago.
         body: json.encode({
           'payment_method_id': paymentMethodId,
           'monto': ?monto,
-          'descripcion_adicional': descripcionAdicional,
         }),
       ),
     );
@@ -235,18 +241,49 @@ class SellerPaymentRemoteDataSourceImpl implements SellerPaymentRemoteDataSource
     String token, {
     required int id,
     required int paymentMethodId,
-    String? descripcion,
   }) async {
     await sendApiRequest(
       () => client.put(
         _uri('/pagos-vendedores/edit-payment-seller/$id'),
         headers: ApiConstants.authHeaders(token),
-        body: json.encode({
-          'payment_method_id': paymentMethodId,
-          'descripcion': descripcion,
-        }),
+        body: json.encode({'payment_method_id': paymentMethodId}),
       ),
     );
+  }
+
+  @override
+  Future<SellerPaymentNotes> getNotes(String token, {required int paymentId}) async {
+    final body = await sendApiRequest(
+      () => client.get(
+        _uri('/pagos-vendedores/$paymentId/notas'),
+        headers: ApiConstants.authHeaders(token),
+      ),
+      retry: true,
+    );
+    return body is Map ? sellerPaymentNotesFromJson(body.cast<String, dynamic>()) : const SellerPaymentNotes();
+  }
+
+  @override
+  Future<SellerPaymentNote> addNote(String token, {required int paymentId, required String texto}) async {
+    final body = await sendApiRequest(
+      () => client.post(
+        _uri('/pagos-vendedores/$paymentId/notas'),
+        headers: ApiConstants.authHeaders(token),
+        body: json.encode({'texto': texto}),
+      ),
+    );
+    return sellerPaymentNoteFromJson((body as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<SellerPaymentNote> deleteNote(String token, {required int noteId}) async {
+    final body = await sendApiRequest(
+      () => client.delete(
+        _uri('/pagos-vendedores/notas/$noteId'),
+        headers: ApiConstants.authHeaders(token),
+      ),
+    );
+    return sellerPaymentNoteFromJson((body as Map).cast<String, dynamic>());
   }
 
   @override
