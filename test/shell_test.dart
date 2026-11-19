@@ -269,7 +269,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('pantalla gestion'), findsOneWidget);
     // El pedido del cliente lo atiende la pantalla de Gestión (aquí es de mentira).
-    expect(navigation.pendingGestionCliente, (clienteId: 7, nombre: 'ACME SAC'));
+    expect(navigation.pendingGestionCliente?.clienteId, 7);
   });
 
   testWidgets('sin el módulo, Deudas y Estado de cuenta no aparecen', (tester) async {

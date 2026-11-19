@@ -100,6 +100,19 @@ GestionRegistro gestionRegistroFromJson(Map<String, dynamic> j) {
 
 GestionRegistro? _registroOrNull(dynamic raw) => raw is Map<String, dynamic> ? gestionRegistroFromJson(raw) : null;
 
+GestionPeriodo _periodo(Map<String, dynamic> p) => GestionPeriodo(
+      desde: _date(p['desde']),
+      hasta: _date(p['hasta']),
+      etiqueta: _text(p['etiqueta']) ?? '',
+      etiquetaAnterior: _text(p['etiqueta_anterior']) ?? '',
+      ventas: _double(p['ventas']),
+      compras: _int(p['compras']),
+      ticketPromedio: _double(p['ticket_promedio']),
+      ventasAnterior: _double(p['ventas_anterior']),
+      variacion: _double(p['variacion']),
+      caidaPct: _doubleOrNull(p['caida_pct']),
+    );
+
 GestionFicha gestionFichaFromJson(dynamic json) {
   final j = _map(json);
   final c = _map(j['cliente']);
@@ -139,18 +152,7 @@ GestionFicha gestionFichaFromJson(dynamic json) {
               monto: _double(compra['monto']),
             ),
     ),
-    periodo: GestionPeriodo(
-      desde: _date(p['desde']),
-      hasta: _date(p['hasta']),
-      etiqueta: _text(p['etiqueta']) ?? '',
-      etiquetaAnterior: _text(p['etiqueta_anterior']) ?? '',
-      ventas: _double(p['ventas']),
-      compras: _int(p['compras']),
-      ticketPromedio: _double(p['ticket_promedio']),
-      ventasAnterior: _double(p['ventas_anterior']),
-      variacion: _double(p['variacion']),
-      caidaPct: _doubleOrNull(p['caida_pct']),
-    ),
+    periodo: _periodo(p),
     ultimaGestion: _registroOrNull(j['ultima_gestion']),
     proximaGestion: _registroOrNull(j['proxima_gestion']),
     productos: [
@@ -224,3 +226,71 @@ Map<String, dynamic> gestionEdicionToJson(GestionEdicion g) {
     },
   };
 }
+
+List<GestionTop> _tops(dynamic raw) => [
+      for (final t in _list(raw))
+        GestionTop(
+          nombre: _text(t['nombre']) ?? '-',
+          codigo: _text(t['codigo']),
+          monto: _double(t['monto']),
+          porcentaje: _double(t['porcentaje']),
+        ),
+    ];
+
+List<GestionMes> _meses(dynamic raw) => [
+      for (final m in _list(raw))
+        GestionMes(
+          mes: _int(m['mes']),
+          anterior: _double(m['anterior']),
+          actual: _doubleOrNull(m['actual']),
+          corte: _text(m['corte']),
+        ),
+    ];
+
+/// La pestaña Compras (`GET /seguimiento-clientes/{cliente}/compras`).
+GestionCompras gestionComprasFromJson(dynamic json) {
+  final j = _map(json);
+  return GestionCompras(
+    periodo: _periodo(_map(j['periodo'])),
+    anioActual: _int(j['anio_actual']),
+    anioAnterior: _int(j['anio_anterior']),
+    anioListas: _int(j['anio_listas']),
+    hasta: _text(j['hasta']) ?? '',
+    evolucion: _meses(j['evolucion']),
+    acumulado: _meses(j['acumulado']),
+    ultimasCompras: [
+      for (final c in _list(j['ultimas_compras']))
+        GestionUltimaCompra(
+          id: _int(c['id']),
+          fecha: _date(c['fecha']),
+          documento: _text(c['documento']) ?? '',
+          monto: _double(c['monto']),
+        ),
+    ],
+    topProductos: _tops(j['top_productos']),
+    topMarcas: _tops(j['top_marcas']),
+    topCategorias: _tops(j['top_categorias']),
+  );
+}
+
+/// La pestaña Documentos (`GET /seguimiento-clientes/{cliente}/documentos`): las cotizaciones y las ventas.
+List<GestionDocumento> gestionDocumentosFromJson(dynamic json) {
+  return [
+    for (final d in _list(_map(json)['data']))
+      GestionDocumento(
+        clave: _text(d['clave']) ?? '${d['tipo']}-${d['id']}',
+        id: _int(d['id']),
+        tipo: GestionDocumentoTipo.fromKey(d['tipo']),
+        numero: _text(d['numero']) ?? '-',
+        nroDocumento: _int(d['nro_documento']),
+        fecha: _date(d['fecha']),
+        monto: _double(d['monto']),
+        estado: _text(d['estado']) ?? '',
+        ejecutivo: _text(d['ejecutivo']),
+        almacen: _text(d['almacen']),
+      ),
+  ];
+}
+
+/// `2026-10-30`: la fecha que espera el backend en los filtros de `documentos`.
+String gestionDiaApi(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';

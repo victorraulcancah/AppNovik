@@ -4,7 +4,9 @@ import '../../core/constants/api_constants.dart';
 import '../../core/errors/exceptions.dart';
 import '../../core/network/api_request.dart';
 import '../../core/network/connection_monitor.dart';
+import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/gestion_entity.dart';
+import '../models/document_model.dart';
 import '../models/gestion_model.dart';
 
 abstract class GestionRemoteDataSource {
@@ -23,6 +25,15 @@ abstract class GestionRemoteDataSource {
   Future<void> editar(String token, int gestionId, GestionEdicion gestion);
 
   Future<void> reprogramar(String token, int gestionId, DateTime proximo);
+
+  Future<GestionCompras> getCompras(String token, int clienteId, {int? anio});
+
+  Future<List<GestionDocumento>> getDocumentos(String token, int clienteId, {required DateTime desde, required DateTime hasta});
+
+  Future<DocumentEntity> getVenta(String token, int id);
+
+  /// `null` si la cotización no aparece en la lista.
+  Future<DocumentEntity?> getCotizacion(String token, {required int companyId, required int id, required int nroDocumento});
 }
 
 /// El texto de un error del servidor: el primer mensaje de `errors{campo: [mensaje]}` (validación de
@@ -139,5 +150,68 @@ class GestionRemoteDataSourceImpl implements GestionRemoteDataSource {
         body: json.encode({'proximo_seguimiento': gestionFechaHoraApi(proximo)}),
       ),
     );
+  }
+
+  @override
+  Future<GestionCompras> getCompras(String token, int clienteId, {int? anio}) async => gestionComprasFromJson(
+        await _send(
+          () => client.get(
+            _uri('/$clienteId/compras', {if (anio != null) 'anio': '$anio'}),
+            headers: ApiConstants.authHeaders(token),
+          ),
+          retry: true,
+        ),
+      );
+
+  @override
+  Future<List<GestionDocumento>> getDocumentos(
+    String token,
+    int clienteId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) async =>
+      gestionDocumentosFromJson(
+        await _send(
+          () => client.get(
+            _uri('/$clienteId/documentos', {'desde': gestionDiaApi(desde), 'hasta': gestionDiaApi(hasta)}),
+            headers: ApiConstants.authHeaders(token),
+          ),
+          retry: true,
+        ),
+      );
+
+  @override
+  Future<DocumentEntity> getVenta(String token, int id) async {
+    final body = await _send(
+      () => client.get(Uri.parse('${ApiConstants.baseUrl}/ventas/$id'), headers: ApiConstants.authHeaders(token)),
+      retry: true,
+    );
+    // La web acepta la venta suelta o dentro de `data`.
+    final venta = body is Map<String, dynamic> && body['data'] is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>
+        : body as Map<String, dynamic>;
+    return documentFromJson(venta, DocumentKind.venta);
+  }
+
+  @override
+  Future<DocumentEntity?> getCotizacion(
+    String token, {
+    required int companyId,
+    required int id,
+    required int nroDocumento,
+  }) async {
+    final body = await _send(
+      () => client.get(
+        Uri.parse('${ApiConstants.baseUrl}/cotizaciones').replace(
+          queryParameters: {'company_id': '$companyId', 'search_input': '$nroDocumento'},
+        ),
+        headers: ApiConstants.authHeaders(token),
+      ),
+      retry: true,
+    );
+    final lista = DocumentPageModel.fromJson(body as Map<String, dynamic>, DocumentKind.cotizacion).items;
+    if (lista.isEmpty) return null;
+    // La búsqueda por número puede traer otras que lo contienen: se toma la del cliente por su id.
+    return lista.firstWhere((d) => d.id == id, orElse: () => lista.first);
   }
 }

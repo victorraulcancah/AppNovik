@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../../domain/entities/document_entity.dart' show DocumentEntity;
 import '../../domain/entities/gestion_entity.dart';
 import '../../domain/entities/inicio_entity.dart' show TaskPeriod;
 import '../../domain/entities/session_context_entity.dart';
@@ -31,6 +32,10 @@ class GestionProvider extends ChangeNotifier {
   final RegisterGestionUseCase _register;
   final EditGestionUseCase _edit;
   final RescheduleGestionUseCase _reschedule;
+  final GetGestionComprasUseCase _getCompras;
+  final GetGestionDocumentosUseCase _getDocumentos;
+  final GetGestionVentaUseCase _getVenta;
+  final GetGestionCotizacionUseCase _getCotizacion;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -45,9 +50,17 @@ class GestionProvider extends ChangeNotifier {
     required RegisterGestionUseCase registerUseCase,
     required EditGestionUseCase editUseCase,
     required RescheduleGestionUseCase rescheduleUseCase,
+    required GetGestionComprasUseCase getComprasUseCase,
+    required GetGestionDocumentosUseCase getDocumentosUseCase,
+    required GetGestionVentaUseCase getVentaUseCase,
+    required GetGestionCotizacionUseCase getCotizacionUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? clock,
-  })  : _getCatalogo = getCatalogoUseCase,
+  })  : _getCompras = getComprasUseCase,
+        _getDocumentos = getDocumentosUseCase,
+        _getVenta = getVentaUseCase,
+        _getCotizacion = getCotizacionUseCase,
+        _getCatalogo = getCatalogoUseCase,
         _searchClients = searchClientsUseCase,
         _getTareas = getTareasUseCase,
         _getFicha = getFichaUseCase,
@@ -58,9 +71,10 @@ class GestionProvider extends ChangeNotifier {
         _onSessionExpired = onSessionExpired,
         _clock = clock ?? DateTime.now {
     rango = _rangoDelAnio();
+    rangoDocumentos = _rangoDelAnio();
   }
 
-  /// La pestaña de la ficha (0 Resumen, 1 Seguimiento).
+  /// La pestaña de la ficha (0 Resumen, 1 Seguimiento, 2 Compras, 3 Documentos).
   final AppTabsController tabs = AppTabsController();
 
   int? _companyId;
@@ -74,6 +88,8 @@ class GestionProvider extends ChangeNotifier {
   int _tareasRequest = 0;
   int _fichaRequest = 0;
   int _historialRequest = 0;
+  int _comprasRequest = 0;
+  int _documentosRequest = 0;
 
   // Catálogo de resultados.
   GestionCatalogo? catalogo;
@@ -114,6 +130,26 @@ class GestionProvider extends ChangeNotifier {
   GestionContacto? filtroTipo;
   String? filtroResultado;
   late DateTimeRange rango;
+
+  // Pestaña Compras del cliente abierto.
+  GestionCompras? compras;
+  bool comprasLoading = false;
+  String? comprasError;
+
+  /// Año de las últimas compras y los top 10 que se pidió; sin elegir, el actual (el que decide el servidor).
+  int? anioCompras;
+
+  // Pestaña Documentos del cliente abierto.
+  List<GestionDocumento>? documentos;
+  bool documentosLoading = false;
+  String? documentosError;
+  late DateTimeRange rangoDocumentos;
+
+  /// `todos`, `cotizaciones` o `ventas`.
+  String vistaDocumentos = 'todos';
+
+  /// Se está trayendo un documento para abrir su comprobante: no se abre otro a la vez.
+  bool abriendoDocumento = false;
 
   /// Si el usuario puede ver Gestión (`clientes.seguimiento`).
   bool get canView => _canView;
@@ -173,6 +209,17 @@ class GestionProvider extends ChangeNotifier {
     filtroTipo = null;
     filtroResultado = null;
     rango = _rangoDelAnio();
+    _comprasRequest++;
+    _documentosRequest++;
+    compras = null;
+    comprasLoading = false;
+    comprasError = null;
+    anioCompras = null;
+    documentos = null;
+    documentosLoading = false;
+    documentosError = null;
+    rangoDocumentos = _rangoDelAnio();
+    vistaDocumentos = 'todos';
   }
 
   /// Del 1 de enero a hoy: el rango con el que arranca el historial.
@@ -349,7 +396,12 @@ class GestionProvider extends ChangeNotifier {
 
   /// Vuelve a pedir la ficha y el historial del cliente abierto sin mostrar la carga (al jalar para
   /// refrescar).
-  Future<void> refreshClient() => Future.wait([_loadFicha(silent: true), _loadHistorial(silent: true)]);
+  Future<void> refreshClient() => Future.wait([
+        _loadFicha(silent: true),
+        _loadHistorial(silent: true),
+        if (compras != null) loadCompras(silent: true),
+        if (documentos != null) loadDocumentos(silent: true),
+      ]);
 
   /// Reintenta cargar la ficha del cliente abierto tras un error.
   Future<void> retryClient() async {
@@ -417,6 +469,136 @@ class GestionProvider extends ChangeNotifier {
     );
     historialLoading = false;
     _notify();
+  }
+
+  // ------------------------------------------------------------------------------------ compras
+
+  /// Pide las compras la primera vez que se abre la pestaña.
+  Future<void> ensureCompras() async {
+    if (compras == null && !comprasLoading) await loadCompras();
+  }
+
+  /// Pide la pestaña Compras. [anio] elige de qué año son las últimas compras y los top 10; sin él se queda el
+  /// que ya estaba elegido (o el actual). Con [silent] no se muestra la carga.
+  Future<void> loadCompras({int? anio, bool silent = false}) async {
+    final id = clienteId;
+    if (id == null) return;
+    final epoch = _epoch;
+    final request = ++_comprasRequest;
+    if (anio != null) anioCompras = anio;
+    if (!silent) {
+      comprasLoading = true;
+      comprasError = null;
+      _notify();
+    }
+    final result = await _getCompras(id, anio: anioCompras);
+    if (epoch != _epoch || request != _comprasRequest) return;
+    result.fold(
+      (failure) {
+        _isExpired(failure);
+        // Con datos a la vista un fallo al cambiar de año no los borra: se vuelve al año que se veía.
+        if (compras == null) {
+          comprasError = failure.message;
+        } else {
+          anioCompras = compras!.anioListas;
+          comprasError = failure.message;
+        }
+      },
+      (data) {
+        compras = data;
+        comprasError = null;
+      },
+    );
+    comprasLoading = false;
+    _notify();
+  }
+
+  /// Cambia el año de las últimas compras y los top 10 (los gráficos muestran siempre los dos años).
+  Future<void> setAnioCompras(int anio) => loadCompras(anio: anio);
+
+  // --------------------------------------------------------------------------------- documentos
+
+  Future<void> ensureDocumentos() async {
+    if (documentos == null && !documentosLoading) await loadDocumentos();
+  }
+
+  Future<void> loadDocumentos({bool silent = false}) async {
+    final id = clienteId;
+    if (id == null) return;
+    final epoch = _epoch;
+    final request = ++_documentosRequest;
+    if (!silent) {
+      documentosLoading = true;
+      documentosError = null;
+      _notify();
+    }
+    final result = await _getDocumentos(id, desde: rangoDocumentos.start, hasta: rangoDocumentos.end);
+    if (epoch != _epoch || request != _documentosRequest) return;
+    result.fold(
+      (failure) {
+        _isExpired(failure);
+        // Sin la lista de ese rango no se muestra la de otro: queda el mensaje y se puede reintentar.
+        if (!silent) {
+          documentosError = failure.message;
+          documentos = null;
+        }
+      },
+      (data) {
+        documentos = data;
+        documentosError = null;
+      },
+    );
+    documentosLoading = false;
+    _notify();
+  }
+
+  /// Cambia el rango de fechas: vuelve a "Todos" y pide los documentos de ese rango.
+  Future<void> setRangoDocumentos(DateTimeRange value) {
+    rangoDocumentos = value;
+    vistaDocumentos = 'todos';
+    return loadDocumentos();
+  }
+
+  void setVistaDocumentos(String value) {
+    vistaDocumentos = value;
+    _notify();
+  }
+
+  List<GestionDocumento> get _cotizaciones => [for (final d in documentos ?? const <GestionDocumento>[]) if (d.esCotizacion) d];
+
+  /// Cuántos documentos hay de cada vista (`todos`, `cotizaciones` o `ventas`: facturas, boletas y tickets).
+  int conteoDocumentos(String vista) {
+    final todos = documentos ?? const <GestionDocumento>[];
+    return switch (vista) {
+      'cotizaciones' => _cotizaciones.length,
+      'ventas' => todos.length - _cotizaciones.length,
+      _ => todos.length,
+    };
+  }
+
+  List<GestionDocumento> get documentosVisibles {
+    final todos = documentos ?? const <GestionDocumento>[];
+    return switch (vistaDocumentos) {
+      'cotizaciones' => _cotizaciones,
+      'ventas' => [for (final d in todos) if (!d.esCotizacion) d],
+      _ => todos,
+    };
+  }
+
+  /// Trae una venta o una cotización completa para abrir su comprobante. Una sola a la vez.
+  Future<Either<Failure, DocumentEntity>> abrirDocumento({required bool cotizacion, required int id, int nroDocumento = 0}) async {
+    if (abriendoDocumento) return Either.left(const ValidationFailure('Ya se está abriendo un documento'));
+    final companyId = _companyId;
+    if (cotizacion && companyId == null) return Either.left(const ValidationFailure('No hay una empresa activa'));
+    abriendoDocumento = true;
+    _notify();
+    final result = cotizacion
+        ? await _getCotizacion(companyId: companyId!, id: id, nroDocumento: nroDocumento)
+        : await _getVenta(id);
+    abriendoDocumento = false;
+    if (result.isLeft) _isExpired(result.left);
+    _notify();
+    return result;
   }
 
   // ------------------------------------------------------------------------ filtros del historial

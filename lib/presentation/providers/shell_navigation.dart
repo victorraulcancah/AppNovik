@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../domain/entities/gestion_entity.dart' show GestionPestana;
 
 /// Permite que una pantalla pida pasar a otro módulo de la barra inferior (por ejemplo, de
 /// Documentos a Ventas al culminar una cotización). El contenedor principal atiende el pedido.
@@ -38,18 +39,18 @@ class ShellNavigation extends ChangeNotifier {
     return request;
   }
 
-  ({int clienteId, String nombre})? _pendingGestionCliente;
+  ({int clienteId, String nombre, GestionPestana pestana})? _pendingGestionCliente;
 
-  /// Pedido para Gestión: abrir la ficha de un cliente en su pestaña Seguimiento (tocar una tarea en el
-  /// Inicio). Lo atiende `GestionPage` con [takePendingGestionCliente].
-  ({int clienteId, String nombre})? get pendingGestionCliente => _pendingGestionCliente;
+  /// Pedido para Gestión: abrir la ficha de un cliente en una pestaña (por defecto Seguimiento, como al tocar una
+  /// tarea en el Inicio; es el `?pestana=` de la web). Lo atiende `GestionPage` con [takePendingGestionCliente].
+  ({int clienteId, String nombre, GestionPestana pestana})? get pendingGestionCliente => _pendingGestionCliente;
 
-  void goToGestionCliente(int clienteId, String nombre) {
-    _pendingGestionCliente = (clienteId: clienteId, nombre: nombre);
+  void goToGestionCliente(int clienteId, String nombre, {GestionPestana pestana = GestionPestana.seguimiento}) {
+    _pendingGestionCliente = (clienteId: clienteId, nombre: nombre, pestana: pestana);
     goTo('gestion');
   }
 
-  ({int clienteId, String nombre})? takePendingGestionCliente() {
+  ({int clienteId, String nombre, GestionPestana pestana})? takePendingGestionCliente() {
     final request = _pendingGestionCliente;
     _pendingGestionCliente = null;
     return request;

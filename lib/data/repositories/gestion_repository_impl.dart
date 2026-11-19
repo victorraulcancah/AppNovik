@@ -1,5 +1,7 @@
+import '../../core/errors/exceptions.dart';
 import '../../core/errors/failures.dart';
 import '../../core/utils/either.dart';
+import '../../domain/entities/document_entity.dart';
 import '../../domain/entities/gestion_entity.dart';
 import '../../domain/repositories/gestion_repository.dart';
 import '../datasources/auth_local_datasource.dart';
@@ -46,4 +48,38 @@ class GestionRepositoryImpl with TokenGuard implements GestionRepository {
   @override
   Future<Either<Failure, void>> reprogramar(int gestionId, DateTime proximo) =>
       withToken((token) => remoteDataSource.reprogramar(token, gestionId, proximo));
+
+  @override
+  Future<Either<Failure, GestionCompras>> getCompras(int clienteId, {int? anio}) =>
+      withToken((token) => remoteDataSource.getCompras(token, clienteId, anio: anio));
+
+  @override
+  Future<Either<Failure, List<GestionDocumento>>> getDocumentos(
+    int clienteId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) =>
+      withToken((token) => remoteDataSource.getDocumentos(token, clienteId, desde: desde, hasta: hasta));
+
+  @override
+  Future<Either<Failure, DocumentEntity>> getVenta(int id) =>
+      withToken((token) => remoteDataSource.getVenta(token, id));
+
+  @override
+  Future<Either<Failure, DocumentEntity>> getCotizacion({
+    required int companyId,
+    required int id,
+    required int nroDocumento,
+  }) =>
+      withToken((token) async {
+        final cotizacion = await remoteDataSource.getCotizacion(
+          token,
+          companyId: companyId,
+          id: id,
+          nroDocumento: nroDocumento,
+        );
+        // Como la web: si no aparece, "No se encontró la cotización".
+        if (cotizacion == null) throw const ServerException('No se encontró la cotización');
+        return cotizacion;
+      });
 }

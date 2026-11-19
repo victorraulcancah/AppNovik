@@ -9,6 +9,7 @@ import 'package:app_novik/data/datasources/gestion_remote_datasource.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/data/models/gestion_model.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
+import 'package:app_novik/domain/entities/document_entity.dart';
 import 'package:app_novik/domain/entities/gestion_entity.dart';
 import 'package:app_novik/domain/entities/inicio_entity.dart' show TaskEntity, TaskPeriod;
 import 'package:app_novik/domain/entities/saved_credentials_entity.dart';
@@ -24,7 +25,12 @@ import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/gestion_provider.dart';
 import 'package:app_novik/presentation/providers/shell_navigation.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
+import 'package:app_novik/presentation/components/app_area_chart.dart';
+import 'package:app_novik/presentation/components/app_charts.dart';
+import 'package:app_novik/presentation/components/app_tabs.dart';
 import 'package:app_novik/presentation/utils/contact_launcher.dart';
+import 'package:app_novik/presentation/utils/gestion_receipt.dart';
+import 'package:app_novik/presentation/widgets/gestion_abrir.dart';
 import 'package:app_novik/presentation/widgets/gestion_form.dart';
 import 'package:app_novik/presentation/widgets/inicio_executive_view.dart';
 import 'package:flutter/material.dart';
@@ -243,6 +249,88 @@ GestionFicha _ficha(
       ],
     );
 
+GestionCompras _compras({int anioListas = 2026, double? caida = 45}) => GestionCompras(
+      periodo: GestionPeriodo(
+        desde: DateTime(2026),
+        hasta: DateTime(2026, 11, 19),
+        etiqueta: '1 ene - 19 nov 2026',
+        etiquetaAnterior: '1 ene - 19 nov 2025',
+        ventas: 5500,
+        compras: 11,
+        ticketPromedio: 500,
+        ventasAnterior: 10000,
+        variacion: -4500,
+        caidaPct: caida,
+      ),
+      anioActual: 2026,
+      anioAnterior: 2025,
+      anioListas: anioListas,
+      hasta: '19/11',
+      evolucion: [
+        for (var m = 1; m <= 12; m++) GestionMes(mes: m, anterior: m * 100.0, actual: m <= 11 ? m * 50.0 : 0),
+      ],
+      acumulado: [
+        for (var m = 1; m <= 12; m++)
+          GestionMes(
+            mes: m,
+            anterior: m * 1000.0,
+            actual: m <= 11 ? m * 500.0 : null,
+            corte: m >= 11 ? 'al 19 nov' : null,
+          ),
+      ],
+      ultimasCompras: [
+        GestionUltimaCompra(id: 5, fecha: DateTime(2026, 11, 7), documento: 'F001-1250', monto: 1234.5),
+        GestionUltimaCompra(id: 4, fecha: DateTime(2026, 10, 2), documento: 'B001-00123', monto: 80),
+      ],
+      topProductos: const [
+        GestionTop(nombre: 'Cable UTP', codigo: 'P-100', monto: 3000, porcentaje: 54.5),
+        GestionTop(nombre: 'Conector', codigo: 'P-200', monto: 1, porcentaje: 0.04),
+        GestionTop(nombre: 'Otros', monto: 2500, porcentaje: 45.5),
+      ],
+      topMarcas: const [GestionTop(nombre: 'Marca X', monto: 4000, porcentaje: 72.7)],
+      topCategorias: const [],
+    );
+
+List<GestionDocumento> _documentos() => [
+      GestionDocumento(
+        clave: 'cotizacion-21',
+        id: 21,
+        tipo: GestionDocumentoTipo.cotizacion,
+        numero: 'C001-0021',
+        nroDocumento: 21,
+        fecha: DateTime(2026, 11, 5),
+        monto: 800,
+        estado: 'Pendiente',
+        ejecutivo: 'FRANCIS BULNES GONZALES',
+        almacen: 'Lima',
+      ),
+      GestionDocumento(
+        clave: 'venta-5',
+        id: 5,
+        tipo: GestionDocumentoTipo.factura,
+        numero: 'F001-1250',
+        nroDocumento: 1250,
+        fecha: DateTime(2026, 11, 7),
+        monto: 1234.5,
+        estado: 'Emitido',
+        ejecutivo: 'FRANCIS BULNES GONZALES',
+        almacen: 'Lima',
+      ),
+      GestionDocumento(
+        clave: 'venta-6',
+        id: 6,
+        tipo: GestionDocumentoTipo.venta,
+        numero: 'V001-0012',
+        nroDocumento: 12,
+        fecha: DateTime(2026, 10, 20),
+        monto: 50,
+        estado: 'Anulado',
+      ),
+    ];
+
+DocumentEntity _comprobante(int id, {DocumentKind kind = DocumentKind.venta}) =>
+    DocumentEntity(id: id, kind: kind, numero: '$id', comprobante: 'C$id');
+
 // ---------------------------------------------------------------------------------------------
 // Repositorio falso
 // ---------------------------------------------------------------------------------------------
@@ -337,6 +425,54 @@ class _FakeGestionRepository implements GestionRepository {
     final failure = writeFailure;
     return failure != null ? Either.left(failure) : Either.rightVoid();
   }
+
+  Failure? comprasFailure;
+  double? comprasCaida = 45;
+  final comprasAnios = <int?>[];
+
+  @override
+  Future<Either<Failure, GestionCompras>> getCompras(int clienteId, {int? anio}) async {
+    comprasAnios.add(anio);
+    final failure = comprasFailure;
+    return failure != null ? Either.left(failure) : Either.right(_compras(anioListas: anio ?? 2026, caida: comprasCaida));
+  }
+
+  List<GestionDocumento> documentos = _documentos();
+  Failure? documentosFailure;
+  final documentosRangos = <({DateTime desde, DateTime hasta})>[];
+
+  @override
+  Future<Either<Failure, List<GestionDocumento>>> getDocumentos(
+    int clienteId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    documentosRangos.add((desde: desde, hasta: hasta));
+    final failure = documentosFailure;
+    return failure != null ? Either.left(failure) : Either.right(documentos);
+  }
+
+  Failure? abrirFailure;
+  final ventasAbiertas = <int>[];
+  final cotizacionesAbiertas = <({int companyId, int id, int nroDocumento})>[];
+
+  @override
+  Future<Either<Failure, DocumentEntity>> getVenta(int id) async {
+    ventasAbiertas.add(id);
+    final failure = abrirFailure;
+    return failure != null ? Either.left(failure) : Either.right(_comprobante(id));
+  }
+
+  @override
+  Future<Either<Failure, DocumentEntity>> getCotizacion({
+    required int companyId,
+    required int id,
+    required int nroDocumento,
+  }) async {
+    cotizacionesAbiertas.add((companyId: companyId, id: id, nroDocumento: nroDocumento));
+    final failure = abrirFailure;
+    return failure != null ? Either.left(failure) : Either.right(_comprobante(id, kind: DocumentKind.cotizacion));
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -407,6 +543,10 @@ GestionProvider _provider(_FakeGestionRepository repo, {SessionContextEntity? se
       registerUseCase: RegisterGestionUseCase(repository: repo),
       editUseCase: EditGestionUseCase(repository: repo),
       rescheduleUseCase: RescheduleGestionUseCase(repository: repo),
+      getComprasUseCase: GetGestionComprasUseCase(repository: repo),
+      getDocumentosUseCase: GetGestionDocumentosUseCase(repository: repo),
+      getVentaUseCase: GetGestionVentaUseCase(repository: repo),
+      getCotizacionUseCase: GetGestionCotizacionUseCase(repository: repo),
       onSessionExpired: onExpired,
       clock: () => _now,
     )..syncSession(session ?? _session());
@@ -424,6 +564,7 @@ Future<_Env> _pump(
   Size size = const Size(400, 2600),
   void Function(_FakeGestionRepository repo)? setUp,
   ({int clienteId, String nombre})? pending,
+  GestionPestana pestana = GestionPestana.seguimiento,
   bool settle = true,
 }) async {
   if (look != null) {
@@ -439,7 +580,7 @@ Future<_Env> _pump(
   final provider = _provider(repo, session: session);
   addTearDown(provider.dispose);
   final navigation = ShellNavigation();
-  if (pending != null) navigation.goToGestionCliente(pending.clienteId, pending.nombre);
+  if (pending != null) navigation.goToGestionCliente(pending.clienteId, pending.nombre, pestana: pestana);
 
   await tester.pumpWidget(
     MultiProvider(
@@ -454,6 +595,15 @@ Future<_Env> _pump(
   );
   if (settle) await tester.pumpAndSettle();
   return (repo: repo, provider: provider, navigation: navigation);
+}
+
+/// Toca una pestaña de la ficha (la barra se desplaza de lado): primero la deja a la vista.
+Future<void> _tapTab(WidgetTester tester, String label) async {
+  final tab = find.descendant(of: find.byType(AppTabBar), matching: find.text(label));
+  await tester.ensureVisible(tab);
+  await tester.pumpAndSettle();
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
 }
 
 /// Toca una etiqueta de la fila de filtros (que se desplaza de lado): primero la deja a la vista.
@@ -480,17 +630,26 @@ Future<void> _openFromTask(WidgetTester tester, String cliente) async {
 void main() {
   late Future<bool> Function(Uri uri) originalOpen;
   late List<Uri> opened;
+  late Future<void> Function(BuildContext, DocumentEntity) originalReceipt;
+  // Los comprobantes que se abrieron (el PDF no corre en las pruebas).
+  late List<DocumentEntity> receipts;
 
   setUp(() {
     originalOpen = ContactLauncher.open;
+    originalReceipt = GestionReceipt.open;
     opened = [];
+    receipts = [];
     ContactLauncher.open = (uri) async {
       opened.add(uri);
       return true;
     };
+    GestionReceipt.open = (context, document) async => receipts.add(document);
   });
 
-  tearDown(() => ContactLauncher.open = originalOpen);
+  tearDown(() {
+    ContactLauncher.open = originalOpen;
+    GestionReceipt.open = originalReceipt;
+  });
 
   // -------------------------------------------------------------------------------------------
   group('Modelo', () {
@@ -1413,9 +1572,12 @@ void main() {
       expect(find.text('Principales productos (año actual)'), findsOneWidget);
       expect(find.textContaining('P-100'), findsOneWidget);
       expect(find.text('S/ 3,000 · 54.5 %'), findsOneWidget);
-      // Las pestañas Compras y Documentos son de otra fase.
-      expect(find.text('Compras'), findsNothing);
-      expect(find.text('Documentos'), findsNothing);
+      // Las cuatro pestañas, en el orden de la web.
+      final etiquetas = ['Resumen', 'Seguimiento', 'Compras', 'Documentos'];
+      final izquierda = [
+        for (final e in etiquetas) tester.getTopLeft(find.descendant(of: find.byType(AppTabBar), matching: find.text(e))).dx,
+      ];
+      expect(izquierda, orderedEquals([...izquierda]..sort()));
     });
 
     testWidgets('Resumen sin gestiones ofrece registrar la primera (solo con permiso de registrar)', (tester) async {
@@ -1923,6 +2085,615 @@ void main() {
   });
 
   // -------------------------------------------------------------------------------------------
+  group('Compras y Documentos: modelo y datasource', () {
+    test('las compras leen los gráficos (el acumulado se corta con null), las listas y los top 10', () {
+      final compras = gestionComprasFromJson({
+        'periodo': {
+          'desde': '2026-01-01',
+          'hasta': '2026-11-19',
+          'etiqueta': '1 ene - 19 nov 2026',
+          'etiqueta_anterior': '1 ene - 19 nov 2025',
+          'ventas': 5500,
+          'compras': 11,
+          'ticket_promedio': 500,
+          'ventas_anterior': 10000,
+          'variacion': -4500,
+          'caida_pct': 45,
+        },
+        'anio_actual': 2026,
+        'anio_anterior': 2025,
+        'anio_listas': 2025,
+        'hasta': '19/11',
+        'evolucion': [
+          {'mes': 1, 'anterior': 100, 'actual': 50.5},
+        ],
+        'acumulado': [
+          {'mes': 11, 'anterior': 9000, 'actual': 4000, 'corte': 'al 19 nov'},
+          {'mes': 12, 'anterior': 10000, 'actual': null, 'corte': null},
+        ],
+        'ultimas_compras': [
+          {'id': 5, 'fecha': '2026-11-07', 'documento': 'F001-1250', 'monto': 1234.5},
+        ],
+        'top_productos': [
+          {'nombre': 'Cable UTP', 'codigo': 'P-100', 'monto': 3000, 'porcentaje': 54.5},
+          {'nombre': 'Otros', 'codigo': null, 'monto': 2500, 'porcentaje': 45.5},
+        ],
+        'top_marcas': [],
+        'top_categorias': [
+          {'nombre': 'Cables', 'monto': 10, 'porcentaje': 100},
+        ],
+      });
+
+      expect(compras.anioListas, 2025);
+      expect(compras.hasta, '19/11');
+      expect(compras.periodo.caidaPct, 45);
+      expect(compras.evolucion.single.actual, 50.5);
+      expect(compras.acumulado.last.actual, isNull);
+      expect(compras.acumulado.first.corte, 'al 19 nov');
+      expect(compras.ultimasCompras.single.fecha, DateTime(2026, 11, 7));
+      expect(compras.topProductos.first.codigo, 'P-100');
+      expect(compras.topProductos.last.esOtros, isTrue);
+      expect(compras.topMarcas, isEmpty);
+      expect(compras.topCategorias.single.codigo, isNull);
+    });
+
+    test('los documentos distinguen cotizaciones de ventas y leen el estado', () {
+      final lista = gestionDocumentosFromJson({
+        'success': true,
+        'data': [
+          {
+            'clave': 'cotizacion-21',
+            'id': 21,
+            'tipo': 'cotizacion',
+            'numero': 'C001-0021',
+            'nro_documento': 21,
+            'fecha': '2026-11-05',
+            'monto': 800,
+            'estado': 'Anulada',
+            'ejecutivo': null,
+            'almacen': 'Lima',
+          },
+          {'clave': 'venta-5', 'id': 5, 'tipo': 'boleta', 'numero': 'B001-00123', 'fecha': '2026-11-07', 'monto': 80.5, 'estado': 'Emitido'},
+        ],
+      });
+
+      expect(lista.first.esCotizacion, isTrue);
+      expect(lista.first.anulado, isTrue);
+      expect(lista.first.ejecutivo, isNull);
+      expect(lista.first.fecha, DateTime(2026, 11, 5));
+      expect(lista.last.tipo, GestionDocumentoTipo.boleta);
+      expect(lista.last.esCotizacion, isFalse);
+      expect(lista.last.anulado, isFalse);
+      expect(gestionDiaApi(DateTime(2026, 3, 4)), '2026-03-04');
+    });
+
+    test('compras pide el año solo si se eligió y documentos manda desde y hasta', () async {
+      final requests = <http.Request>[];
+      final ds = GestionRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          requests.add(r);
+          return http.Response(jsonEncode({'success': true, 'data': []}), 200);
+        }),
+      );
+
+      await ds.getCompras('tok', 7);
+      await ds.getCompras('tok', 7, anio: 2025);
+      await ds.getDocumentos('tok', 7, desde: DateTime(2026), hasta: DateTime(2026, 11, 19));
+
+      expect(requests.map((r) => r.url.path), [
+        '$_apiPath/seguimiento-clientes/7/compras',
+        '$_apiPath/seguimiento-clientes/7/compras',
+        '$_apiPath/seguimiento-clientes/7/documentos',
+      ]);
+      expect(requests[0].url.queryParameters, isEmpty);
+      expect(requests[1].url.queryParameters, {'anio': '2025'});
+      expect(requests[2].url.queryParameters, {'desde': '2026-01-01', 'hasta': '2026-11-19'});
+      expect(requests.map((r) => r.headers['Authorization']), everyElement('Bearer tok'));
+    });
+
+    test('un 403 de compras o documentos llega con el mensaje del servidor', () async {
+      final ds = GestionRemoteDataSourceImpl(
+        client: MockClient(
+          (_) async => http.Response('{"success":false,"message":"Este cliente no es de tu cartera"}', 403),
+        ),
+      );
+
+      await expectLater(
+        ds.getCompras('t', 7),
+        throwsA(isA<ServerException>().having((e) => e.message, 'message', 'Este cliente no es de tu cartera')),
+      );
+      await expectLater(
+        ds.getDocumentos('t', 7, desde: DateTime(2026), hasta: DateTime(2026, 2)),
+        throwsA(isA<ServerException>().having((e) => e.message, 'message', 'Este cliente no es de tu cartera')),
+      );
+    });
+
+    test('una venta se pide por su id, suelta o dentro de data', () async {
+      final paths = <String>[];
+      var dentro = false;
+      final ds = GestionRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          paths.add(r.url.path);
+          final venta = {'id': 5, 'nro_documento': 12, 'estado': 1};
+          return http.Response(jsonEncode(dentro ? {'data': venta} : venta), 200);
+        }),
+      );
+
+      final suelta = await ds.getVenta('t', 5);
+      dentro = true;
+      final envuelta = await ds.getVenta('t', 5);
+
+      expect(paths, ['$_apiPath/ventas/5', '$_apiPath/ventas/5']);
+      expect(suelta.id, 5);
+      expect(suelta.kind, DocumentKind.venta);
+      expect(envuelta.id, 5);
+    });
+
+    test('la cotización se busca por su número en la lista de la empresa y se toma la del id (no hay GET /cotizaciones/{id})', () async {
+      late Uri uri;
+      final ds = GestionRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          uri = r.url;
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {'id': 121, 'nro_documento': 121},
+                {'id': 21, 'nro_documento': 21},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+
+      final cotizacion = await ds.getCotizacion('t', companyId: 3, id: 21, nroDocumento: 21);
+
+      expect(uri.path, '$_apiPath/cotizaciones');
+      expect(uri.queryParameters, {'company_id': '3', 'search_input': '21'});
+      expect(cotizacion?.id, 21);
+      expect(cotizacion?.kind, DocumentKind.cotizacion);
+
+      final vacia = GestionRemoteDataSourceImpl(client: MockClient((_) async => http.Response('{"data":[]}', 200)));
+      expect(await vacia.getCotizacion('t', companyId: 3, id: 21, nroDocumento: 21), isNull);
+    });
+  });
+
+  // -------------------------------------------------------------------------------------------
+  group('Compras y Documentos: provider', () {
+    Future<(_FakeGestionRepository, GestionProvider)> abierto({Set<String> permissions = _verTodo}) async {
+      final repo = _FakeGestionRepository();
+      final provider = _provider(repo, session: _session(permissions: permissions));
+      addTearDown(provider.dispose);
+      await provider.openClient(7, 'ACME SAC');
+      return (repo, provider);
+    }
+
+    test('las compras se piden una sola vez y el año elegido solo cambia las listas', () async {
+      final (repo, provider) = await abierto();
+
+      await provider.ensureCompras();
+      await provider.ensureCompras();
+      expect(repo.comprasAnios, [null]);
+      expect(provider.compras?.anioListas, 2026);
+
+      await provider.setAnioCompras(2025);
+      expect(repo.comprasAnios, [null, 2025]);
+      expect(provider.compras?.anioListas, 2025);
+      expect(provider.anioCompras, 2025);
+    });
+
+    test('si falla al cambiar de año se queda con lo que se veía, en el año que se veía, y avisa', () async {
+      final (repo, provider) = await abierto();
+      await provider.loadCompras();
+
+      repo.comprasFailure = const NetworkFailure('Sin conexión a internet');
+      await provider.setAnioCompras(2025);
+
+      expect(provider.compras?.anioListas, 2026);
+      expect(provider.anioCompras, 2026);
+      expect(provider.comprasError, 'Sin conexión a internet');
+    });
+
+    test('un fallo de la primera carga de compras deja el mensaje', () async {
+      final (repo, provider) = await abierto();
+      repo.comprasFailure = const ServerFailure('Este cliente no es de tu cartera');
+
+      await provider.ensureCompras();
+
+      expect(provider.compras, isNull);
+      expect(provider.comprasError, 'Este cliente no es de tu cartera');
+    });
+
+    test('los documentos arrancan del 1 de enero a hoy; cambiar el rango vuelve a "Todos" y pide ese rango', () async {
+      final (repo, provider) = await abierto();
+
+      await provider.ensureDocumentos();
+      expect(repo.documentosRangos.single, (desde: DateTime(2026), hasta: DateTime(2026, 11, 19)));
+      provider.setVistaDocumentos('ventas');
+
+      await provider.setRangoDocumentos(DateTimeRange(start: DateTime(2025), end: DateTime(2025, 12, 31)));
+
+      expect(provider.vistaDocumentos, 'todos');
+      expect(repo.documentosRangos.last, (desde: DateTime(2025), hasta: DateTime(2025, 12, 31)));
+    });
+
+    test('las vistas cuentan cotizaciones y ventas (factura, boleta y ticket) y filtran', () async {
+      final (_, provider) = await abierto();
+      await provider.ensureDocumentos();
+
+      expect(provider.conteoDocumentos('todos'), 3);
+      expect(provider.conteoDocumentos('cotizaciones'), 1);
+      expect(provider.conteoDocumentos('ventas'), 2);
+      provider.setVistaDocumentos('cotizaciones');
+      expect(provider.documentosVisibles.map((d) => d.numero), ['C001-0021']);
+      provider.setVistaDocumentos('ventas');
+      expect(provider.documentosVisibles.map((d) => d.numero), ['F001-1250', 'V001-0012']);
+    });
+
+    test('un fallo de documentos deja el mensaje y reintentar lo trae', () async {
+      final (repo, provider) = await abierto();
+      repo.documentosFailure = const ServerFailure('Este cliente no es de tu cartera');
+
+      await provider.ensureDocumentos();
+      expect(provider.documentos, isNull);
+      expect(provider.documentosError, 'Este cliente no es de tu cartera');
+
+      repo.documentosFailure = null;
+      await provider.loadDocumentos();
+      expect(provider.documentos, hasLength(3));
+      expect(provider.documentosError, isNull);
+    });
+
+    test('al abrir otro cliente se descartan sus compras, documentos, año y rango', () async {
+      final (_, provider) = await abierto();
+      await provider.setAnioCompras(2025);
+      await provider.setRangoDocumentos(DateTimeRange(start: DateTime(2025), end: DateTime(2025, 12, 31)));
+
+      await provider.openClient(8, 'BETA SAC');
+
+      expect(provider.compras, isNull);
+      expect(provider.anioCompras, isNull);
+      expect(provider.documentos, isNull);
+      expect(provider.rangoDocumentos.start, DateTime(2026));
+    });
+
+    test('abrir una venta pide /ventas/{id}; una cotización, con la empresa, el id y su número', () async {
+      final (repo, provider) = await abierto();
+
+      final venta = await provider.abrirDocumento(cotizacion: false, id: 5);
+      final cotizacion = await provider.abrirDocumento(cotizacion: true, id: 21, nroDocumento: 21);
+
+      expect(venta.right.kind, DocumentKind.venta);
+      expect(cotizacion.right.kind, DocumentKind.cotizacion);
+      expect(repo.ventasAbiertas, [5]);
+      expect(repo.cotizacionesAbiertas.single, (companyId: 1, id: 21, nroDocumento: 21));
+      expect(provider.abriendoDocumento, isFalse);
+    });
+
+    test('si no se pudo abrir devuelve el motivo del servidor', () async {
+      final (repo, provider) = await abierto();
+      repo.abrirFailure = const ServerFailure('Este cliente no es de tu cartera');
+
+      final result = await provider.abrirDocumento(cotizacion: false, id: 5);
+
+      expect(result.left.message, 'Este cliente no es de tu cartera');
+      expect(provider.abriendoDocumento, isFalse);
+    });
+
+    test('también con solo ver: las pestañas Compras y Documentos no piden registrar', () async {
+      final (_, provider) = await abierto(permissions: _soloVer);
+
+      await provider.ensureCompras();
+      await provider.ensureDocumentos();
+
+      expect(provider.compras, isNotNull);
+      expect(provider.documentos, hasLength(3));
+    });
+  });
+
+  // -------------------------------------------------------------------------------------------
+  group('Pestaña Compras', () {
+    Future<_Env> abrir(WidgetTester tester, {void Function(_FakeGestionRepository repo)? setUp, Set<String> permissions = _verTodo}) =>
+        _pump(
+          tester,
+          permissions: permissions,
+          pending: (clienteId: 7, nombre: 'ACME SAC'),
+          pestana: GestionPestana.compras,
+          setUp: setUp,
+        );
+
+    testWidgets('un pedido con la pestaña abre la ficha directo en Compras y las pide una vez', (tester) async {
+      final env = await abrir(tester);
+
+      expect(env.provider.tabs.index, 2);
+      expect(env.repo.comprasAnios, [null]);
+      expect(env.repo.documentosRangos, isEmpty);
+    });
+
+    testWidgets('las cuatro tarjetas del periodo', (tester) async {
+      await abrir(tester);
+
+      expect(find.text('Ventas 2025'), findsOneWidget);
+      expect(find.text('Ventas 2026'), findsOneWidget);
+      expect(find.text('01/01 - 19/11'), findsNWidgets(3));
+      expect(find.text('S/ 10,000'), findsOneWidget);
+      expect(find.text('S/ 5,500'), findsOneWidget);
+      expect(find.text('mismo tramo del año anterior'), findsOneWidget);
+      expect(find.text('del 1 de enero a hoy'), findsOneWidget);
+      expect(find.text('N.º de compras'), findsOneWidget);
+      expect(find.text('ticket promedio S/ 500.00'), findsOneWidget);
+      expect(find.text('Contra el año anterior'), findsOneWidget);
+      expect(find.text('-45.0 %'), findsOneWidget);
+      expect(find.text('antes: S/ 10,000'), findsOneWidget);
+    });
+
+    testWidgets('si el año anterior no compró, la variación no se compara', (tester) async {
+      await abrir(tester, setUp: (repo) => repo.comprasCaida = null);
+
+      expect(find.text('—'), findsOneWidget);
+      expect(find.text('no compró entonces'), findsOneWidget);
+    });
+
+    testWidgets('si vendió más que el año anterior, la variación sale con +', (tester) async {
+      await abrir(tester, setUp: (repo) => repo.comprasCaida = -12.5);
+
+      expect(find.text('+12.5 %'), findsOneWidget);
+    });
+
+    testWidgets('los dos gráficos, con los dos años y el día hasta el que se suma el año anterior', (tester) async {
+      await abrir(tester);
+
+      expect(find.text('Evolución de compras'), findsOneWidget);
+      expect(find.text('Ventas al 19/11 | 2025 vs. 2026'), findsOneWidget);
+      expect(find.text('Ventas acumulada al 19/11 | 2025 vs. 2026'), findsOneWidget);
+      expect(find.byType(AppGroupedBarChart), findsOneWidget);
+      expect(find.byType(AppAreaChart), findsOneWidget);
+      final barras = tester.widget<AppGroupedBarChart>(find.byType(AppGroupedBarChart));
+      expect(barras.labels.first, 'ENE');
+      expect(barras.labels, hasLength(12));
+      expect(barras.previous[1], 200);
+      // El año actual todavía no tiene el último mes: la línea se corta, no cae a cero.
+      final area = tester.widget<AppAreaChart>(find.byType(AppAreaChart));
+      expect(area.series.first.values, hasLength(12));
+      expect(area.series.last.values, hasLength(11));
+      expect(find.text('2025 se suma al 19 nov, el mismo día que 2026.'), findsOneWidget);
+    });
+
+    testWidgets('las últimas compras y los top 10 del año, con "Otros", el % y el código del producto', (tester) async {
+      await abrir(tester);
+
+      expect(find.text('Últimas compras'), findsOneWidget);
+      expect(find.text('solo 2026'), findsOneWidget);
+      expect(find.text('F001-1250'), findsOneWidget);
+      expect(find.text('S/ 1,234.50'), findsOneWidget);
+      expect(find.text('07 nov 2026'), findsOneWidget);
+      expect(find.text('B001-00123'), findsOneWidget);
+
+      expect(find.text('Top 10 productos 2026'), findsOneWidget);
+      expect(find.textContaining('P-100'), findsOneWidget);
+      expect(find.text('54.5 %'), findsOneWidget);
+      // Menos de 0.1 % se escribe "<0.1".
+      expect(find.text('<0.1 %'), findsOneWidget);
+      expect(find.text('Otros'), findsOneWidget);
+      expect(find.text('Top 10 marcas 2026'), findsOneWidget);
+      expect(find.text('Marca X'), findsOneWidget);
+      expect(find.text('Top 10 categorías 2026'), findsOneWidget);
+      expect(find.text('Sin compras en 2026'), findsOneWidget);
+    });
+
+    testWidgets('elegir el año anterior vuelve a pedir las listas de ese año', (tester) async {
+      final env = await abrir(tester);
+
+      await tester.tap(find.descendant(of: find.byType(SegmentedButton<int>), matching: find.text('2025')));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.comprasAnios, [null, 2025]);
+      expect(find.text('solo 2025'), findsOneWidget);
+      expect(find.text('Top 10 productos 2025'), findsOneWidget);
+      expect(find.text('Sin compras en 2025'), findsOneWidget);
+    });
+
+    testWidgets('tocar una compra abre su comprobante', (tester) async {
+      final env = await abrir(tester);
+
+      await tester.tap(find.text('F001-1250'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.ventasAbiertas, [5]);
+      expect(receipts.single.id, 5);
+      expect(receipts.single.kind, DocumentKind.venta);
+    });
+
+    testWidgets('si no se puede abrir el comprobante lo dice y no abre nada', (tester) async {
+      await abrir(tester, setUp: (repo) => repo.abrirFailure = const ServerFailure('No tienes permiso para esta acción'));
+
+      await tester.tap(find.text('F001-1250'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No tienes permiso para esta acción'), findsOneWidget);
+      expect(receipts, isEmpty);
+    });
+
+    testWidgets('un cliente ajeno a la cartera (403) muestra el mensaje y se puede reintentar', (tester) async {
+      final env = await abrir(tester, setUp: (repo) => repo.comprasFailure = const ServerFailure('Este cliente no es de tu cartera'));
+
+      expect(find.text('Este cliente no es de tu cartera'), findsOneWidget);
+      expect(find.text('Evolución de compras'), findsNothing);
+
+      env.repo.comprasFailure = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Evolución de compras'), findsOneWidget);
+    });
+
+    testWidgets('con solo ver también se ven las compras', (tester) async {
+      await abrir(tester, permissions: _soloVer);
+
+      expect(find.text('Evolución de compras'), findsOneWidget);
+    });
+  });
+
+  // -------------------------------------------------------------------------------------------
+  group('Pestaña Documentos', () {
+    Future<_Env> abrir(WidgetTester tester, {void Function(_FakeGestionRepository repo)? setUp, Set<String> permissions = _verTodo}) =>
+        _pump(
+          tester,
+          permissions: permissions,
+          pending: (clienteId: 7, nombre: 'ACME SAC'),
+          pestana: GestionPestana.documentos,
+          setUp: setUp,
+        );
+
+    testWidgets('Todos, Cotizaciones y Ventas con sus conteos, y cada documento con sus datos', (tester) async {
+      final env = await abrir(tester);
+
+      expect(env.provider.tabs.index, 3);
+      expect(find.text('Todos (3)'), findsOneWidget);
+      expect(find.text('Cotizaciones (1)'), findsOneWidget);
+      expect(find.text('Ventas (2)'), findsOneWidget);
+      expect(find.text('01/01/2026 – 19/11/2026'), findsOneWidget);
+      expect(find.text('C001-0021'), findsOneWidget);
+      expect(find.text('F001-1250'), findsOneWidget);
+      expect(find.text('V001-0012'), findsOneWidget);
+      expect(find.text('Ejecutivo: FRANCIS BULNES GONZALES'), findsNWidgets(2));
+      expect(find.text('Lima'), findsNWidgets(2));
+      expect(find.text('S/ 800.00'), findsOneWidget);
+      expect(find.text('05/11/2026'), findsOneWidget);
+      expect(find.text('Pendiente'), findsOneWidget);
+      expect(find.text('Emitido'), findsOneWidget);
+      expect(find.text('Anulado'), findsOneWidget);
+      expect(find.text('3 documentos'), findsOneWidget);
+      expect(env.repo.comprasAnios, isEmpty);
+    });
+
+    testWidgets('el documento anulado va en rojo y los demás no', (tester) async {
+      await abrir(tester);
+
+      GestionDocumentoLink link(String numero) =>
+          tester.widget<GestionDocumentoLink>(find.widgetWithText(GestionDocumentoLink, numero));
+      expect(link('V001-0012').anulado, isTrue);
+      expect(link('F001-1250').anulado, isFalse);
+      expect(link('C001-0021').anulado, isFalse);
+    });
+
+    testWidgets('las vistas filtran la lista', (tester) async {
+      await abrir(tester);
+
+      await tester.tap(find.text('Cotizaciones (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('C001-0021'), findsOneWidget);
+      expect(find.text('F001-1250'), findsNothing);
+      expect(find.text('1 documentos'), findsOneWidget);
+
+      await _tapChip(tester, 'Ventas (2)');
+      await tester.pumpAndSettle();
+      expect(find.text('C001-0021'), findsNothing);
+      expect(find.text('V001-0012'), findsOneWidget);
+    });
+
+    testWidgets('tocar una venta abre su comprobante por su id', (tester) async {
+      final env = await abrir(tester);
+
+      await tester.tap(find.text('F001-1250'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.ventasAbiertas, [5]);
+      expect(env.repo.cotizacionesAbiertas, isEmpty);
+      expect(receipts.single.kind, DocumentKind.venta);
+    });
+
+    testWidgets('tocar una cotización abre su comprobante buscándola en la empresa', (tester) async {
+      final env = await abrir(tester);
+
+      await tester.tap(find.text('C001-0021'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.cotizacionesAbiertas.single, (companyId: 1, id: 21, nroDocumento: 21));
+      expect(env.repo.ventasAbiertas, isEmpty);
+      expect(receipts.single.kind, DocumentKind.cotizacion);
+    });
+
+    testWidgets('si la cotización no se encuentra lo dice', (tester) async {
+      await abrir(tester, setUp: (repo) => repo.abrirFailure = const ServerFailure('No se encontró la cotización'));
+
+      await tester.tap(find.text('C001-0021'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se encontró la cotización'), findsOneWidget);
+      expect(receipts, isEmpty);
+    });
+
+    testWidgets('un atajo de fechas pide ese rango y vuelve a Todos', (tester) async {
+      final env = await abrir(tester);
+      await _tapChip(tester, 'Ventas (2)');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Año pasado'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.documentosRangos.last, (desde: DateTime(2025), hasta: DateTime(2025, 12, 31)));
+      expect(find.text('01/01/2025 – 31/12/2025'), findsOneWidget);
+      expect(env.provider.vistaDocumentos, 'todos');
+    });
+
+    testWidgets('se elige el rango con el selector de fechas', (tester) async {
+      final env = await abrir(tester);
+
+      await tester.tap(find.text('01/01/2026 – 19/11/2026'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DateRangePickerDialog), findsOneWidget);
+      await tester.tap(find.text('Aplicar'));
+      await tester.pumpAndSettle();
+
+      expect(env.repo.documentosRangos, hasLength(2));
+    });
+
+    testWidgets('sin documentos en el rango lo dice', (tester) async {
+      await abrir(tester, setUp: (repo) => repo.documentos = const []);
+
+      expect(find.text('No hay documentos en este rango de fechas'), findsOneWidget);
+      expect(find.text('Todos (0)'), findsOneWidget);
+    });
+
+    testWidgets('un cliente ajeno a la cartera (403) muestra el mensaje y se puede reintentar', (tester) async {
+      final env = await abrir(tester, setUp: (repo) => repo.documentosFailure = const ServerFailure('Este cliente no es de tu cartera'));
+
+      expect(find.text('Este cliente no es de tu cartera'), findsOneWidget);
+
+      env.repo.documentosFailure = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('C001-0021'), findsOneWidget);
+    });
+
+    testWidgets('con solo ver también se ven los documentos', (tester) async {
+      await abrir(tester, permissions: _soloVer);
+
+      expect(find.text('Todos (3)'), findsOneWidget);
+    });
+
+    testWidgets('cambiar de pestaña con el tab bar pide cada una al abrirla', (tester) async {
+      final env = await _pump(tester, pending: (clienteId: 7, nombre: 'ACME SAC'));
+      expect(env.repo.comprasAnios, isEmpty);
+
+      await _tapTab(tester, 'Compras');
+      await tester.pumpAndSettle();
+      expect(env.repo.comprasAnios, [null]);
+      expect(find.text('Evolución de compras'), findsOneWidget);
+
+      await _tapTab(tester, 'Documentos');
+      await tester.pumpAndSettle();
+      expect(env.repo.documentosRangos, hasLength(1));
+      expect(find.text('Evolución de compras'), findsNothing);
+
+      // Volver a Compras no la pide otra vez: lo traído queda.
+      await _tapTab(tester, 'Compras');
+      await tester.pumpAndSettle();
+      expect(env.repo.comprasAnios, [null]);
+    });
+  });
+
+  // -------------------------------------------------------------------------------------------
   group('Inicio', () {
     testWidgets('tocar una tarea del Inicio abre la ficha de ese cliente en Gestión', (tester) async {
       tester.view.physicalSize = const Size(400, 3000);
@@ -1966,11 +2737,20 @@ void main() {
       nav.goToGestionCliente(7, 'ACME SAC');
 
       expect(nav.requested, 'gestion');
-      expect(nav.pendingGestionCliente, (clienteId: 7, nombre: 'ACME SAC'));
+      expect(nav.pendingGestionCliente, (clienteId: 7, nombre: 'ACME SAC', pestana: GestionPestana.seguimiento));
       expect(avisos, 1);
-      expect(nav.takePendingGestionCliente(), (clienteId: 7, nombre: 'ACME SAC'));
+      expect(nav.takePendingGestionCliente(), (clienteId: 7, nombre: 'ACME SAC', pestana: GestionPestana.seguimiento));
       expect(nav.pendingGestionCliente, isNull);
       expect(nav.takePendingGestionCliente(), isNull);
+    });
+
+    test('el pedido admite la pestaña, como el ?pestana= de la web, y una clave desconocida cae en Resumen', () {
+      final nav = ShellNavigation()..goToGestionCliente(7, 'ACME SAC', pestana: GestionPestana.documentos);
+
+      expect(nav.pendingGestionCliente?.pestana, GestionPestana.documentos);
+      expect(GestionPestana.fromKey('compras'), GestionPestana.compras);
+      expect(GestionPestana.fromKey('otra'), GestionPestana.resumen);
+      expect(GestionPestana.values.map((p) => p.key), ['resumen', 'seguimiento', 'compras', 'documentos']);
     });
   });
 
@@ -2004,6 +2784,34 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Guardar gestión y programar'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+
+      testWidgets('ficha, pestaña Compras: ${look.label}', (tester) async {
+        final handle = tester.ensureSemantics();
+        await _pump(
+          tester,
+          look: look.tall(6000),
+          pending: (clienteId: 7, nombre: 'ACME SAC'),
+          pestana: GestionPestana.compras,
+        );
+
+        expect(find.text('Top 10 categorías 2026'), findsOneWidget);
+        await expectLooksRight(tester, look);
+        handle.dispose();
+      });
+
+      testWidgets('ficha, pestaña Documentos: ${look.label}', (tester) async {
+        final handle = tester.ensureSemantics();
+        await _pump(
+          tester,
+          look: look.tall(4200),
+          pending: (clienteId: 7, nombre: 'ACME SAC'),
+          pestana: GestionPestana.documentos,
+        );
+
+        expect(find.text('3 documentos'), findsOneWidget);
         await expectLooksRight(tester, look);
         handle.dispose();
       });

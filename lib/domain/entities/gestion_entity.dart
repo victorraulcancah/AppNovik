@@ -387,3 +387,135 @@ class GestionEdicion {
     this.proximaAccion,
   });
 }
+
+/// Las pestañas de la ficha, en su orden. Su clave es la del `?pestana=` de la web.
+enum GestionPestana {
+  resumen('resumen'),
+  seguimiento('seguimiento'),
+  compras('compras'),
+  documentos('documentos');
+
+  final String key;
+
+  const GestionPestana(this.key);
+
+  /// La pestaña de una clave (`seguimiento`); con una desconocida, la primera (Resumen), como la web.
+  static GestionPestana fromKey(Object? key) {
+    for (final p in values) {
+      if (p.key == key) return p;
+    }
+    return GestionPestana.resumen;
+  }
+}
+
+/// Una fila de un top 10 (productos, marcas o categorías): `codigo` solo viene en los productos.
+class GestionTop {
+  final String nombre;
+  final String? codigo;
+  final double monto;
+
+  /// Qué parte del total del año es; "Otros" es el resto.
+  final double porcentaje;
+
+  const GestionTop({required this.nombre, this.codigo, required this.monto, required this.porcentaje});
+
+  bool get esOtros => nombre == 'Otros';
+}
+
+/// La venta de un mes de cada año.
+class GestionMes {
+  /// 1 a 12.
+  final int mes;
+  final double anterior;
+
+  /// `null` en el acumulado de los meses que todavía no llegan: la línea se corta, no cae a cero.
+  final double? actual;
+
+  /// Solo en el acumulado: hasta qué día del año anterior se está sumando en ese punto ("al 21 oct").
+  final String? corte;
+
+  const GestionMes({required this.mes, required this.anterior, this.actual, this.corte});
+}
+
+/// La pestaña Compras: 12 meses contra el año anterior, últimas compras y los top 10.
+class GestionCompras {
+  /// Del 1 de enero a hoy contra el mismo tramo del año anterior.
+  final GestionPeriodo periodo;
+  final int anioActual;
+  final int anioAnterior;
+
+  /// De qué año son las últimas compras y los top 10 (el actual hasta hoy o el anterior completo).
+  final int anioListas;
+
+  /// "21/10": hasta qué día de cada año se compara.
+  final String hasta;
+  final List<GestionMes> evolucion;
+  final List<GestionMes> acumulado;
+  final List<GestionUltimaCompra> ultimasCompras;
+  final List<GestionTop> topProductos;
+  final List<GestionTop> topMarcas;
+  final List<GestionTop> topCategorias;
+
+  const GestionCompras({
+    required this.periodo,
+    required this.anioActual,
+    required this.anioAnterior,
+    required this.anioListas,
+    this.hasta = '',
+    this.evolucion = const [],
+    this.acumulado = const [],
+    this.ultimasCompras = const [],
+    this.topProductos = const [],
+    this.topMarcas = const [],
+    this.topCategorias = const [],
+  });
+}
+
+enum GestionDocumentoTipo {
+  cotizacion,
+  factura,
+  boleta,
+  venta;
+
+  static GestionDocumentoTipo fromKey(Object? key) {
+    for (final t in values) {
+      if (t.name == key) return t;
+    }
+    return GestionDocumentoTipo.venta;
+  }
+}
+
+/// Un documento del cliente: una cotización o una venta (factura, boleta o ticket).
+class GestionDocumento {
+  final String clave;
+  final int id;
+  final GestionDocumentoTipo tipo;
+  final String numero;
+
+  /// Número corto de la cotización.
+  final int nroDocumento;
+  final DateTime fecha;
+  final double monto;
+
+  /// Emitido, Anulado, Pendiente, Convertida o Anulada.
+  final String estado;
+  final String? ejecutivo;
+  final String? almacen;
+
+  const GestionDocumento({
+    required this.clave,
+    required this.id,
+    required this.tipo,
+    required this.numero,
+    this.nroDocumento = 0,
+    required this.fecha,
+    this.monto = 0,
+    this.estado = '',
+    this.ejecutivo,
+    this.almacen,
+  });
+
+  bool get esCotizacion => tipo == GestionDocumentoTipo.cotizacion;
+
+  bool get anulado => estado == 'Anulado' || estado == 'Anulada';
+}

@@ -7,12 +7,14 @@ import '../providers/auth_provider.dart';
 import '../providers/gestion_provider.dart';
 import '../providers/shell_navigation.dart';
 import '../utils/gestion_copy.dart';
+import '../widgets/gestion_compras_tab.dart';
+import '../widgets/gestion_documentos_tab.dart';
 import '../widgets/gestion_ficha_view.dart';
 import '../widgets/gestion_seguimiento_tab.dart';
 import '../widgets/gestion_tareas_view.dart';
 
 /// Módulo Gestión (seguimiento de clientes): sin cliente elegido, las tareas pendientes; con uno, su ficha
-/// (resumen y seguimiento). Se busca un cliente por nombre, documento o código. Permisos: `clientes.seguimiento`
+/// (resumen, seguimiento, compras y documentos). Se busca un cliente por nombre, documento o código. Permisos: `clientes.seguimiento`
 /// para ver y `clientes.seguimiento.registrar` para registrar, editar y reprogramar gestiones.
 class GestionPage extends StatefulWidget {
   const GestionPage({super.key});
@@ -51,8 +53,8 @@ class _GestionPageState extends State<GestionPage> {
     if (!gestion.canView) return;
     final pedido = context.read<ShellNavigation>().takePendingGestionCliente();
     if (pedido != null) {
-      // Desde una tarea: el cliente se abre directo en Seguimiento, para registrar la gestión.
-      unawaited(gestion.openClient(pedido.clienteId, pedido.nombre, tab: 1));
+      // Desde una tarea: el cliente se abre directo en Seguimiento, para registrar la gestión (o en la pestaña pedida).
+      unawaited(gestion.openClient(pedido.clienteId, pedido.nombre, tab: pedido.pestana.index));
     } else if (gestion.hasClient) {
       unawaited(gestion.refreshClient());
     }
@@ -270,6 +272,8 @@ class _GestionFicha extends StatelessWidget {
             tabs: const [
               AppTabItem(label: 'Resumen', icon: Icons.dashboard_outlined, child: SizedBox.shrink()),
               AppTabItem(label: 'Seguimiento', icon: Icons.timeline, child: SizedBox.shrink()),
+              AppTabItem(label: 'Compras', icon: Icons.shopping_cart_outlined, child: SizedBox.shrink()),
+              AppTabItem(label: 'Documentos', icon: Icons.description_outlined, child: SizedBox.shrink()),
             ],
           ),
           const SizedBox(height: 16),
@@ -295,6 +299,9 @@ class _GestionFicha extends StatelessWidget {
                     maintainState: true,
                     child: const GestionSeguimientoTab(),
                   ),
+                  // Compras y Documentos piden sus datos al abrirse por primera vez; lo que traen queda en el provider.
+                  if (gestion.tabs.index == GestionPestana.compras.index) const GestionComprasTab(),
+                  if (gestion.tabs.index == GestionPestana.documentos.index) const GestionDocumentosTab(),
                 ],
               ),
             ),
