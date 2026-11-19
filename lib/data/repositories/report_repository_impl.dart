@@ -60,6 +60,46 @@ class ReportRepositoryImpl with TokenGuard implements ReportRepository {
       );
 
   @override
+  Future<Either<Failure, RankingProductsPage>> getRankingProducts({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    int page = 1,
+    int pageSize = 50,
+  }) =>
+      withToken(
+        (token) => remoteDataSource.getRankingProducts(
+          token: token,
+          kind: kind,
+          filters: filters,
+          companyId: companyId,
+          entityId: entityId,
+          page: page,
+          pageSize: pageSize,
+        ),
+      );
+
+  @override
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> getRankingProductDocuments({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  }) =>
+      withToken(
+        (token) => remoteDataSource.getRankingProductDocuments(
+          token: token,
+          kind: kind,
+          filters: filters,
+          companyId: companyId,
+          entityId: entityId,
+          productId: productId,
+        ),
+      );
+
+  @override
   Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
     required int companyId,
     required String text,

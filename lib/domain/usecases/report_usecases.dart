@@ -59,6 +59,54 @@ class GetRankingReportUseCase {
   }
 }
 
+class GetRankingProductsUseCase {
+  final ReportRepository repository;
+  GetRankingProductsUseCase({required this.repository});
+
+  Future<Either<Failure, RankingProductsPage>> call({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    int page = 1,
+    int pageSize = 50,
+  }) {
+    if (filters.desde.isAfter(filters.hasta)) {
+      return Future.value(
+        Either.left(const ValidationFailure('La fecha inicial no puede ser posterior a la final')),
+      );
+    }
+    return repository.getRankingProducts(
+      kind: kind,
+      filters: filters,
+      companyId: companyId,
+      entityId: entityId,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+}
+
+class GetRankingProductDocumentsUseCase {
+  final ReportRepository repository;
+  GetRankingProductDocumentsUseCase({required this.repository});
+
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> call({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  }) =>
+      repository.getRankingProductDocuments(
+        kind: kind,
+        filters: filters,
+        companyId: companyId,
+        entityId: entityId,
+        productId: productId,
+      );
+}
+
 class SearchReportProductCodesUseCase {
   final ReportRepository repository;
   SearchReportProductCodesUseCase({required this.repository});

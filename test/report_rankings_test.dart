@@ -114,6 +114,49 @@ class _FakeRepo implements ReportRepository {
     return Either.right(rankings[kind] ?? const RankingReport());
   }
 
+  /// Los productos de cada entidad por página (la 1 es la primera) y las ventas de un producto.
+  final List<({ReportKind kind, int entityId, int page, SalesReportFilters filters})> productCalls = [];
+  final List<({ReportKind kind, int entityId, int productId, SalesReportFilters filters})> docCalls = [];
+  List<RankingProductsPage> productPages = [
+    const RankingProductsPage(
+      products: [
+        RankingProduct(id: 31, codigo: 'EVO.5', name: 'AMPLIFICADOR 5CH', cantidad: 4, venta: 800, margen: 200),
+        RankingProduct(id: 32, codigo: 'SUB-12', name: 'SUBWOOFER 12"', cantidad: 2, venta: 300, margen: 60),
+      ],
+    ),
+  ];
+  Either<Failure, List<SalesReportDocumentEntity>> docs = Either.right(const [
+    SalesReportDocumentEntity(id: 71, tipo: 'Boleta', numero: 'B001-0123'),
+    SalesReportDocumentEntity(id: 72, tipo: 'Venta', numero: 'V001-7253'),
+  ]);
+  Failure? productsFailure;
+
+  @override
+  Future<Either<Failure, RankingProductsPage>> getRankingProducts({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    productCalls.add((kind: kind, entityId: entityId, page: page, filters: filters));
+    if (productsFailure != null) return Either.left(productsFailure!);
+    return Either.right(productPages[(page - 1).clamp(0, productPages.length - 1)]);
+  }
+
+  @override
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> getRankingProductDocuments({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  }) async {
+    docCalls.add((kind: kind, entityId: entityId, productId: productId, filters: filters));
+    return docs;
+  }
+
   @override
   Future<Either<Failure, SalesReportEntity>> getSalesReport({
     required SalesReportFilters filters,
@@ -153,8 +196,13 @@ class _FakeRepo implements ReportRepository {
   }) async => Either.right(const SalesReportCatalogs());
 
   @override
-  Future<Either<Failure, DocumentEntity>> getSale(int id) async =>
-      Either.left(const ValidationFailure('sin venta'));
+  Future<Either<Failure, DocumentEntity>> getSale(int id) async {
+    sales.add(id);
+    return Either.left(const ValidationFailure('sin venta'));
+  }
+
+  /// Los comprobantes que se pidieron.
+  final List<int> sales = [];
 }
 
 ReportsProvider _provider(_FakeRepo repo, {SessionContextEntity? session}) => ReportsProvider(
@@ -164,6 +212,8 @@ ReportsProvider _provider(_FakeRepo repo, {SessionContextEntity? session}) => Re
   getSaleUseCase: GetReportSaleUseCase(repository: repo),
   getRankingUseCase: GetRankingReportUseCase(repository: repo),
   searchProductCodesUseCase: SearchReportProductCodesUseCase(repository: repo),
+  getRankingProductsUseCase: GetRankingProductsUseCase(repository: repo),
+  getRankingProductDocumentsUseCase: GetRankingProductDocumentsUseCase(repository: repo),
   now: () => DateTime(2026, 10, 31, 10),
 )..syncSession(session ?? _session());
 
@@ -681,6 +731,346 @@ void main() {
     });
   });
 
+  group('productos y documentos de una entidad: lectura', () {
+    test('rankingProductsFromJson lee código, nombre, cantidad, venta (subtotal), margen y la paginación', () {
+      final page = rankingProductsFromJson({
+        'success': true,
+        'data': [
+          {'id': 5, 'codigo': 'EVO.5', 'nombre': 'AMPLIFICADOR', 'cantidad': 4, 'subtotal': '800.5', 'margen': 200, 'img': null},
+          {'id': 6, 'nombre': '  '},
+        ],
+        'pagination': {'has_more': true},
+      });
+      expect(page.hasMore, isTrue);
+      expect(page.products.first.codigo, 'EVO.5');
+      expect(page.products.first.venta, 800.5);
+      expect(page.products.first.margen, 200);
+      expect(page.products.last.name, '-');
+      // Sin `pagination` (departamentos y clientes responden todo junto) no hay más páginas.
+      expect(rankingProductsFromJson({'data': []}).hasMore, isFalse);
+      expect(rankingProductsFromJson(null).products, isEmpty);
+    });
+
+    test('reportDocumentsFromJson rotula los documentos como Productos y servicios', () {
+      final docs = reportDocumentsFromJson({
+        'data': [
+          {'id': 1, 'nro_documento': 'b001-123', 'tipo_documento': 'Boleta', 'fecha': '2026-10-02'},
+          {'id': 2, 'nro_documento': 'F001-9', 'tipo_documento': 'Factura'},
+          {'id': 3, 'nro_documento': 'V001-0012', 'tipo_documento': 'Venta'},
+          {'id': 4, 'nro_documento': 7253, 'tipo_documento': 'Delivery'},
+          {'nro_documento': 'sin id'},
+        ],
+      });
+      expect(docs.map((d) => '${d.tipo} Nro: ${d.numero}'), [
+        'Boleta Nro: B001-123',
+        'Factura Nro: F001-9',
+        'Venta Nro: V001-0012',
+        'Venta Nro: V001-7253',
+      ]);
+      expect(docs.first.id, 1);
+      expect(reportDocumentsFromJson({'data': 'x'}), isEmpty);
+    });
+  });
+
+  group('ReportRemoteDataSource: productos y documentos por entidad', () {
+    final filters = SalesReportFilters(
+      desde: DateTime(2026, 10),
+      hasta: DateTime(2026, 10, 31),
+      sucursales: const ['1', '2'],
+      clientes: const ['50'],
+      vendedores: const ['9'],
+      marcas: const ['3'],
+      categorias: const ['4'],
+      departamentos: const ['04'],
+      productCode: 'EVO.5',
+    );
+
+    Future<Uri> products(ReportKind kind, {int entityId = 8, int page = 2}) async {
+      late Uri uri;
+      late Map<String, String> headers;
+      final dataSource = ReportRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          uri = r.url;
+          headers = r.headers;
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': [
+                {'id': 5, 'codigo': 'EVO.5', 'nombre': 'AMP', 'cantidad': 4, 'subtotal': 800, 'margen': 200},
+              ],
+              'pagination': {'has_more': true},
+            }),
+            200,
+          );
+        }),
+      );
+      final result = await dataSource.getRankingProducts(
+        token: 'tok',
+        kind: kind,
+        filters: filters,
+        companyId: 7,
+        entityId: entityId,
+        page: page,
+        pageSize: 50,
+      );
+      expect(result.products.single.name, 'AMP');
+      expect(result.hasMore, isTrue);
+      expect(headers['Authorization'], 'Bearer tok');
+      return uri;
+    }
+
+    test('vendedores: el endpoint antiguo, con vendedor_id y una sola sucursal', () async {
+      final uri = await products(ReportKind.vendedores);
+      final q = uri.queryParametersAll;
+      expect(uri.path, endsWith('/ventas/productos-por-vendedores'));
+      expect(q['vendedor_id'], ['8']);
+      expect(q['company_id'], ['7']);
+      expect(q['fechas[]'], ['2026-10-01', '2026-10-31']);
+      expect(q['sucursal_id'], ['1']);
+      expect(q['sucursales[]'], isNull);
+      expect(q['clientes[]'], ['50']);
+      expect(q['marcas[]'], ['3']);
+      expect(q['tipos_producto[]'], ['4']);
+      expect(q['product_code'], ['EVO.5']);
+      expect(q['page'], ['2']);
+      expect(q['per_page'], ['50']);
+      // El endpoint no entiende estos filtros.
+      expect(q['vendedores[]'], isNull);
+      expect(q['departamentos[]'], isNull);
+    });
+
+    test('departamentos: departamento_id y las sucursales como la web', () async {
+      final uri = await products(ReportKind.departamentos, entityId: 0);
+      final q = uri.queryParametersAll;
+      expect(uri.path, endsWith('/ventas/productos-por-departamento-v2'));
+      expect(q['departamento_id'], ['0']);
+      expect(q['sucursal_id'], ['1']);
+      expect(q['sucursales[]'], ['1', '2']);
+      expect(q['vendedores[]'], ['9']);
+      expect(q['departamentos[]'], isNull); // el servicio los ignora
+      expect(q['product_code'], ['EVO.5']);
+    });
+
+    test('marcas: marca_id y sin repetir el filtro de marcas', () async {
+      final uri = await products(ReportKind.marcas);
+      final q = uri.queryParametersAll;
+      expect(uri.path, endsWith('/ventas/productos-por-marcas-v2'));
+      expect(q['marca_id'], ['8']);
+      expect(q['marcas[]'], isNull);
+      expect(q['sucursales[]'], ['1', '2']);
+      expect(q['clientes[]'], ['50']);
+      expect(q['vendedores[]'], ['9']);
+      expect(q['tipos_producto[]'], ['4']);
+      expect(q['departamentos[]'], ['04']);
+    });
+
+    test('categorías: categoria_id y sin repetir el filtro de categorías', () async {
+      final uri = await products(ReportKind.categorias);
+      final q = uri.queryParametersAll;
+      expect(uri.path, endsWith('/ventas/productos-por-categorias-v2'));
+      expect(q['categoria_id'], ['8']);
+      expect(q['tipos_producto[]'], isNull);
+      expect(q['marcas[]'], ['3']);
+      expect(q['vendedores[]'], ['9']);
+    });
+
+    test('clientes: cliente_id y sin repetir el filtro de clientes', () async {
+      final uri = await products(ReportKind.clientes);
+      final q = uri.queryParametersAll;
+      expect(uri.path, endsWith('/ventas/productos-por-cliente-v2'));
+      expect(q['cliente_id'], ['8']);
+      expect(q['clientes[]'], isNull);
+      expect(q['sucursales[]'], ['1', '2']);
+      expect(q['vendedores[]'], ['9']);
+    });
+
+    test('sin filtros solo manda lo básico', () async {
+      late Uri uri;
+      final dataSource = ReportRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          uri = r.url;
+          return http.Response(jsonEncode({'success': true, 'data': []}), 200);
+        }),
+      );
+      final result = await dataSource.getRankingProducts(
+        token: 't',
+        kind: ReportKind.marcas,
+        filters: SalesReportFilters(desde: DateTime(2026, 10), hasta: DateTime(2026, 10, 31)),
+        companyId: 7,
+        entityId: 3,
+        page: 1,
+        pageSize: 50,
+      );
+      expect(result.products, isEmpty);
+      expect(uri.queryParametersAll.keys.toSet(), {'fechas[]', 'company_id', 'marca_id', 'page', 'per_page'});
+    });
+
+    Future<Uri> documents(ReportKind kind, {int entityId = 8}) async {
+      late Uri uri;
+      final dataSource = ReportRemoteDataSourceImpl(
+        client: MockClient((r) async {
+          uri = r.url;
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': [
+                {'id': 71, 'nro_documento': 'B001-123', 'tipo_documento': 'Boleta', 'fecha': '2026-10-02'},
+              ],
+            }),
+            200,
+          );
+        }),
+      );
+      final result = await dataSource.getRankingProductDocuments(
+        token: 't',
+        kind: kind,
+        filters: filters,
+        companyId: 7,
+        entityId: entityId,
+        productId: 31,
+      );
+      expect(result.single.numero, 'B001-123');
+      return uri;
+    }
+
+    test('los documentos de un producto van a documentos-por-producto-sucursal-v2 con la entidad como filtro', () async {
+      var q = (await documents(ReportKind.vendedores)).queryParametersAll;
+      expect((await documents(ReportKind.vendedores)).path, endsWith('/ventas/documentos-por-producto-sucursal-v2'));
+      expect(q['producto_id'], ['31']);
+      expect(q['company_id'], ['7']);
+      expect(q['fechas[]'], ['2026-10-01', '2026-10-31']);
+      expect(q['vendedores[]'], ['8']); // la entidad reemplaza al filtro
+      expect(q['clientes[]'], ['50']);
+      expect(q['sucursales[]'], ['1', '2']);
+
+      q = (await documents(ReportKind.clientes)).queryParametersAll;
+      expect(q['clientes[]'], ['8']);
+      expect(q['vendedores[]'], ['9']);
+
+      q = (await documents(ReportKind.departamentos, entityId: 0)).queryParametersAll;
+      expect(q['departamentos[]'], ['0']);
+
+      q = (await documents(ReportKind.marcas)).queryParametersAll;
+      expect(q['marcas[]'], ['8']);
+
+      q = (await documents(ReportKind.categorias)).queryParametersAll;
+      expect(q['categorias[]'], ['8']);
+      expect(q['tipos_producto[]'], ['4']);
+    });
+
+    test('un error del servidor llega como excepción', () async {
+      final dataSource = ReportRemoteDataSourceImpl(client: MockClient((_) async => http.Response('{}', 500)));
+      expect(
+        () => dataSource.getRankingProducts(
+          token: 't',
+          kind: ReportKind.marcas,
+          filters: filters,
+          companyId: 7,
+          entityId: 1,
+          page: 1,
+          pageSize: 50,
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  group('ReportsProvider: productos de una entidad', () {
+    test('abrir una fila pide sus productos con el id, el rango y los filtros', () async {
+      final repo = _FakeRepo();
+      final p = _provider(repo);
+      await p.openEntityProducts(ReportKind.marcas, const RankingRow(id: 2, name: 'PIONEER'));
+
+      final call = repo.productCalls.single;
+      expect(call.kind, ReportKind.marcas);
+      expect(call.entityId, 2);
+      expect(call.page, 1);
+      expect(call.filters.desde, DateTime(2026, 10));
+      final state = p.entityProducts!;
+      expect(state.loading, isFalse);
+      expect(state.products.map((e) => e.name), ['AMPLIFICADOR 5CH', 'SUBWOOFER 12"']);
+    });
+
+    test('el departamento sin id se pide con 0; en los demás una fila sin id no se puede abrir', () async {
+      final repo = _FakeRepo();
+      final p = _provider(repo);
+      await p.openEntityProducts(ReportKind.departamentos, const RankingRow(name: 'SIN UBICACIÓN'));
+      expect(repo.productCalls.single.entityId, 0);
+
+      await p.openEntityProducts(ReportKind.clientes, const RankingRow(name: 'X'));
+      expect(repo.productCalls.length, 1);
+      expect(p.entityProducts!.error, isNotNull);
+    });
+
+    test('Vendedor excluye las cantidades negativas, como la web; los demás no', () async {
+      final repo = _FakeRepo()
+        ..productPages = [
+          const RankingProductsPage(products: [
+            RankingProduct(id: 1, name: 'A', cantidad: 3),
+            RankingProduct(id: 2, name: 'B', cantidad: -1),
+            RankingProduct(id: 3, name: 'C', cantidad: 0),
+          ]),
+        ];
+      final p = _provider(repo);
+      await p.openEntityProducts(ReportKind.vendedores, const RankingRow(id: 9, name: 'V'));
+      expect(p.entityProducts!.products.map((e) => e.name), ['A', 'C']);
+      await p.openEntityProducts(ReportKind.marcas, const RankingRow(id: 9, name: 'M'));
+      expect(p.entityProducts!.products.length, 3);
+    });
+
+    test('la página siguiente se agrega y no se repite mientras carga ni cuando ya no hay más', () async {
+      final repo = _FakeRepo()
+        ..productPages = [
+          const RankingProductsPage(products: [RankingProduct(id: 1, name: 'A')], hasMore: true),
+          const RankingProductsPage(products: [RankingProduct(id: 2, name: 'B')]),
+        ];
+      final p = _provider(repo);
+      await p.openEntityProducts(ReportKind.marcas, const RankingRow(id: 2, name: 'M'));
+
+      final a = p.loadMoreEntityProducts();
+      final b = p.loadMoreEntityProducts(); // ignorada: ya está cargando
+      await a;
+      await b;
+      await p.loadMoreEntityProducts(); // ya no hay más
+      expect(repo.productCalls.map((c) => c.page), [1, 2]);
+      expect(p.entityProducts!.products.map((e) => e.name), ['A', 'B']);
+      expect(p.entityProducts!.hasMore, isFalse);
+    });
+
+    test('un error se guarda, reintentar vuelve a pedir y cerrar descarta lo que llegue tarde', () async {
+      final repo = _FakeRepo()..productsFailure = const NetworkFailure('Sin conexión a internet');
+      final p = _provider(repo);
+      await p.openEntityProducts(ReportKind.marcas, const RankingRow(id: 2, name: 'M'));
+      expect(p.entityProducts!.error, 'Sin conexión a internet');
+
+      repo.productsFailure = null;
+      await p.retryEntityProducts();
+      expect(p.entityProducts!.error, isNull);
+      expect(p.entityProducts!.products, isNotEmpty);
+
+      final late = p.openEntityProducts(ReportKind.marcas, const RankingRow(id: 3, name: 'N'));
+      p.closeEntityProducts();
+      await late;
+      expect(p.entityProducts, isNull);
+    });
+
+    test('los documentos de un producto usan la entidad abierta', () async {
+      final repo = _FakeRepo();
+      final p = _provider(repo);
+      const product = RankingProduct(id: 31, name: 'AMP');
+
+      // Sin entidad abierta no se puede.
+      expect((await p.loadEntityProductDocuments(product)).isLeft, isTrue);
+
+      await p.openEntityProducts(ReportKind.vendedores, const RankingRow(id: 9, name: 'V'));
+      final result = await p.loadEntityProductDocuments(product);
+      expect(result.right.map((d) => d.numero), ['B001-0123', 'V001-7253']);
+      expect(repo.docCalls.single.kind, ReportKind.vendedores);
+      expect(repo.docCalls.single.entityId, 9);
+      expect(repo.docCalls.single.productId, 31);
+    });
+  });
+
   group('ReportsPage: reportes por entidad', () {
     Future<_FakeRepo> pump(
       WidgetTester tester, {
@@ -736,6 +1126,226 @@ void main() {
       await tester.tap(find.text(title));
       await tester.pumpAndSettle();
     }
+
+    final sheet = find.byType(BottomSheet);
+    Finder inSheet(Finder f) => find.descendant(of: sheet, matching: f);
+
+    testWidgets('tocar una fila abre sus productos, y un producto sus documentos y el comprobante', (tester) async {
+      final repo = await pump(tester);
+      await choose(tester, 'Marcas');
+
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      // La marca PIONEER (id 2) con el rango del mes; se piden de a 50.
+      expect(repo.productCalls.single.kind, ReportKind.marcas);
+      expect(repo.productCalls.single.entityId, 2);
+      expect(repo.productCalls.single.page, 1);
+      expect(find.text('Productos vendidos'), findsOneWidget);
+      expect(find.text('PIONEER'), findsWidgets);
+
+      // La misma tarjeta de Productos y servicios: código, margen oculto, venta y cantidad.
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsOneWidget);
+      expect(inSheet(find.text('EVO.5')), findsOneWidget);
+      expect(inSheet(find.text('Margen S/. *******')), findsNWidgets(2));
+      expect(inSheet(find.text('S/. 800.00')), findsOneWidget);
+      expect(inSheet(find.text('Cant. 4')), findsOneWidget);
+      expect(inSheet(find.byTooltip('Ver documentos')), findsNWidgets(2));
+
+      await tester.tap(find.text('AMPLIFICADOR 5CH'));
+      await tester.pumpAndSettle();
+
+      expect(repo.docCalls.single.productId, 31);
+      expect(repo.docCalls.single.entityId, 2);
+      expect(find.text('Documentos'), findsOneWidget);
+      expect(find.text('Boleta Nro: B001-0123'), findsOneWidget);
+      expect(find.text('Venta Nro: V001-7253'), findsOneWidget);
+
+      await tester.tap(find.text('Boleta Nro: B001-0123'));
+      await tester.pumpAndSettle();
+      expect(repo.sales, [71]);
+    });
+
+    testWidgets('el vendedor se rotula "Ejecutivo comercial" y se piden sus productos', (tester) async {
+      final repo = await pump(tester);
+      await choose(tester, 'Vendedor');
+
+      await tester.tap(find.text('GUSTAVO MIRANDA PUN'));
+      await tester.pumpAndSettle();
+
+      expect(repo.productCalls.single.kind, ReportKind.vendedores);
+      expect(find.text('Ejecutivo comercial: GUSTAVO MIRANDA PUN'), findsOneWidget);
+    });
+
+    testWidgets('el botón "Ver productos" de la fila hace lo mismo que tocarla', (tester) async {
+      final repo = await pump(tester);
+      await choose(tester, 'Cliente');
+
+      await tester.tap(find.byTooltip('Ver productos').first);
+      await tester.pumpAndSettle();
+
+      expect(repo.productCalls.single.kind, ReportKind.clientes);
+      expect(repo.productCalls.single.entityId, 1);
+      expect(find.text('Productos vendidos'), findsOneWidget);
+    });
+
+    testWidgets('el buscador filtra por código o nombre y pide las páginas que faltan', (tester) async {
+      final repo = await pump(tester, setup: (r) {
+        r.productPages = [
+          const RankingProductsPage(
+            products: [RankingProduct(id: 1, codigo: 'EVO.5', name: 'AMPLIFICADOR 5CH', cantidad: 1, venta: 10)],
+            hasMore: true,
+          ),
+          const RankingProductsPage(
+            products: [RankingProduct(id: 2, codigo: 'ZZ-9', name: 'PARLANTE NEGRO', cantidad: 1, venta: 5)],
+          ),
+        ];
+      });
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      // La ventana alta no llena: la segunda página llega sola con el scroll infinito.
+      expect(repo.productCalls.map((c) => c.page), [1, 2]);
+      expect(inSheet(find.text('PARLANTE NEGRO')), findsOneWidget);
+
+      final field = inSheet(find.byType(TextField));
+      await tester.enterText(field, 'zz-9');
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('PARLANTE NEGRO')), findsOneWidget);
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsNothing);
+
+      await tester.enterText(field, 'amplif');
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsOneWidget);
+      expect(inSheet(find.text('PARLANTE NEGRO')), findsNothing);
+
+      await tester.enterText(field, 'nada');
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('Sin resultados')), findsOneWidget);
+    });
+
+    testWidgets('al buscar se piden las páginas pendientes aunque no se haya bajado', (tester) async {
+      // Pantalla baja: la primera página llena la ventana y la segunda no se pide sola.
+      final repo = await pump(tester, size: const Size(360, 1300), setup: (r) {
+        r.productPages = [
+          RankingProductsPage(
+            products: [
+              for (var i = 0; i < 40; i++)
+                RankingProduct(id: i, codigo: 'C$i', name: 'PRODUCTO $i', cantidad: 1, venta: 10),
+            ],
+            hasMore: true,
+          ),
+          const RankingProductsPage(
+            products: [RankingProduct(id: 99, codigo: 'RARO', name: 'PIEZA ESCONDIDA', cantidad: 1, venta: 5)],
+          ),
+        ];
+      });
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+      expect(repo.productCalls.map((c) => c.page), [1]);
+
+      await tester.enterText(inSheet(find.byType(TextField)), 'escondida');
+      await tester.pumpAndSettle();
+
+      expect(repo.productCalls.map((c) => c.page), [1, 2]);
+      expect(inSheet(find.text('PIEZA ESCONDIDA')), findsOneWidget);
+    });
+
+    testWidgets('el margen empieza oculto y el ojo lo muestra con su porcentaje', (tester) async {
+      await pump(tester);
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text('Margen S/. *******')), findsNWidgets(2));
+      await tester.tap(inSheet(find.byTooltip('Ver el margen')));
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('Margen S/. 200.00 (25.0 %)')), findsOneWidget);
+      expect(inSheet(find.text('Margen S/. 60.00 (20.0 %)')), findsOneWidget);
+      await tester.tap(inSheet(find.byTooltip('Ocultar el margen')));
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('Margen S/. *******')), findsNWidgets(2));
+    });
+
+    testWidgets('sin permiso de margen no hay línea de margen ni ojo', (tester) async {
+      await pump(tester, session: _session(roles: const ['Jefe Comercial']));
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsOneWidget);
+      expect(inSheet(find.textContaining('Margen')), findsNothing);
+      expect(inSheet(find.byTooltip('Ver el margen')), findsNothing);
+      expect(inSheet(find.text('S/. 800.00')), findsOneWidget);
+    });
+
+    testWidgets('sin permiso de importes (jefe de almacén) solo se ven unidades', (tester) async {
+      await pump(tester, session: _session(roles: const ['jefe de almacén']));
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text('4 uds.')), findsOneWidget);
+      expect(inSheet(find.textContaining('S/.')), findsNothing);
+      expect(inSheet(find.textContaining('Margen')), findsNothing);
+      expect(inSheet(find.byTooltip('Ver el margen')), findsNothing);
+    });
+
+    testWidgets('si los productos fallan lo dice y reintenta', (tester) async {
+      final repo = await pump(tester, setup: (r) => r.productsFailure = const NetworkFailure('Sin conexión a internet'));
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se pudo cargar los productos'), findsOneWidget);
+      expect(find.text('Sin conexión a internet'), findsOneWidget);
+
+      repo.productsFailure = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsOneWidget);
+      expect(repo.productCalls.length, 2);
+    });
+
+    testWidgets('una marca sin productos lo dice', (tester) async {
+      await pump(tester, setup: (r) => r.productPages = [const RankingProductsPage()]);
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No hay productos'), findsOneWidget);
+    });
+
+    testWidgets('los documentos: vacío y, si falla, el error con reintentar', (tester) async {
+      final repo = await pump(tester, setup: (r) => r.docs = Either.left(const ServerFailure('Error del servidor')));
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AMPLIFICADOR 5CH'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error del servidor'), findsOneWidget);
+      repo.docs = Either.right(const []);
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(find.text('No hay documentos'), findsOneWidget);
+      expect(repo.docCalls.length, 2);
+    });
+
+    testWidgets('con letra grande y pantalla angosta el modal de productos no se desborda', (tester) async {
+      final look = screenLooks[2].tall();
+      final handle = tester.ensureSemantics();
+      await pump(tester, look: look);
+      await choose(tester, 'Marcas');
+      await tester.tap(find.text('PIONEER'));
+      await tester.pumpAndSettle();
+
+      expect(inSheet(find.text('AMPLIFICADOR 5CH')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      handle.dispose();
+    });
 
     testWidgets('con un solo reporte no sale el selector ni las tarjetas', (tester) async {
       await pump(

@@ -80,6 +80,21 @@ class RankingState {
   }
 }
 
+/// Los productos vendidos a una entidad (la fila que se tocó en un reporte por entidad): se piden de
+/// a 50 y al llegar al final de la lista se pide la página siguiente.
+class EntityProductsState {
+  final ReportKind kind;
+  final RankingRow row;
+  List<RankingProduct> products = [];
+  bool hasMore = false;
+  int page = 1;
+  bool loading = true;
+  bool loadingMore = false;
+  String? error;
+
+  EntityProductsState(this.kind, this.row);
+}
+
 /// Estado del reporte Ventas General: el rango y los filtros, las cifras, la gráfica, los
 /// productos (paginados) y, si se pide, lo mismo del año anterior para compararlo.
 class ReportsProvider extends ChangeNotifier {
@@ -94,6 +109,8 @@ class ReportsProvider extends ChangeNotifier {
   final GetReportSaleUseCase _getSale;
   final GetRankingReportUseCase? _getRanking;
   final SearchReportProductCodesUseCase? _searchProductCodes;
+  final GetRankingProductsUseCase? _getRankingProducts;
+  final GetRankingProductDocumentsUseCase? _getRankingProductDocuments;
 
   /// Se llama cuando el backend responde 401 (token vencido).
   final VoidCallback? _onSessionExpired;
@@ -108,9 +125,13 @@ class ReportsProvider extends ChangeNotifier {
     required GetReportSaleUseCase getSaleUseCase,
     GetRankingReportUseCase? getRankingUseCase,
     SearchReportProductCodesUseCase? searchProductCodesUseCase,
+    GetRankingProductsUseCase? getRankingProductsUseCase,
+    GetRankingProductDocumentsUseCase? getRankingProductDocumentsUseCase,
     VoidCallback? onSessionExpired,
     DateTime Function()? now,
   }) : _searchProductCodes = searchProductCodesUseCase,
+       _getRankingProducts = getRankingProductsUseCase,
+       _getRankingProductDocuments = getRankingProductDocumentsUseCase,
        _getReport = getSalesReportUseCase,
        _export = exportSalesReportUseCase,
        _getCatalogs = getCatalogsUseCase,
@@ -281,6 +302,8 @@ class ReportsProvider extends ChangeNotifier {
     kind = ReportKind.general;
     _rankings.clear();
     _searchTimer?.cancel();
+    _entityRequest++;
+    entityProducts = null;
     report = null;
     previous = null;
     loading = false;
@@ -544,6 +567,132 @@ class ReportsProvider extends ChangeNotifier {
       (data) => state.serverRows = data.rows,
     );
     notifyListeners();
+  }
+
+  // ── Productos y documentos de una entidad ────────────────────────────────────────────────
+
+  /// Los productos de la fila abierta; `null` mientras no hay ninguna.
+  EntityProductsState? entityProducts;
+  int _entityRequest = 0;
+
+  /// Tamaño de página de los productos de una entidad (el de la web).
+  static const entityPageSize = 50;
+
+  /// El id con que se pide la entidad: el departamento "SIN UBICACIÓN" viene sin id y la web lo pide
+  /// con 0; en los demás reportes una fila sin id no se puede abrir.
+  static int? entityId(ReportKind kind, RankingRow row) =>
+      row.id ?? (kind == ReportKind.departamentos ? 0 : null);
+
+  /// Abre (pide) los productos vendidos a [row]. La web excluye las cantidades negativas solo en Vendedor.
+  Future<void> openEntityProducts(ReportKind kind, RankingRow row) async {
+    final load = _getRankingProducts;
+    final companyId = _companyId;
+    final id = entityId(kind, row);
+    final request = ++_entityRequest;
+    final state = EntityProductsState(kind, row);
+    entityProducts = state;
+    notifyListeners();
+    if (load == null || companyId == null || id == null) {
+      state.loading = false;
+      state.error = 'No se pudo cargar los productos';
+      notifyListeners();
+      return;
+    }
+
+    final result = await load(
+      kind: kind,
+      filters: filters,
+      companyId: companyId,
+      entityId: id,
+      page: 1,
+      pageSize: entityPageSize,
+    );
+    if (request != _entityRequest) return;
+    state.loading = false;
+    result.fold(
+      (failure) {
+        state.error = failure.message;
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (data) {
+        state.products = _visibleProducts(kind, data.products);
+        state.hasMore = data.hasMore;
+      },
+    );
+    notifyListeners();
+  }
+
+  List<RankingProduct> _visibleProducts(ReportKind kind, List<RankingProduct> list) =>
+      kind == ReportKind.vendedores ? [for (final p in list) if (p.cantidad >= 0) p] : list;
+
+  Future<void> retryEntityProducts() {
+    final state = entityProducts;
+    if (state == null) return Future.value();
+    return openEntityProducts(state.kind, state.row);
+  }
+
+  /// La página siguiente de los productos de la entidad abierta.
+  Future<void> loadMoreEntityProducts() async {
+    final state = entityProducts;
+    final load = _getRankingProducts;
+    final companyId = _companyId;
+    if (state == null || load == null || companyId == null) return;
+    final id = entityId(state.kind, state.row);
+    if (id == null || !state.hasMore || state.loading || state.loadingMore) return;
+
+    final request = _entityRequest;
+    state.loadingMore = true;
+    notifyListeners();
+    final result = await load(
+      kind: state.kind,
+      filters: filters,
+      companyId: companyId,
+      entityId: id,
+      page: state.page + 1,
+      pageSize: entityPageSize,
+    );
+    if (request != _entityRequest) return;
+    state.loadingMore = false;
+    result.fold(
+      (failure) {
+        // Se queda lo ya pedido; al volver a bajar se reintenta.
+        if (failure is AuthenticationFailure) _onSessionExpired?.call();
+      },
+      (data) {
+        state.page += 1;
+        state.products = [...state.products, ..._visibleProducts(state.kind, data.products)];
+        state.hasMore = data.hasMore;
+      },
+    );
+    notifyListeners();
+  }
+
+  void closeEntityProducts() {
+    _entityRequest++;
+    entityProducts = null;
+    notifyListeners();
+  }
+
+  /// Las ventas de [product] a la entidad abierta (sus documentos).
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> loadEntityProductDocuments(
+    RankingProduct product,
+  ) async {
+    final state = entityProducts;
+    final load = _getRankingProductDocuments;
+    final companyId = _companyId;
+    final id = state == null ? null : entityId(state.kind, state.row);
+    if (state == null || load == null || companyId == null || id == null) {
+      return Either.left(const ServerFailure('No se pudo cargar los documentos'));
+    }
+    final result = await load(
+      kind: state.kind,
+      filters: filters,
+      companyId: companyId,
+      entityId: id,
+      productId: product.id,
+    );
+    if (result.isLeft && result.left is AuthenticationFailure) _onSessionExpired?.call();
+    return result;
   }
 
   @override

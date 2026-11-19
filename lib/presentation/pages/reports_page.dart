@@ -9,6 +9,7 @@ import '../components/components.dart';
 import '../providers/reports_provider.dart';
 import '../utils/download_file.dart';
 import '../widgets/report_filters.dart';
+import '../widgets/report_products.dart';
 import '../widgets/report_rankings.dart';
 import 'receipt_page.dart';
 
@@ -109,30 +110,17 @@ class _ReportsPageState extends State<ReportsPage> {
   /// Las ventas del rango que incluyen [product]: tocar una abre su comprobante.
   Future<void> _showDocuments(SalesReportProductEntity product, SalesReportEntity report) {
     final docs = [for (final d in report.documents) if (d.productIds.contains(product.id)) d];
-    return showAppModal(
-      context,
-      title: 'Documentos',
-      subtitle: product.name,
-      icon: Icons.description_outlined,
-      primaryLabel: null,
-      secondaryLabel: 'Cerrar',
-      child: docs.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: Text('No hay documentos')),
-            )
-          : Column(
-              children: [
-                for (final d in docs)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${d.tipo} Nro: ${d.numero}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _openSale(d),
-                  ),
-              ],
-            ),
-    );
+    return showReportDocuments(context, productName: product.name, docs: docs, onOpen: _openSale);
+  }
+
+  /// Los productos vendidos a la fila tocada de un reporte por entidad (sus documentos y comprobantes
+  /// se abren desde ahí).
+  Future<void> _showEntityProducts(ReportKind kind, RankingRow row) {
+    if (ReportsProvider.entityId(kind, row) == null) {
+      _snack('Este registro no tiene productos para mostrar');
+      return Future.value();
+    }
+    return showEntityProducts(context, kind: kind, row: row, onOpenSale: _openSale);
   }
 
   Future<void> _openSale(SalesReportDocumentEntity doc) async {
@@ -449,6 +437,7 @@ class _ReportsPageState extends State<ReportsPage> {
           onRefresh: reports.refresh,
           onRetry: () => reports.retryRanking(kind),
           onLoadMore: () => reports.loadMoreRanking(kind),
+          onRowTap: (row) => _showEntityProducts(kind, row),
         ),
       ),
     );
@@ -659,29 +648,18 @@ class _ReportsPageState extends State<ReportsPage> {
     int number,
   ) {
     final importes = !reports.ocultarImportes;
-    final showMargin = importes && !reports.ocultarMargen;
-    final detail = [if (p.codigo.isNotEmpty) p.codigo, if (p.marca != null) p.marca!].join(' · ');
-
-    return AppListCard(
+    return ReportProductCard(
       title: p.name,
-      lines: [
-        if (detail.isNotEmpty) detail,
-        if (importes) 'Subtotal ${_soles(p.subtotal)}',
-        if (importes) 'Desc. ${_soles(p.descuento)}',
-        // El margen con su porcentaje de la venta (la ganancia).
-        if (showMargin)
-          'Margen ${_marginVisible ? '${_soles(p.margen)}${p.venta > 0 ? ' (${rankingPercent(p.margen / p.venta * 100)})' : ''}' : 'S/. *******'}',
-      ],
-      trailingTitle: importes ? _soles(p.venta) : '${formatQuantity(p.cantidad)} uds.',
-      trailingCaption: importes ? 'Cant. ${formatQuantity(p.cantidad)}' : null,
+      detail: [if (p.codigo.isNotEmpty) p.codigo, if (p.marca != null) p.marca!].join(' · '),
+      subtotal: p.subtotal,
+      descuento: p.descuento,
+      venta: p.venta,
+      cantidad: p.cantidad,
+      margen: p.margen,
+      showAmounts: importes,
+      showMargin: importes && !reports.ocultarMargen,
+      marginVisible: _marginVisible,
       onTap: () => _showDocuments(p, report),
-      actions: [
-        AppActionButton(
-          type: AppActionType.view,
-          label: 'Ver documentos',
-          onPressed: () => _showDocuments(p, report),
-        ),
-      ],
     );
   }
 }

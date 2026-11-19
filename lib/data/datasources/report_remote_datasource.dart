@@ -31,6 +31,28 @@ abstract class ReportRemoteDataSource {
 
   Future<Uint8List> exportSalesReport(String token, SalesReportFilters filters);
 
+  /// Los productos vendidos a una entidad ([entityId]: departamento, vendedor, marca, categoría o
+  /// cliente) en el rango y con los filtros: lo que abre la web al tocar su nombre.
+  Future<RankingProductsPage> getRankingProducts({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int page,
+    required int pageSize,
+  });
+
+  /// Las ventas en que se vendió [productId] a la entidad (`documentos-por-producto-sucursal-v2`).
+  Future<List<SalesReportDocumentEntity>> getRankingProductDocuments({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  });
+
   /// Productos del catálogo cuyo código contiene [text] (las sugerencias del filtro "Código de producto").
   Future<List<ReportProductOption>> searchProductCodes({
     required String token,
@@ -149,6 +171,94 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       () => client.get(uri, headers: ApiConstants.authHeaders(token)),
     );
     return rankingFromJson(kind, body);
+  }
+
+  /// Dónde está la lista de productos de cada reporte por entidad y cómo se llama su id.
+  static (String path, String idKey) _productsRoute(ReportKind kind) => switch (kind) {
+    ReportKind.vendedores => ('/ventas/productos-por-vendedores', 'vendedor_id'),
+    ReportKind.departamentos => ('/ventas/productos-por-departamento-v2', 'departamento_id'),
+    ReportKind.marcas => ('/ventas/productos-por-marcas-v2', 'marca_id'),
+    ReportKind.categorias => ('/ventas/productos-por-categorias-v2', 'categoria_id'),
+    ReportKind.clientes => ('/ventas/productos-por-cliente-v2', 'cliente_id'),
+    ReportKind.general => throw ArgumentError('Venta general no tiene productos por entidad'),
+  };
+
+  /// Los mismos parámetros que manda cada pestaña de la web al abrir los productos de una fila: la
+  /// entidad (`vendedor_id`, `departamento_id`, `marca_id`, `categoria_id`, `cliente_id`), las fechas,
+  /// la empresa, `product_code`, la página (50 por vez) y los filtros que acepta cada endpoint. El de
+  /// vendedores es el antiguo: solo entiende una sucursal (`sucursal_id`), clientes, marcas y categorías.
+  @override
+  Future<RankingProductsPage> getRankingProducts({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int page,
+    required int pageSize,
+  }) async {
+    final (path, idKey) = _productsRoute(kind);
+    final f = filters;
+    final legacy = kind == ReportKind.vendedores;
+    final code = f.productCode;
+    final query = <String, List<String>>{
+      'fechas[]': [_day(f.desde), _day(f.hasta)],
+      'company_id': ['$companyId'],
+      idKey: ['$entityId'],
+      if (f.sucursales.isNotEmpty) 'sucursal_id': [f.sucursales.first],
+      if (f.sucursales.isNotEmpty && !legacy) 'sucursales[]': f.sucursales,
+      if (kind != ReportKind.clientes && f.clientes.isNotEmpty) 'clientes[]': f.clientes,
+      if (!legacy && f.vendedores.isNotEmpty) 'vendedores[]': f.vendedores,
+      if (kind != ReportKind.marcas && f.marcas.isNotEmpty) 'marcas[]': f.marcas,
+      if (kind != ReportKind.categorias && f.categorias.isNotEmpty) 'tipos_producto[]': f.categorias,
+      if (!legacy && kind != ReportKind.departamentos && f.departamentos.isNotEmpty)
+        'departamentos[]': f.departamentos,
+      if (code != null && code.isNotEmpty) 'product_code': [code],
+      'page': ['$page'],
+      'per_page': ['$pageSize'],
+    };
+    final body = await sendApiRequest(
+      () => client.get(_uri(path, query), headers: ApiConstants.authHeaders(token)),
+    );
+    return rankingProductsFromJson(body);
+  }
+
+  @override
+  Future<List<SalesReportDocumentEntity>> getRankingProductDocuments({
+    required String token,
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  }) async {
+    final f = filters;
+    // La entidad pedida reemplaza a su propio filtro (el vendedor, el cliente, el departamento...).
+    List<String> pick(ReportKind own, List<String> list) => kind == own ? ['$entityId'] : list;
+    final clientes = pick(ReportKind.clientes, f.clientes);
+    final vendedores = pick(ReportKind.vendedores, f.vendedores);
+    final marcas = pick(ReportKind.marcas, f.marcas);
+    final departamentos = pick(ReportKind.departamentos, f.departamentos);
+    final categorias = kind == ReportKind.categorias ? ['$entityId'] : const <String>[];
+    final query = <String, List<String>>{
+      'fechas[]': [_day(f.desde), _day(f.hasta)],
+      'company_id': ['$companyId'],
+      'producto_id': ['$productId'],
+      if (f.sucursales.isNotEmpty) 'sucursales[]': f.sucursales,
+      if (clientes.isNotEmpty) 'clientes[]': clientes,
+      if (vendedores.isNotEmpty) 'vendedores[]': vendedores,
+      if (marcas.isNotEmpty) 'marcas[]': marcas,
+      if (f.categorias.isNotEmpty) 'tipos_producto[]': f.categorias,
+      if (categorias.isNotEmpty) 'categorias[]': categorias,
+      if (departamentos.isNotEmpty) 'departamentos[]': departamentos,
+    };
+    final body = await sendApiRequest(
+      () => client.get(
+        _uri('/ventas/documentos-por-producto-sucursal-v2', query),
+        headers: ApiConstants.authHeaders(token),
+      ),
+    );
+    return reportDocumentsFromJson(body);
   }
 
   @override

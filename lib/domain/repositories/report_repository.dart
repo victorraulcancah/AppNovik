@@ -26,6 +26,25 @@ abstract class ReportRepository {
     String? search,
   });
 
+  /// Los productos vendidos a una entidad del ranking ([entityId]), de mayor a menor venta.
+  Future<Either<Failure, RankingProductsPage>> getRankingProducts({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    int page = 1,
+    int pageSize = 50,
+  });
+
+  /// Las ventas en que se vendió [productId] a esa entidad.
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> getRankingProductDocuments({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  });
+
   /// Excel del reporte con los mismos filtros.
   Future<Either<Failure, DownloadedFile>> exportSalesReport(SalesReportFilters filters);
 

@@ -104,6 +104,37 @@ class RankingRow {
   double? get ticketPromedio => nVentas > 0 ? venta / nVentas : null;
 }
 
+/// Un producto vendido a una entidad (departamento, vendedor, marca, categoría o cliente): lo que
+/// responden los `productos-por-*` de la web. [venta] es el `subtotal` del servidor (la venta ya con
+/// descuento, la columna "Venta Total" de la web).
+class RankingProduct {
+  final int id;
+  final String codigo;
+  final String name;
+  final double cantidad;
+  final double venta;
+  final double margen;
+
+  const RankingProduct({
+    required this.id,
+    required this.name,
+    this.codigo = '',
+    this.cantidad = 0,
+    this.venta = 0,
+    this.margen = 0,
+  });
+}
+
+/// Una página de productos de una entidad.
+class RankingProductsPage {
+  final List<RankingProduct> products;
+
+  /// ¿Faltan páginas por pedir? (los reportes que no paginan responden todo de una vez: `false`).
+  final bool hasMore;
+
+  const RankingProductsPage({this.products = const [], this.hasMore = false});
+}
+
 /// Una página de un ranking, de mayor a menor venta, con el total del rango: de él sale el
 /// porcentaje de cada fila.
 class RankingReport {

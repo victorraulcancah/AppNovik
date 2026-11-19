@@ -159,6 +159,25 @@ class _FakeRepo implements ReportRepository {
   }) async => Either.right(const RankingReport());
 
   @override
+  Future<Either<Failure, RankingProductsPage>> getRankingProducts({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    int page = 1,
+    int pageSize = 50,
+  }) async => Either.right(const RankingProductsPage());
+
+  @override
+  Future<Either<Failure, List<SalesReportDocumentEntity>>> getRankingProductDocuments({
+    required ReportKind kind,
+    required SalesReportFilters filters,
+    required int companyId,
+    required int entityId,
+    required int productId,
+  }) async => Either.right(const []);
+
+  @override
   Future<Either<Failure, List<ReportProductOption>>> searchProductCodes({
     required int companyId,
     required String text,

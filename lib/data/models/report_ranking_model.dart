@@ -1,4 +1,5 @@
 import '../../domain/entities/report_ranking_entity.dart';
+import '../../domain/entities/report_entity.dart';
 
 double _double(dynamic v) => v is num ? v.toDouble() : (v is String ? double.tryParse(v) ?? 0 : 0);
 
@@ -53,4 +54,53 @@ RankingReport rankingFromJson(ReportKind kind, dynamic body) {
     totalRows: pagination is Map ? (_int(pagination['total']) ?? rows.length) : rows.length,
     hasMore: pagination is Map && pagination['has_more'] == true,
   );
+}
+
+String _text(dynamic v) => v == null ? '' : '$v'.trim();
+
+/// Lee `productos-por-*` (vendedores, departamento, marcas, categorías, cliente): `data` con
+/// `id, codigo, nombre, cantidad, subtotal, margen` y, si el reporte pagina, `pagination.has_more`.
+RankingProductsPage rankingProductsFromJson(dynamic body) {
+  if (body is! Map) return const RankingProductsPage();
+  final data = body['data'];
+  final pagination = body['pagination'];
+  return RankingProductsPage(
+    products: [
+      if (data is List)
+        for (final e in data.whereType<Map>())
+          RankingProduct(
+            id: _int(e['id']) ?? 0,
+            codigo: _text(e['codigo']),
+            name: _text(e['nombre']).isEmpty ? '-' : _text(e['nombre']),
+            cantidad: _double(e['cantidad']),
+            venta: _double(e['subtotal']),
+            margen: _double(e['margen']),
+          ),
+    ],
+    hasMore: pagination is Map && pagination['has_more'] == true,
+  );
+}
+
+/// Lee `documentos-por-producto-sucursal-v2`: `data` con `id, nro_documento, tipo_documento, fecha...`,
+/// rotulados como en Productos y servicios (`Boleta Nro: B001-0001`, `Venta Nro: V001-0005`).
+List<SalesReportDocumentEntity> reportDocumentsFromJson(dynamic body) {
+  final data = body is Map ? body['data'] : null;
+  if (data is! List) return const [];
+  return [
+    for (final e in data.whereType<Map>())
+      if (_int(e['id']) != null) _document(e),
+  ];
+}
+
+SalesReportDocumentEntity _document(Map e) {
+  final raw = _text(e['nro_documento']).isNotEmpty ? _text(e['nro_documento']) : _text(e['nro_documento_raw']);
+  final kind = _text(e['tipo_documento']).toLowerCase();
+  var numero = raw.toUpperCase();
+  if (RegExp(r'^\d+$').hasMatch(numero)) numero = 'V001-${numero.padLeft(4, '0')}';
+  final tipo = kind.contains('factura')
+      ? 'Factura'
+      : kind.contains('boleta')
+          ? 'Boleta'
+          : (numero.startsWith('F') ? 'Factura' : (numero.startsWith('B') ? 'Boleta' : 'Venta'));
+  return SalesReportDocumentEntity(id: _int(e['id'])!, tipo: tipo, numero: numero);
 }

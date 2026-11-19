@@ -409,6 +409,9 @@ class RankingView extends StatefulWidget {
   final VoidCallback onRetry;
   final VoidCallback onLoadMore;
 
+  /// Tocar una fila (o su botón) abre los productos vendidos a esa entidad.
+  final ValueChanged<RankingRow>? onRowTap;
+
   const RankingView({
     super.key,
     required this.kind,
@@ -426,6 +429,7 @@ class RankingView extends StatefulWidget {
     required this.onRefresh,
     required this.onRetry,
     required this.onLoadMore,
+    this.onRowTap,
   });
 
   @override
@@ -602,11 +606,17 @@ class _RankingViewState extends State<RankingView> {
             loadingMore: state.loadingMore,
             itemBuilder: (context, row, _) {
               final share = state.share(row);
+              final open = widget.onRowTap == null ? null : () => widget.onRowTap!(row);
               return AppListCard(
                 title: row.name,
                 lines: _details(row),
                 trailingTitle: widget.showAmounts ? _soles(row.venta) : rankingPercent(share),
                 trailingCaption: widget.showAmounts ? rankingPercent(share) : null,
+                onTap: open,
+                actions: [
+                  if (open != null)
+                    AppActionButton(type: AppActionType.view, label: 'Ver productos', onPressed: open),
+                ],
                 footer: Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
                   child: RankingBar(
