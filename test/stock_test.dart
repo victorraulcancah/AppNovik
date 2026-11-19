@@ -1198,6 +1198,17 @@ void main() {
       expect(repo.searches, ['7750000000017']);
     });
 
+    test('replaceSearchTerm deja solo ese término y quita los de antes', () async {
+      await provider.addSearchTerm('uno');
+      await provider.addSearchTerm('dos');
+
+      await provider.replaceSearchTerm('  tres ');
+
+      expect(provider.searchTerms, ['tres']);
+      await provider.replaceSearchTerm('');
+      expect(provider.searchTerms, isEmpty);
+    });
+
     test('un código de barras sin producto da null', () async {
       repo.products = [];
 
@@ -1322,6 +1333,29 @@ void main() {
 
       expect(find.byTooltip('Filtros'), findsNothing);
       expect(find.byTooltip('Escanear código de barras'), findsOneWidget);
+    });
+
+    testWidgets('escanear un código con otro ya filtrado lo reemplaza: no se combinan y no se queda sin resultados', (
+      tester,
+    ) async {
+      final original = BarcodeScanner.scan;
+      addTearDown(() => BarcodeScanner.scan = original);
+      final repo = await pumpPage(tester, const StockPage());
+
+      // Ya hay un código buscado (un chip).
+      await tester.enterText(find.byType(SearchBar), 'SUB-1');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(InputChip, 'SUB-1'), findsOneWidget);
+
+      // Se escanea otro: el chip de antes se va y queda solo el nuevo (juntos se combinan con "y" y no encuentran nada).
+      repo.products = [product(2, name: 'OTRO')];
+      BarcodeScanner.scan = (_) async => '7750000000017';
+      await tester.tap(find.byTooltip('Escanear código de barras'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(InputChip, 'SUB-1'), findsNothing);
+      expect(find.widgetWithText(InputChip, 'SUB-2'), findsOneWidget);
     });
 
     testWidgets('enviar la búsqueda la vuelve un chip que se puede quitar', (tester) async {

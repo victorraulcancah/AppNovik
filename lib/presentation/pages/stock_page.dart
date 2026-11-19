@@ -93,7 +93,8 @@ class _StockPageState extends State<StockPage> {
     }
     _debounce?.cancel();
     _searchController.clear();
-    stock.addSearchTerm(codigo);
+    // Un código nuevo reemplaza al filtro de antes: juntos no encontrarían nada (los términos se combinan con "y").
+    stock.replaceSearchTerm(codigo);
   }
 
   bool _can(String permission) =>

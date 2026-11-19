@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../core/utils/barcode_check.dart';
+
 /// Pantalla de la cámara para leer un código de barras: se apunta al código dentro del marco y,
 /// al leerlo, se cierra devolviendo su texto. Tiene linterna y cambio de cámara.
 class BarcodeScanPage extends StatefulWidget {
@@ -12,22 +14,30 @@ class BarcodeScanPage extends StatefulWidget {
 }
 
 class _BarcodeScanPageState extends State<BarcodeScanPage> {
+  // Solo los formatos de los productos (EAN/UPC, Code 128 y QR): con más formatos la cámara confunde las barras de
+  // un EAN con las de otro y devuelve un número equivocado.
   final _controller = MobileScannerController(
     formats: const [
       BarcodeFormat.ean13,
       BarcodeFormat.ean8,
       BarcodeFormat.upcA,
-      BarcodeFormat.upcE,
       BarcodeFormat.code128,
-      BarcodeFormat.code39,
-      BarcodeFormat.code93,
-      BarcodeFormat.itf14,
-      BarcodeFormat.codabar,
       BarcodeFormat.qrCode,
     ],
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    // Cada cuadro cuenta: se confirma la lectura con dos iguales seguidas (ver `_onDetect`).
+    detectionSpeed: DetectionSpeed.normal,
+    // Más resolución y zoom automático sobre el código: las barras finas de algunas etiquetas no se leían bien.
+    cameraResolution: const Size(1920, 1080),
+    autoZoom: true,
   );
   bool _done = false;
+
+  /// La última lectura válida y cuántas veces seguidas salió igual.
+  String? _last;
+  int _hits = 0;
+
+  /// Lecturas iguales seguidas que hacen falta para dar el código por bueno.
+  static const _confirmations = 2;
 
   @override
   void dispose() {
@@ -39,7 +49,24 @@ class _BarcodeScanPageState extends State<BarcodeScanPage> {
     if (_done) return;
     for (final barcode in capture.barcodes) {
       final value = barcode.rawValue?.trim();
-      if (value != null && value.isNotEmpty) {
+      if (value == null || value.isEmpty) continue;
+      // Un EAN/UPC con el dígito de control mal es una lectura equivocada (un dígito mal leído o el código cortado):
+      // se descarta y se sigue intentando.
+      final retail = barcode.format == BarcodeFormat.ean13 ||
+          barcode.format == BarcodeFormat.ean8 ||
+          barcode.format == BarcodeFormat.upcA;
+      if (retail && !isValidGtin(value)) {
+        _last = null;
+        _hits = 0;
+        continue;
+      }
+      if (value == _last) {
+        _hits++;
+      } else {
+        _last = value;
+        _hits = 1;
+      }
+      if (_hits >= _confirmations) {
         _done = true;
         HapticFeedback.mediumImpact();
         Navigator.of(context).pop(value);
@@ -80,11 +107,12 @@ class _BarcodeScanPageState extends State<BarcodeScanPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final frameWidth = size.width * 0.82;
+    // Un marco más grande: un código cercano o con las barras largas ya no se sale de él.
+    final frameWidth = size.width * 0.92;
     final frame = Rect.fromCenter(
       center: Offset(size.width / 2, size.height * 0.42),
       width: frameWidth,
-      height: frameWidth * 0.62,
+      height: frameWidth * 0.75,
     );
 
     return Scaffold(
