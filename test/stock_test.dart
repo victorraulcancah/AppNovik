@@ -7,6 +7,7 @@ import 'package:app_novik/core/utils/either.dart';
 import 'package:app_novik/core/utils/format.dart';
 import 'package:app_novik/data/datasources/stock_remote_datasource.dart';
 import 'package:app_novik/data/models/stock_model.dart';
+import 'package:app_novik/presentation/utils/barcode_scanner.dart';
 import 'package:app_novik/presentation/widgets/product_image.dart';
 import 'package:app_novik/data/datasources/theme_local_datasource.dart';
 import 'package:app_novik/domain/entities/company_entity.dart';
@@ -1750,6 +1751,29 @@ void main() {
       expect(find.text('1 seleccionado'), findsOneWidget);
       // Marcar no agrega nada a la pantalla hasta tocar "Agregar al stock".
       expect(find.byKey(const ValueKey('linea-1')), findsNothing);
+    });
+
+    testWidgets('el escáner de código de barras está junto al campo y abre el buscador con ese código ya buscado', (
+      tester,
+    ) async {
+      final original = BarcodeScanner.scan;
+      addTearDown(() => BarcodeScanner.scan = original);
+      BarcodeScanner.scan = (_) async => 'sub';
+      await openAdd(tester);
+
+      expect(find.byTooltip('Escanear código de barras'), findsOneWidget);
+      await tester.tap(find.byTooltip('Escanear código de barras'));
+      await tester.pumpAndSettle();
+
+      // El buscador se abre con lo escaneado y ya con sus resultados, sin teclado.
+      expect(find.text('Buscar productos'), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('buscador-productos'))).controller!.text, 'sub');
+      expect(find.byKey(const ValueKey('resultado-1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('resultado-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Agregar al stock'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('linea-1')), findsOneWidget);
     });
 
     testWidgets('marcar varios y agregarlos de una vez', (tester) async {

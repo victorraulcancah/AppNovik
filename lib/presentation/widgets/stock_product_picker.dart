@@ -20,6 +20,9 @@ Future<List<StockProductEntity>> showStockProductPicker(
   required Future<Either<Failure, List<StockProductEntity>>> Function(String text) search,
   required int? warehouseId,
   String confirmLabel = 'Agregar al stock',
+
+  /// Un texto (por ejemplo, un código de barras escaneado fuera del modal) que se busca apenas se abre.
+  String? initialQuery,
 }) async {
   final selection = ValueNotifier<Map<int, StockProductEntity>>({});
   final hasSelection = ValueNotifier<bool>(false);
@@ -36,7 +39,7 @@ Future<List<StockProductEntity>> showStockProductPicker(
     primaryEnabled: hasSelection,
     child: AppDisposer(
       onDispose: [selection.dispose, hasSelection.dispose],
-      child: _PickerBody(search: search, warehouseId: warehouseId, selection: selection),
+      child: _PickerBody(search: search, warehouseId: warehouseId, selection: selection, initialQuery: initialQuery),
     ),
     onPrimary: () {
       picked = selection.value.values.toList();
@@ -49,8 +52,9 @@ class _PickerBody extends StatefulWidget {
   final Future<Either<Failure, List<StockProductEntity>>> Function(String text) search;
   final int? warehouseId;
   final ValueNotifier<Map<int, StockProductEntity>> selection;
+  final String? initialQuery;
 
-  const _PickerBody({required this.search, required this.warehouseId, required this.selection});
+  const _PickerBody({required this.search, required this.warehouseId, required this.selection, this.initialQuery});
 
   @override
   State<_PickerBody> createState() => _PickerBodyState();
@@ -65,6 +69,19 @@ class _PickerBodyState extends State<_PickerBody> {
   bool _loading = false;
   String? _error;
   List<StockProductEntity> _results = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialQuery?.trim() ?? '';
+    if (initial.isNotEmpty) {
+      _searchController.text = initial;
+      _text = initial;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search(initial);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -135,7 +152,7 @@ class _PickerBodyState extends State<_PickerBody> {
               child: TextField(
                 key: const ValueKey('buscador-productos'),
                 controller: _searchController,
-                autofocus: true,
+                autofocus: (widget.initialQuery ?? '').trim().isEmpty,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'Nombre, código, marca…',

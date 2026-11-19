@@ -85,11 +85,12 @@ class _StockAddPageState extends State<StockAddPage> {
   }
 
   /// Abre el buscador y agrega de una vez los productos marcados.
-  Future<void> _pickProducts(StockProvider stock) async {
+  Future<void> _pickProducts(StockProvider stock, {String? initialQuery}) async {
     final picked = await showStockProductPicker(
       context,
       search: stock.searchProducts,
       warehouseId: _warehouseId,
+      initialQuery: initialQuery,
     );
     if (!mounted) return;
     picked.forEach(_add);
@@ -213,22 +214,35 @@ class _StockAddPageState extends State<StockAddPage> {
                         : (id) => setState(() => _warehouseId = id),
                   ),
                   const SizedBox(height: 12),
-                  // El mismo buscador de Ventas: un campo que abre el buscador con casillas.
-                  InkWell(
-                    onTap: _saving ? null : () => _pickProducts(stock),
-                    borderRadius: BorderRadius.circular(14),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.inventory_2_outlined),
-                        suffixIcon: Icon(Icons.manage_search, color: scheme.onSurfaceVariant),
+                  // El mismo buscador de Ventas: un campo que abre el buscador con casillas, y al lado el
+                  // escáner de código de barras (abre el buscador con ese código ya buscado).
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: _saving ? null : () => _pickProducts(stock),
+                          borderRadius: BorderRadius.circular(14),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.inventory_2_outlined),
+                              suffixIcon: Icon(Icons.manage_search, color: scheme.onSurfaceVariant),
+                            ),
+                            child: Text(
+                              'Producto',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        'Producto',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      BarcodeScanButton(
+                        onScanned: (code) {
+                          if (!_saving) _pickProducts(stock, initialQuery: code);
+                        },
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
