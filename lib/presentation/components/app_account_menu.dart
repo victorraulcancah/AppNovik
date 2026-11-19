@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/change_password_modal.dart';
 
 /// Avatar con la inicial del usuario. Al tocarlo muestra el usuario y su
 /// empresa, el selector de tema (claro, oscuro, a modo del sistema) y permite
@@ -82,6 +83,11 @@ class AppAccountMenu extends StatelessWidget {
           ),
         ),
         const Divider(height: 1),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.lock_reset),
+          onPressed: () => showChangePasswordModal(context),
+          child: const Text('Cambiar contraseña'),
+        ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.logout),
           onPressed: () => context.read<AuthProvider>().logout(),

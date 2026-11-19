@@ -9,6 +9,7 @@ import 'data/datasources/auth_local_datasource.dart';
 import 'data/datasources/auth_remote_datasource.dart';
 import 'data/datasources/client_record_remote_datasource.dart';
 import 'data/datasources/client_remote_datasource.dart';
+import 'data/datasources/account_remote_datasource.dart';
 import 'data/datasources/debt_remote_datasource.dart';
 import 'data/datasources/price_list_remote_datasource.dart';
 import 'data/datasources/seller_payment_remote_datasource.dart';
@@ -26,6 +27,7 @@ import 'data/datasources/theme_local_datasource.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/client_record_repository_impl.dart';
 import 'data/repositories/client_repository_impl.dart';
+import 'data/repositories/account_repository_impl.dart';
 import 'data/repositories/debt_repository_impl.dart';
 import 'data/repositories/price_list_repository_impl.dart';
 import 'data/repositories/seller_payment_repository_impl.dart';
@@ -45,6 +47,7 @@ import 'domain/usecases/account_statement_usecases.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/client_record_repository.dart';
 import 'domain/repositories/client_repository.dart';
+import 'domain/repositories/account_repository.dart';
 import 'domain/repositories/debt_repository.dart';
 import 'domain/repositories/price_list_repository.dart';
 import 'domain/repositories/seller_payment_repository.dart';
@@ -61,6 +64,7 @@ import 'domain/repositories/stock_repository.dart';
 import 'domain/usecases/auth_usecases.dart';
 import 'domain/usecases/client_record_usecases.dart';
 import 'domain/usecases/client_usecases.dart';
+import 'domain/usecases/account_usecases.dart';
 import 'domain/usecases/debt_usecases.dart';
 import 'domain/usecases/price_list_usecases.dart';
 import 'domain/usecases/seller_payment_usecases.dart';
@@ -113,6 +117,11 @@ class DependencyInjection {
             clearSavedCredentialsUseCase:
                 ClearSavedCredentialsUseCase(repository: _authRepository),
           ),
+        ),
+
+        // Cambiar la propia contraseña (menú de la cuenta).
+        Provider<ChangePasswordUseCase>(
+          create: (_) => ChangePasswordUseCase(repository: _accountRepository),
         ),
 
         ChangeNotifierProvider<ShellNavigation>(create: (_) => ShellNavigation()),
@@ -361,6 +370,11 @@ class DependencyInjection {
   static AuthRepository get _authRepository => AuthRepositoryImpl(
         remoteDataSource: _authRemoteDataSource,
         localDataSource: _authLocalDataSource,
+      );
+
+  static AccountRepository get _accountRepository => AccountRepositoryImpl(
+        remoteDataSource: AccountRemoteDataSourceImpl(client: _httpClient),
+        authLocalDataSource: _authLocalDataSource,
       );
 
   static DocumentRepository get _documentRepository => DocumentRepositoryImpl(

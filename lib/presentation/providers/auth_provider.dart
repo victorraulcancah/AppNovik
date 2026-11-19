@@ -158,6 +158,16 @@ class AuthProvider extends ChangeNotifier {
     }());
   }
 
+  /// Tras cambiar la contraseña: si el dispositivo recordaba la de este usuario, guarda la nueva para
+  /// que el próximo inicio de sesión no falle con la vieja. Sin credenciales recordadas no hace nada.
+  void updateRememberedPassword(String password) {
+    final saved = savedCredentials;
+    if (saved == null) return;
+    savedCredentials = SavedCredentialsEntity(usuario: saved.usuario, password: password);
+    _rememberCredentials(saved.usuario, password, remember: true);
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _logoutUseCase();
     _clearSession();
