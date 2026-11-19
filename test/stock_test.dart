@@ -1983,7 +1983,7 @@ void main() {
       expect(find.text('Sin costo'), findsOneWidget); // el producto 2 no tiene entradas previas
       expect(find.byType(ProductImagePlaceholder), findsNWidgets(2));
       expect(find.byType(Checkbox), findsNWidgets(2));
-      expect(find.text('8'), findsOneWidget);
+      expect(find.text('8'), findsNWidgets(2)); // los dos tienen 8 en el almacén 1
       expect(find.text('PIONEER'), findsNWidgets(2));
     });
 
