@@ -380,6 +380,7 @@ class _ProductCardState extends State<_ProductCard> {
                                     context,
                                     path: _product.imagen!,
                                     title: _product.name,
+                                    code: _product.codigo,
                                   ),
                                   child: ProductImage(path: _product.imagen!, size: 64, radius: 12),
                                 ),

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
 import '../../domain/entities/document_entity.dart' show DownloadedFile;
 import '../utils/share_file.dart';
+import '../utils/share_product.dart';
 import 'product_image.dart';
 
 /// Pone la imagen sobre un fondo blanco. Las fotos sin fondo (PNG/WebP transparentes) se verían con
@@ -34,7 +35,7 @@ Future<Uint8List?> flattenOnWhite(Uint8List bytes) async {
 
 /// Abre la foto de un producto a pantalla completa: se acerca con los dedos, se cierra con la X o
 /// tocando el fondo, y se puede compartir en una imagen con fondo blanco.
-Future<void> openProductImage(BuildContext context, {required String path, String? title}) {
+Future<void> openProductImage(BuildContext context, {required String path, String? title, String? code}) {
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
       opaque: false,
@@ -42,7 +43,7 @@ Future<void> openProductImage(BuildContext context, {required String path, Strin
       barrierDismissible: true,
       transitionDuration: const Duration(milliseconds: 220),
       reverseTransitionDuration: const Duration(milliseconds: 160),
-      pageBuilder: (_, _, _) => ProductImageViewer(path: path, title: title),
+      pageBuilder: (_, _, _) => ProductImageViewer(path: path, title: title, code: code),
       transitionsBuilder: (context, animation, _, child) {
         if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return child;
         return FadeTransition(opacity: animation, child: child);
@@ -55,7 +56,10 @@ class ProductImageViewer extends StatefulWidget {
   final String path;
   final String? title;
 
-  const ProductImageViewer({super.key, required this.path, this.title});
+  /// Código del producto: se manda junto con la descripción al compartir la foto.
+  final String? code;
+
+  const ProductImageViewer({super.key, required this.path, this.title, this.code});
 
   @override
   State<ProductImageViewer> createState() => _ProductImageViewerState();
@@ -82,7 +86,7 @@ class _ProductImageViewerState extends State<ProductImageViewer> {
       final file = flat == null
           ? DownloadedFile(name: name, bytes: response.bodyBytes)
           : DownloadedFile(name: '${name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name}.png', bytes: flat);
-      await shareDownloadedFile(file);
+      await shareDownloadedFile(file, text: shareTextOf(code: widget.code, description: widget.title));
     } catch (_) {
       messenger
         ..hideCurrentSnackBar()

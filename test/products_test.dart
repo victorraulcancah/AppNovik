@@ -1147,8 +1147,12 @@ void main() {
 
         await tester.tap(find.byTooltip('Ver detalle'));
         await tester.pumpAndSettle();
-        final compartir = find.widgetWithText(OutlinedButton, 'Compartir');
-        await tester.ensureVisible(compartir);
+        // Es solo un icono, arriba a la derecha de la imagen (sin botón con texto).
+        expect(find.widgetWithText(OutlinedButton, 'Compartir'), findsNothing);
+        final compartir = find.byTooltip('Compartir');
+        final fotoDelDetalle = find.byType(ProductImage).last;
+        expect(tester.getTopRight(compartir).dx, greaterThan(tester.getCenter(fotoDelDetalle).dx));
+        expect(tester.getTopLeft(compartir).dy, lessThan(tester.getTopLeft(find.text('Tipo')).dy));
         await tester.tap(compartir);
         await tester.pumpAndSettle();
 
@@ -1168,13 +1172,12 @@ void main() {
 
         await tester.tap(find.byTooltip('Ver detalle'));
         await tester.pumpAndSettle();
-        final compartir = find.widgetWithText(OutlinedButton, 'Compartir');
-        await tester.ensureVisible(compartir);
+        final compartir = find.byTooltip('Compartir');
         await tester.tap(compartir);
         await tester.pumpAndSettle();
 
         expect(find.text('No se pudo compartir el producto'), findsOneWidget);
-        expect(tester.widget<OutlinedButton>(compartir).onPressed, isNotNull);
+        expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.share_outlined)).onPressed, isNotNull);
       });
 
       testWidgets('un producto con imagen muestra su miniatura en la tarjeta', (tester) async {

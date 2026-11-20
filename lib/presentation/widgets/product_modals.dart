@@ -48,12 +48,12 @@ class _ShareProductButtonState extends State<_ShareProductButton> {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return IconButton(
+      tooltip: 'Compartir',
       onPressed: _sharing ? null : _share,
       icon: _sharing
-          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
           : const Icon(Icons.share_outlined),
-      label: const Text('Compartir'),
     );
   }
 }
@@ -85,14 +85,22 @@ Future<bool?> showProductDetail(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // La imagen del producto (si tiene): crece desde la miniatura de la lista.
-            if (p.imagen != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Center(
-                  child: ProductImageGrow(path: p.imagen!, semanticLabel: 'Imagen de ${p.name}'),
-                ),
-              ),
+            // Arriba: la imagen del producto (si tiene), que crece desde la miniatura de la lista, y el
+            // icono de compartir (foto, código y descripción) en la esquina derecha.
+            Stack(
+              children: [
+                if (p.imagen != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Center(
+                      child: ProductImageGrow(path: p.imagen!, semanticLabel: 'Imagen de ${p.name}'),
+                    ),
+                  )
+                else
+                  const SizedBox(height: 48),
+                Positioned(top: 0, right: 0, child: _ShareProductButton(product: p)),
+              ],
+            ),
             AppDetailRow(label: 'Tipo', value: p.esServicio ? 'Servicio' : 'Producto'),
             AppDetailRow(label: 'Código', value: p.codigo),
             AppDetailRow(label: 'Descripción', value: p.name),
@@ -106,9 +114,6 @@ Future<bool?> showProductDetail(
                 tone: p.activo ? AppBadgeTone.success : AppBadgeTone.neutral,
               ),
             ),
-            const SizedBox(height: 12),
-            // Compartir (WhatsApp, correo…): la foto, el código y la descripción.
-            _ShareProductButton(product: p),
           ],
         ),
       ),

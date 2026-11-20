@@ -13,9 +13,10 @@ String mimeTypeOf(String name) {
 
 /// Abre el menú de compartir del sistema con el archivo (guardarlo, enviarlo por
 /// WhatsApp o correo, abrirlo con otra app).
-Future<void> shareDownloadedFile(DownloadedFile file) {
+Future<void> shareDownloadedFile(DownloadedFile file, {String? text}) {
   return SharePlus.instance.share(
     ShareParams(
+      text: text == null || text.isEmpty ? null : text,
       files: [XFile.fromData(file.bytes, name: file.name, mimeType: mimeTypeOf(file.name))],
       fileNameOverrides: [file.name],
     ),

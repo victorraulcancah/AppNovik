@@ -318,7 +318,12 @@ class _ProductCard extends StatelessWidget {
                               button: true,
                               label: 'Ver la imagen de ${product.name}',
                               child: GestureDetector(
-                                onTap: () => openProductImage(context, path: product.imagen!, title: product.name),
+                                onTap: () => openProductImage(
+                                  context,
+                                  path: product.imagen!,
+                                  title: product.name,
+                                  code: product.codigo,
+                                ),
                                 child: ProductImage(path: product.imagen!, size: 64, radius: 12),
                               ),
                             ),

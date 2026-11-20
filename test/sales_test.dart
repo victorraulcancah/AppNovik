@@ -32,6 +32,7 @@ import 'package:app_novik/presentation/providers/auth_provider.dart';
 import 'package:app_novik/presentation/providers/clients_provider.dart';
 import 'package:app_novik/presentation/providers/sales_provider.dart';
 import 'package:app_novik/presentation/providers/theme_provider.dart';
+import 'package:app_novik/presentation/utils/share_product.dart';
 import 'package:app_novik/presentation/widgets/product_image.dart';
 import 'package:app_novik/presentation/widgets/product_image_viewer.dart';
 import 'package:app_novik/presentation/widgets/sale_line_card.dart';
@@ -1344,6 +1345,9 @@ void main() {
       expect(find.byType(ProductImageViewer), findsOneWidget);
       expect(find.text('CABLE 12GA'), findsWidgets);
       expect(find.byTooltip('Compartir imagen'), findsOneWidget);
+      // Al compartir la foto se manda también el código y la descripción.
+      final visor = tester.widget<ProductImageViewer>(find.byType(ProductImageViewer));
+      expect(shareTextOf(code: visor.code, description: visor.title), 'Cód: CAB-12\nDescripción: CABLE 12GA');
 
       // Fondo blanco (las fotos se suben así) y el nombre abajo, no encima de la foto.
       final scaffold = tester.widget<Scaffold>(find.descendant(of: find.byType(ProductImageViewer), matching: find.byType(Scaffold)));

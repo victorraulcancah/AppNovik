@@ -8,9 +8,12 @@ import '../../domain/entities/product_entity.dart';
 import '../widgets/product_image.dart';
 
 /// El texto que se manda de un producto: su código y su descripción.
-String productShareText(ProductEntity p) => [
-      if (p.codigo.isNotEmpty) 'Cód: ${p.codigo}',
-      if (p.name.isNotEmpty) 'Descripción: ${p.name}',
+String productShareText(ProductEntity p) => shareTextOf(code: p.codigo, description: p.name);
+
+/// Lo mismo con el código y la descripción sueltos (el visor de la foto no tiene el producto entero).
+String shareTextOf({String? code, String? description}) => [
+      if (code != null && code.isNotEmpty) 'Cód: $code',
+      if (description != null && description.isNotEmpty) 'Descripción: $description',
     ].join('\n');
 
 String _extensionOf(String path) {
