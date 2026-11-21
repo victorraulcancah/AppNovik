@@ -15,6 +15,22 @@ String formatCompactMoney(double value, {String symbol = 'S/'}) {
   return '$symbol ${value.round()}';
 }
 
+/// Nombre de un cliente (persona o empresa) recortado para tablas angostas: sin el artículo del inicio, sin
+/// la forma legal del final y con la última palabra solo en inicial. `Yoselin Rosa Miranda` → `Yoselin Rosa M.`,
+/// `La Casa del Auto` → `Casa del A.`, `AUTO MARKET PERU E.I.R.L.` → `AUTO MARKET P.`. Una sola palabra queda igual.
+String shortClientName(String? fullName) {
+  final parts = (fullName ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.length > 1 && const {'la', 'el', 'los', 'las'}.contains(parts.first.toLowerCase())) parts.removeAt(0);
+  // La forma legal (S.A.C., EIRL, SRL...) no dice quién es el cliente.
+  final legal = RegExp(r'^(s\.?a\.?c?\.?|e\.?i\.?r\.?l\.?|s\.?r\.?l\.?|s\.?a\.?s\.?|e\.?i\.?r\.?l?|ltda\.?)$', caseSensitive: false);
+  while (parts.length > 2 && legal.hasMatch(parts.last)) {
+    parts.removeLast();
+  }
+  if (parts.length <= 1) return parts.isEmpty ? '' : parts.first;
+  final last = parts.removeLast();
+  return '${parts.join(' ')} ${last.substring(0, 1).toUpperCase()}.';
+}
+
 /// Nombre y la inicial del apellido: `FRANCIS BULNES GONZALES` → `FRANCIS B.`.
 ///
 /// Los nombres peruanos van como nombres + apellido paterno + apellido materno, así que según

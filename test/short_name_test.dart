@@ -31,6 +31,32 @@ void main() {
     });
   });
 
+  group('shortClientName', () {
+    test('los ejemplos del cliente: todo menos la última palabra, que va en inicial', () {
+      expect(shortClientName('Yoselin Rosa Miranda'), 'Yoselin Rosa M.');
+      expect(shortClientName('Juan Carlos Contreras'), 'Juan Carlos C.');
+      expect(shortClientName('Bolívar Store Express'), 'Bolívar Store E.');
+      expect(shortClientName('Larry Christian Pérez'), 'Larry Christian P.');
+    });
+
+    test('sin el artículo del inicio', () {
+      expect(shortClientName('La Casa del Auto'), 'Casa del A.');
+      expect(shortClientName('EL MAESTRO'), 'MAESTRO');
+    });
+
+    test('sin la forma legal del final', () {
+      expect(shortClientName('AUTO MARKET PERU E.I.R.L.'), 'AUTO MARKET P.');
+      expect(shortClientName('CORREA CARDENAS S.A.C.'), 'CORREA C.');
+    });
+
+    test('una palabra, vacío o con espacios de más', () {
+      expect(shortClientName('Prueba'), 'Prueba');
+      expect(shortClientName(''), '');
+      expect(shortClientName(null), '');
+      expect(shortClientName('  Juan    Pérez  '), 'Juan P.');
+    });
+  });
+
   testWidgets('la tarjeta de lista ya no lleva número en la esquina', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

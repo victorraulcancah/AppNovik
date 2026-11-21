@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/format.dart';
 import '../../domain/entities/inicio_entity.dart';
 import '../../theme/app_theme.dart';
 import '../components/components.dart';
@@ -1114,7 +1115,7 @@ class InicioFallClients extends StatelessWidget {
             rows: [
               for (final f in fall.filas)
                 [
-                  InicioCell(f.cliente),
+                  InicioCell(shortClientName(f.cliente)),
                   InicioCell(thousands(f.anterior)),
                   InicioCell(thousands(f.actual)),
                   InicioCell(thousands(f.variacion), color: fallState(f.estado).color, bold: true),
@@ -1230,7 +1231,7 @@ class InicioPendingQuotes extends StatelessWidget {
             rows: [
               for (final q in quotes)
                 [
-                  InicioCell(q.cliente),
+                  InicioCell(shortClientName(q.cliente)),
                   if (showSeller) InicioCell(q.vendedor == null ? '—' : firstName(q.vendedor!)),
                   InicioCell(
                     '${q.enDolares ? '\$' : 'S/'} ${_moneyText(q.montoMoneda)}',

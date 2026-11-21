@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/utils/format.dart';
 import '../../domain/entities/inicio_entity.dart';
 import '../components/app_motion.dart' show AppCountUpScope;
 import '../providers/inicio_provider.dart';
@@ -339,7 +340,9 @@ class _Channels extends StatelessWidget {
                 InicioTable(
                   columns: const ['Canal', '%', 'Clientes', 'Ventas'],
                   emptyText: '',
-                  firstFlex: 4,
+                  // El canal lleva más ancho que el resto y, si aun así no cabe, la letra se achica un poco: el
+                  // nombre sale siempre completo (antes quedaba "DISTRIBUID…").
+                  flexes: const [6, 3, 3, 5],
                   rows: [
                     for (final c in channels)
                       [
@@ -352,7 +355,13 @@ class _Channels extends StatelessWidget {
                               decoration: BoxDecoration(color: channelColor(c.codigo), shape: BoxShape.circle),
                             ),
                             const SizedBox(width: 6),
-                            Flexible(child: InicioCell(c.nombre)),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: InicioCell(c.nombre),
+                              ),
+                            ),
                           ],
                         ),
                         InicioCell(total > 0 ? '${(c.clientes / total * 100).toStringAsFixed(1)}%' : '0.0%'),
@@ -729,7 +738,7 @@ class _NewClients extends StatelessWidget {
             rows: [
               for (final t in data.top)
                 [
-                  InicioCell(t.nombre),
+                  InicioCell(shortClientName(t.nombre)),
                   InicioCell(thousands(t.monto)),
                   SizedBox(
                     width: 44,
