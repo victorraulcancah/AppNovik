@@ -27,8 +27,11 @@ String shortClientName(String? fullName) {
     parts.removeLast();
   }
   if (parts.length <= 1) return parts.isEmpty ? '' : parts.first;
-  final last = parts.removeLast();
-  return '${parts.join(' ')} ${last.substring(0, 1).toUpperCase()}.';
+  // Con cuatro palabras o más (nombres + apellido paterno + materno) el apellido que se abrevia es el tercero:
+  // `YOSELIN ROSA MIRANDA SALAZAR` → `YOSELIN ROSA M.`; así nunca pasa de dos palabras y una inicial.
+  final last = parts.length >= 4 ? parts[2] : parts.last;
+  final head = parts.length >= 4 ? parts.sublist(0, 2) : parts.sublist(0, parts.length - 1);
+  return '${head.join(' ')} ${last.substring(0, 1).toUpperCase()}.';
 }
 
 /// Nombre y la inicial del apellido: `FRANCIS BULNES GONZALES` → `FRANCIS B.`.

@@ -343,6 +343,8 @@ class _Channels extends StatelessWidget {
                   // El canal lleva más ancho que el resto y, si aun así no cabe, la letra se achica un poco: el
                   // nombre sale siempre completo (antes quedaba "DISTRIBUID…").
                   flexes: const [6, 3, 3, 5],
+                  // Todos los canales a la vista, sin "Ver más".
+                  collapsedRows: channels.length,
                   rows: [
                     for (final c in channels)
                       [

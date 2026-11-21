@@ -39,6 +39,12 @@ void main() {
       expect(shortClientName('Larry Christian Pérez'), 'Larry Christian P.');
     });
 
+    test('con dos apellidos (cuatro palabras) se abrevia el paterno, no el materno', () {
+      expect(shortClientName('YOSELIN ROSA MIRANDA SALAZAR'), 'YOSELIN ROSA M.');
+      expect(shortClientName('JUAN CARLOS CONTRERAS PEREZ'), 'JUAN CARLOS C.');
+      expect(shortClientName('Larry Christian Pérez Soto'), 'Larry Christian P.');
+    });
+
     test('sin el artículo del inicio', () {
       expect(shortClientName('La Casa del Auto'), 'Casa del A.');
       expect(shortClientName('EL MAESTRO'), 'MAESTRO');
