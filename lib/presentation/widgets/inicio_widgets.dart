@@ -796,6 +796,43 @@ class InicioCell extends StatelessWidget {
   }
 }
 
+/// Nombre de un cliente o de un método en una celda: sale completo si cabe en el ancho de la columna; si no,
+/// se prueba la siguiente forma más corta (la última palabra solo en inicial, `nameDisplayOptions`). Solo si
+/// ni la más corta cabe se corta con "…".
+class InicioNameCell extends StatelessWidget {
+  final String? name;
+
+  const InicioNameCell(this.name, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(fontFeatures: _tabular);
+    final options = nameDisplayOptions(name);
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        var chosen = options.last;
+        for (final option in options) {
+          final painter = TextPainter(
+            text: TextSpan(text: option, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: scaler,
+            maxLines: 1,
+          )..layout();
+          final fits = painter.width <= maxWidth;
+          painter.dispose();
+          if (fits) {
+            chosen = option;
+            break;
+          }
+        }
+        return Text(chosen, maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
+      },
+    );
+  }
+}
+
 class InicioEmpty extends StatelessWidget {
   final String text;
 
@@ -1115,7 +1152,7 @@ class InicioFallClients extends StatelessWidget {
             rows: [
               for (final f in fall.filas)
                 [
-                  InicioCell(shortClientName(f.cliente)),
+                  InicioNameCell(f.cliente),
                   InicioCell(thousands(f.anterior)),
                   InicioCell(thousands(f.actual)),
                   InicioCell(thousands(f.variacion), color: fallState(f.estado).color, bold: true),
@@ -1231,7 +1268,7 @@ class InicioPendingQuotes extends StatelessWidget {
             rows: [
               for (final q in quotes)
                 [
-                  InicioCell(shortClientName(q.cliente)),
+                  InicioNameCell(q.cliente),
                   if (showSeller) InicioCell(q.vendedor == null ? '—' : firstName(q.vendedor!)),
                   InicioCell(
                     '${q.enDolares ? '\$' : 'S/'} ${_moneyText(q.montoMoneda)}',

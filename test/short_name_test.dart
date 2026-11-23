@@ -1,5 +1,6 @@
 import 'package:app_novik/core/utils/format.dart';
 import 'package:app_novik/presentation/components/components.dart';
+import 'package:app_novik/presentation/widgets/inicio_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -61,6 +62,53 @@ void main() {
       expect(shortClientName(null), '');
       expect(shortClientName('  Juan    Pérez  '), 'Juan P.');
     });
+  });
+
+  test('nameDisplayOptions: del nombre completo al más corto', () {
+    expect(nameDisplayOptions('CASA DEL AUTO'), ['CASA DEL AUTO', 'CASA DEL A.', 'CASA D.']);
+    expect(nameDisplayOptions('AUTO MARKET PERU E.I.R.L.'), [
+      'AUTO MARKET PERU E.I.R.L.',
+      'AUTO MARKET PERU',
+      'AUTO MARKET P.',
+      'AUTO M.',
+    ]);
+    expect(nameDisplayOptions('YOSELIN ROSA MIRANDA SALAZAR'), [
+      'YOSELIN ROSA MIRANDA SALAZAR',
+      'YOSELIN ROSA MIRANDA S.',
+      'YOSELIN ROSA M.',
+      'YOSELIN R.',
+    ]);
+    expect(nameDisplayOptions('EMPRESA MULTISERVICIOS GENERALES').last, 'EMPRESA M.');
+    expect(nameDisplayOptions('TRANSFERENCIA BANCARIA'), ['TRANSFERENCIA BANCARIA', 'TRANSFERENCIA B.']);
+    expect(nameDisplayOptions('EFECTIVO'), ['EFECTIVO']);
+    expect(nameDisplayOptions(null), ['']);
+  });
+
+  testWidgets('InicioNameCell: completo si cabe; si no, la última palabra en inicial; al final, "…"', (tester) async {
+    Future<void> show(double width, String name) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: width, child: InicioNameCell(name)),
+              ),
+            ),
+          ),
+        );
+
+    // (En las pruebas la letra mide 12 px por carácter.)
+    await show(400, 'MALDONADO ALCCAHUAMAN CCORI');
+    expect(find.text('MALDONADO ALCCAHUAMAN CCORI'), findsOneWidget);
+
+    await show(300, 'MALDONADO ALCCAHUAMAN CCORI');
+    expect(find.text('MALDONADO ALCCAHUAMAN C.'), findsOneWidget);
+
+    await show(200, 'YOSELIN ROSA MIRANDA SALAZAR');
+    expect(find.text('YOSELIN ROSA M.'), findsOneWidget);
+
+    // Con poco ancho se siguen quitando palabras en vez de cortar con "…".
+    await show(130, 'EMPRESA MULTISERVICIOS GENERALES');
+    expect(find.text('EMPRESA M.'), findsOneWidget);
   });
 
   testWidgets('la tarjeta de lista ya no lleva número en la esquina', (tester) async {

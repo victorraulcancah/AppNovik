@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/utils/format.dart';
 import '../../domain/entities/inicio_entity.dart';
 import '../components/app_motion.dart' show AppCountUpScope;
 import '../providers/inicio_provider.dart';
@@ -639,7 +638,7 @@ class _IncomesState extends State<_Incomes> {
             rows: [
               for (final m in shown)
                 [
-                  InicioCell(m.metodo),
+                  InicioNameCell(m.metodo),
                   InicioCell(money(pick(m))),
                   InicioShareBar(percent: total > 0 ? pick(m) / total * 100 : 0, color: const Color(0xFF2563EB)),
                 ],
@@ -740,7 +739,7 @@ class _NewClients extends StatelessWidget {
             rows: [
               for (final t in data.top)
                 [
-                  InicioCell(shortClientName(t.nombre)),
+                  InicioNameCell(t.nombre),
                   InicioCell(thousands(t.monto)),
                   SizedBox(
                     width: 44,

@@ -15,6 +15,35 @@ String formatCompactMoney(double value, {String symbol = 'S/'}) {
   return '$symbol ${value.round()}';
 }
 
+/// Las formas en que puede mostrarse un nombre, de la más completa a la más corta: se usa la primera que
+/// quepa en el ancho de la celda. 1) el nombre completo; 2) sin la forma legal del final (E.I.R.L., S.A.C.);
+/// 3) con la última palabra solo en inicial; 4) el recorte de [shortClientName] (nombres + inicial del paterno).
+List<String> nameDisplayOptions(String? fullName) {
+  final parts = (fullName ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return const [''];
+  final options = <String>[parts.join(' ')];
+  void add(String value) {
+    if (value.isNotEmpty && !options.contains(value)) options.add(value);
+  }
+
+  final legal = RegExp(r'^(s\.?a\.?c?\.?|e\.?i\.?r\.?l\.?|s\.?r\.?l\.?|s\.?a\.?s\.?|e\.?i\.?r\.?l?|ltda\.?)$', caseSensitive: false);
+  final clean = [...parts];
+  while (clean.length > 2 && legal.hasMatch(clean.last)) {
+    clean.removeLast();
+  }
+  add(clean.join(' '));
+  if (clean.length > 1) {
+    add('${clean.sublist(0, clean.length - 1).join(' ')} ${clean.last.substring(0, 1).toUpperCase()}.');
+  }
+  add(shortClientName(fullName));
+  // Si ni así cabe (palabras muy largas), se van quitando palabras del final hasta dejar solo la primera y la
+  // inicial de la siguiente: `EMPRESA MULTISERVICIOS GENERALES` → `EMPRESA M.`. Evita terminar en "…".
+  for (var keep = clean.length - 2; keep >= 1; keep--) {
+    add('${clean.sublist(0, keep).join(' ')} ${clean[keep].substring(0, 1).toUpperCase()}.');
+  }
+  return options;
+}
+
 /// Nombre de un cliente (persona o empresa) recortado para tablas angostas: sin el artículo del inicio, sin
 /// la forma legal del final y con la última palabra solo en inicial. `Yoselin Rosa Miranda` → `Yoselin Rosa M.`,
 /// `La Casa del Auto` → `Casa del A.`, `AUTO MARKET PERU E.I.R.L.` → `AUTO MARKET P.`. Una sola palabra queda igual.
