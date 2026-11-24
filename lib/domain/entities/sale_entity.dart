@@ -83,6 +83,9 @@ class SaleProductEntity {
   /// Unidad de medida del producto ("Kilogramo", "Unidad"...).
   final String? unidad;
 
+  /// Cuántas piezas trae la unidad de medida (`cantidad_bloque`: "UNIDAD (4 c/u)" → 4); `null` si no tiene.
+  final int? cantidadBloque;
+
   /// Ruta de la foto en el servidor (`/storage/images/products/...`); `null` si no tiene.
   final String? imagen;
 
@@ -94,6 +97,7 @@ class SaleProductEntity {
     this.categoryId,
     this.brandId,
     this.unidad,
+    this.cantidadBloque,
     this.imagen,
     this.esServicio = false,
     this.ventaSinStock = false,
@@ -118,6 +122,7 @@ class SaleProductEntity {
         categoryId: categoryId,
         brandId: brandId,
         unidad: unidad,
+        cantidadBloque: cantidadBloque,
         imagen: imagen,
         esServicio: esServicio,
         ventaSinStock: ventaSinStock,

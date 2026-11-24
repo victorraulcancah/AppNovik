@@ -257,6 +257,8 @@ SessionContextEntity _session({
   Set<String> permissions = const {'ventas.store'},
   bool puntos = false,
   double minimoCanje = 0,
+  // En las pruebas la empresa tiene los ítems libres activos (en Ajustes vienen apagados por defecto).
+  bool itemsLibres = true,
 }) =>
     SessionContextEntity(
       user: const UserEntity(id: 9, name: 'Ana', usuario: 'ana'),
@@ -266,6 +268,7 @@ SessionContextEntity _session({
         emiteComprobantes: certificado,
         programaDePuntos: puntos,
         minimoCanjePuntos: minimoCanje,
+        itemsLibres: itemsLibres,
       ),
       modules: const [],
       permissions: permissions,
@@ -297,6 +300,7 @@ Future<SalesProvider> _ready(
   bool puntos = false,
   double minimoCanje = 0,
   Set<String> permissions = const {'ventas.store'},
+  bool itemsLibres = true,
 }) async {
   final p = _provider(repo)
     ..syncSession(_session(
@@ -304,6 +308,7 @@ Future<SalesProvider> _ready(
       puntos: puntos,
       minimoCanje: minimoCanje,
       permissions: permissions,
+      itemsLibres: itemsLibres,
     ));
   await p.ensureLoaded();
   return p;
@@ -459,6 +464,8 @@ void main() {
       expect(p.precioEn(10), 35.5);
       expect(p.precioEn(11), 0);
       expect(p.maximoEn(1), 12);
+      expect(p.cantidadBloque, isNull);
+      expect(saleProductFromJson({'id': 6, 'codigo': 'B', 'name': 'B', 'cantidad_bloque': 4}).cantidadBloque, 4);
     });
 
     test('un servicio o un producto de venta sin stock no tiene tope', () {
@@ -1362,6 +1369,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ProductImageViewer), findsNothing);
       expect(find.text('0 seleccionados'), findsOneWidget);
+    });
+
+    testWidgets('la tarjeta lleva el cubo y las piezas de la unidad de medida, solo si las tiene', (tester) async {
+      const conBloque = SaleProductEntity(
+        id: 210,
+        codigo: 'EVO.1XXL',
+        name: 'AMPLIFICADOR DIGITAL MONORAL',
+        unidad: 'UNIDAD',
+        cantidadBloque: 3,
+        stockPorAlmacen: {1: 33},
+        precioPorLista: {11: 350},
+      );
+      await open(tester, products: [conBloque, audio]);
+      final hoja = find.byType(BottomSheet);
+
+      expect(find.descendant(of: hoja, matching: find.text('× 3')), findsOneWidget);
+      expect(find.descendant(of: hoja, matching: find.byIcon(Icons.view_in_ar_outlined)), findsOneWidget);
+      // El otro producto no trae piezas: no lleva nada.
+      expect(find.byKey(const Key('cantidad-unidad')), findsOneWidget);
     });
 
     testWidgets('todas las tarjetas miden lo mismo, tengan el nombre corto o largo', (tester) async {
@@ -3145,6 +3171,16 @@ void main() {
         final r = await p.addFreeItem(descripcion: 'FLETE', precio: 20);
 
         expect(r.problem, 'No tienes permiso para agregar ítems libres');
+        expect(p.lines, isEmpty);
+      });
+
+      test('con el permiso pero con los ítems libres apagados en Ajustes no se puede agregar', () async {
+        final p = await _ready(_FakeSaleRepository(), permissions: libre, itemsLibres: false);
+
+        expect(p.puedeItemLibre, isFalse);
+        final r = await p.addFreeItem(descripcion: 'FLETE', precio: 20);
+
+        expect(r.problem, isNotNull);
         expect(p.lines, isEmpty);
       });
 

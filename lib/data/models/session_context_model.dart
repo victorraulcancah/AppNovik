@@ -79,6 +79,7 @@ class SessionContextModel extends SessionContextEntity {
       emiteComprobantes: c['certificado'] != null && '${c['certificado']}'.isNotEmpty,
       guiaSerie: _int(c['guia_serie']),
       guiaNumero: _int(c['guia_numero']),
+      itemsLibres: _bool(c['items_libres']),
       plan: profile == null
           ? null
           : PlanEntity(

@@ -415,17 +415,28 @@ class _ProductCardState extends State<_ProductCard> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: _blocked ? scheme.errorContainer : scheme.surfaceContainerHigh,
+                            color: _blocked ? scheme.errorContainer : const Color(0xFF16A34A).withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             stockText,
                             style: theme.textTheme.labelLarge?.copyWith(
                               fontWeight: FontWeight.w600,
-                              color: _blocked ? scheme.onErrorContainer : scheme.onSurface,
+                              color: _blocked ? scheme.onErrorContainer : const Color(0xFF15803D),
                             ),
                           ),
                         ),
+                        // Cuántas piezas trae la unidad de medida: el cubo y "× 4".
+                        if ((_product.cantidadBloque ?? 0) > 0) ...[
+                          const SizedBox(width: 12),
+                          Icon(Icons.view_in_ar_outlined, size: 22, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text(
+                            '× ${_product.cantidadBloque}',
+                            key: const Key('cantidad-unidad'),
+                            style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
                         const Spacer(),
                         if (_product.marca != null)
                           Padding(

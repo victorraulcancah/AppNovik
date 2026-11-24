@@ -42,6 +42,10 @@ class CompanyEntity {
   final int? guiaSerie;
   final int? guiaNumero;
 
+  /// Ventas: se pueden agregar ítems libres (líneas sin producto). Se activa en Ajustes de la web; apagado por
+  /// defecto, y mientras esté apagado la app no muestra "Agregar ítem libre".
+  final bool itemsLibres;
+
   const CompanyEntity({
     required this.id,
     required this.razonSocial,
@@ -58,5 +62,6 @@ class CompanyEntity {
     this.emiteComprobantes = false,
     this.guiaSerie,
     this.guiaNumero,
+    this.itemsLibres = false,
   });
 }

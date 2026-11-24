@@ -127,6 +127,7 @@ StockProductEntity stockProductFromJson(Map<String, dynamic> json) {
     // Como en Ventas: la web trata `/storage/` solo como "sin imagen".
     imagen: img is String && img.replaceFirst('/storage/', '').isNotEmpty ? img : null,
     unidad: measure is Map && measure['name'] is String ? measure['name'] as String : null,
+    cantidadBloque: _int(json['cantidad_bloque']),
     esServicio: json['tipo'] == 's',
   );
 }

@@ -339,14 +339,28 @@ class _ProductCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh,
+                          color: const Color(0xFF16A34A).withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           stockText,
-                          style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF15803D),
+                          ),
                         ),
                       ),
+                      // Cuántas piezas trae la unidad de medida: el cubo y "× 4".
+                      if ((product.cantidadBloque ?? 0) > 0) ...[
+                        const SizedBox(width: 12),
+                        Icon(Icons.view_in_ar_outlined, size: 22, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Text(
+                          '× ${product.cantidadBloque}',
+                          key: const Key('cantidad-unidad'),
+                          style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
                       const Spacer(),
                       if (product.marca != null && product.marca!.isNotEmpty)
                         Padding(

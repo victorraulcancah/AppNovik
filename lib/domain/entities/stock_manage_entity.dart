@@ -25,6 +25,9 @@ class StockProductEntity {
   /// Foto del producto (`img`; `null` si no tiene) y su unidad ("unidad", "set"...), como en el buscador de Ventas.
   final String? imagen;
   final String? unidad;
+
+  /// Piezas que trae la unidad de medida (`cantidad_bloque`); `null` si no tiene.
+  final int? cantidadBloque;
   final bool esServicio;
 
   const StockProductEntity({
@@ -36,6 +39,7 @@ class StockProductEntity {
     this.levels = const {},
     this.imagen,
     this.unidad,
+    this.cantidadBloque,
     this.esServicio = false,
   });
 

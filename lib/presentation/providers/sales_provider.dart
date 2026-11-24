@@ -208,7 +208,8 @@ class SalesProvider extends ChangeNotifier {
     _defaultDelivery = session?.defaultDelivery;
     _defaultPaymentMethodId = session?.defaultPaymentMethodId;
     _emiteComprobantes = session?.company.emiteComprobantes ?? false;
-    _puedeItemLibre = session?.can('factura.libre') ?? false;
+    // Con el permiso `factura.libre` y si la empresa activó los ítems libres en Ajustes (apagados por defecto).
+    _puedeItemLibre = (session?.can('factura.libre') ?? false) && (session?.company.itemsLibres ?? false);
     _programaDePuntos = session?.company.programaDePuntos ?? false;
     _minimoCanjePuntos = session?.company.minimoCanjePuntos ?? 0;
     final companyId = session?.company.id;

@@ -70,6 +70,7 @@ SaleProductEntity saleProductFromJson(Map<String, dynamic> json) {
     brandId: _int(json['brand_id']) ?? (brand is Map ? _int(brand['id']) : null),
     categoryId: _int(json['category_id']),
     unidad: measure is Map ? _text(measure['name']) : null,
+    cantidadBloque: _int(json['cantidad_bloque']),
     // Como en Productos, la web trata `/storage/` solo como "sin imagen".
     imagen: _productImage(json['img']),
     esServicio: json['tipo'] == 's',

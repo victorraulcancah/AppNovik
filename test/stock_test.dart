@@ -512,6 +512,7 @@ void main() {
     int id, {
     String name = 'SUBWOOFER',
     double? ultimoCosto = 10.5,
+    int? cantidadBloque,
     Map<int, StockWarehouseLevel> levels = const {
       1: StockWarehouseLevel(stock: 8, costoPromedio: 9),
       2: StockWarehouseLevel(stock: 0),
@@ -523,6 +524,7 @@ void main() {
         name: name,
         marca: 'PIONEER',
         ultimoCosto: ultimoCosto,
+        cantidadBloque: cantidadBloque,
         levels: levels,
       );
 
@@ -545,6 +547,12 @@ void main() {
       expect(s.imagen, isNull);
       expect(s.unidad, isNull);
       expect(s.esServicio, isTrue);
+    });
+
+    test('el producto del buscador trae las piezas de la unidad de medida (cantidad_bloque)', () {
+      expect(stockProductFromJson({'id': 3, 'codigo': 'A', 'name': 'A', 'cantidad_bloque': 4}).cantidadBloque, 4);
+      expect(stockProductFromJson({'id': 3, 'codigo': 'A', 'name': 'A', 'cantidad_bloque': '3'}).cantidadBloque, 3);
+      expect(stockProductFromJson({'id': 3, 'codigo': 'A', 'name': 'A'}).cantidadBloque, isNull);
     });
 
     test('la existencia trae el último costo promedio', () {
@@ -1722,7 +1730,7 @@ void main() {
 
   group('StockAddPage', () {
     void withProducts(_FakeStockRepository repo) => repo.products = [
-          product(1, name: 'SUBWOOFER 12'),
+          product(1, name: 'SUBWOOFER 12', cantidadBloque: 4),
           product(2, name: 'PARLANTE 6', ultimoCosto: null),
         ];
 
@@ -1763,6 +1771,19 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Agregar al stock'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('la tarjeta lleva el cubo y las piezas de la unidad de medida, solo si las tiene', (tester) async {
+      await openAdd(tester);
+      await searchInPicker(tester, 'sub');
+
+      // El 1 trae 4 piezas; el 2 no trae nada.
+      final tarjeta1 = find.byKey(const ValueKey('resultado-1'));
+      final tarjeta2 = find.byKey(const ValueKey('resultado-2'));
+      expect(find.descendant(of: tarjeta1, matching: find.text('× 4')), findsOneWidget);
+      expect(find.descendant(of: tarjeta1, matching: find.byIcon(Icons.view_in_ar_outlined)), findsOneWidget);
+      expect(find.descendant(of: tarjeta2, matching: find.byKey(const Key('cantidad-unidad'))), findsNothing);
+      expect(find.descendant(of: tarjeta2, matching: find.byIcon(Icons.view_in_ar_outlined)), findsNothing);
+    });
 
     testWidgets('el buscador es el de Ventas: un campo "Producto" que abre un modal con casillas', (tester) async {
       await openAdd(tester);
